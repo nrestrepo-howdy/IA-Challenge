@@ -6,3 +6,6 @@ dist/
 *.local
 
 .npm-cache/
+
+# Agent worktrees live inside the repo; they are never part of it.
+.claude/worktrees/

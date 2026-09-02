@@ -146,6 +146,36 @@ turned on itself.
 
 ---
 
+## 2 Sep — The instrumentation layer blocked the thing it was measuring
+
+**What happened.** The first attempt to run the five workstreams in parallel failed
+immediately. All three worktrees aborted with the same error: *"WorktreeCreate hook
+succeeded but returned no worktree path."*
+
+**Cause.** The evidence layer had been registered on thirteen lifecycle events,
+`WorktreeCreate` among them. But that event is not merely observational: the harness
+reads the hook's **stdout as the worktree path**. The logger writes to a file and
+prints nothing, so the harness received an empty path and refused to create the
+worktree. Every parallel workstream was blocked by the mechanism whose only purpose is
+to record that they ran.
+
+**Fix.** Remove the logger from that one event, in both project and user settings.
+Worktree spans are reconstructed from `SubagentStart` / `SubagentStop`, which carry
+`agent_id`, `agent_type` and timestamps — which is what the parallelism evidence
+actually needs. `WorktreeCreate` added nothing that was not already available.
+
+**Why it is worth a section.** It is a textbook observer effect: instrumentation that
+does not merely watch the system but changes what it can do. Attaching a generic
+handler to thirteen events looked like thoroughness; one of those events had
+out-of-band semantics, and blanket instrumentation does not distinguish. The lesson
+generalizes past this bug — a hook that can block is not a listener, and treating it
+as one will eventually stop something that mattered.
+
+It also failed in the most useful possible way: loudly, on first use, before any work
+depended on it.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

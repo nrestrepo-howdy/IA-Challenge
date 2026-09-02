@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.verbo/events.jsonl
+.env
+.env.local
+*.local

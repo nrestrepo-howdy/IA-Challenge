@@ -1,11 +1,27 @@
 #!/usr/bin/env bash
-# Verbo · capa de evidencia. Proyecta cada evento del ciclo de vida a JSONL.
-# Nunca bloquea: cualquier fallo sale 0 y el agente sigue.
+# Verbo · evidence layer.
+#
+# Installed both at project level and (scoped) at user level, because Claude Code
+# loads project settings from the session's project root -- and a session started
+# elsewhere would silently record nothing. Development evidence is the one artifact
+# that cannot be reconstructed later, so it gets a belt and braces.
+#
+# Outside the Verbo repo this is a no-op: it must never pollute other work.
+# It never blocks: any failure exits 0 and the agent continues.
 set -u
-DIR="${CLAUDE_PROJECT_DIR:-$PWD}/.verbo"
+REPO="$HOME/verbo"
+PAYLOAD="$(cat)"
+
+# Scope check: log only when the work is happening inside the repo.
+CWD="$(printf '%s' "$PAYLOAD" | jq -r '.cwd // ""' 2>/dev/null || echo "")"
+case "${CLAUDE_PROJECT_DIR:-$CWD}" in
+  "$REPO"|"$REPO"/*) ;;
+  *) case "$CWD" in "$REPO"|"$REPO"/*) ;; *) exit 0 ;; esac ;;
+esac
+
+DIR="$REPO/.verbo"
 mkdir -p "$DIR" 2>/dev/null || exit 0
-TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat | jq -c --arg ts "$TS" '{
+printf '%s' "$PAYLOAD" | jq -c --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
   ts:        $ts,
   event:     (.hook_event_name // "unknown"),
   session:   (.session_id      // null),

@@ -9,6 +9,29 @@
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; background: #0b0e14; }
       #stage { display: block; width: 100vw; height: 100vh; }
+      #say {
+        position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%);
+        width: min(520px, calc(100vw - 48px));
+        padding: 13px 18px; border-radius: 999px;
+        border: 1px solid #263040; background: rgba(12,16,23,.82);
+        backdrop-filter: blur(12px);
+        font: 400 15px/1 ui-sans-serif, system-ui, sans-serif; color: #dde4ec;
+        outline: none; transition: border-color .18s, box-shadow .18s;
+      }
+      #say::placeholder { color: #5b6675; }
+      #say:focus { border-color: #3d5a74; box-shadow: 0 0 0 4px rgba(61,90,116,.16); }
+      #say:disabled { opacity: .5; }
+      #log {
+        position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%);
+        width: min(520px, calc(100vw - 48px));
+        display: flex; flex-direction: column-reverse; gap: 5px;
+        font: 400 12px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+        pointer-events: none;
+      }
+      #log .l { color: #6f7c8c; }
+      #log .you   { color: #dde4ec; font-size: 13px; }
+      #log .accept { color: #6fd3a8; }
+      #log .reject { color: #d98878; }
       #status {
         position: fixed; left: 16px; bottom: 14px;
         font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
@@ -19,6 +42,9 @@
   </head>
   <body>
     <canvas id="stage"></canvas>
+    <div id="log"></div>
+    <input id="say" autocomplete="off" spellcheck="false"
+           placeholder="tell the world what to become — try &ldquo;make it rain&rdquo;" />
     <div id="status">starting</div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>

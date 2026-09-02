@@ -211,12 +211,65 @@ it points at. Three signals that contradict each other tell you where to look.
 
 ---
 
+## 2 Sep — Joining the five workstreams found two bugs neither typecheck nor unit tests could
+
+The five workstreams had each passed their own verification in isolation. Wiring them
+together against a real renderer surfaced two defects that only exist *between* them.
+
+**1. A silent no-op.** `reconcile()` iterated the primitive registry with
+`Object.values(primitives)`. WS5 returns a `ReadonlyMap`, and `Object.values()` on a
+Map returns `[]` — so the loop ran zero times and no visual binding was ever created.
+It typechecked, it built, and it rendered a base scene that would never have shown a
+single injected primitive. Nothing failed; it simply did nothing.
+
+It surfaced because a *different* consumer — the module loader — declared the type it
+actually wanted, and the compiler objected. The bug was found by a type error in an
+unrelated file.
+
+**2. Double registration.** The cycle called `mount()` and then `register()`. But
+`mount()` registers with the world itself, because a primitive cannot publish its
+declared state slice until it has one. Every candidate threw *"instance
+'rain-emitter#6' is already registered"*, so all three strategies failed, three
+attempts deep, and the cycle reported a clean `all candidates failed`.
+
+**What made this cheap.** The failure was legible without a debugger: the log said
+which layer rejected, which strategy, and the verbatim error. A cycle that reported
+only `ok: false` would have cost an hour. Diagnoses being actionable prose rather than
+scores was a design rule written on day one for the repair agent's benefit; it paid
+off first for a human.
+
+**The observation worth keeping.** Both bugs are integration bugs, and both were
+invisible to the thing that verified each workstream. Contracts prevented the
+workstreams from *colliding*; they did not make their assumptions about each other
+true. Freezing an interface buys parallelism, not agreement — and the end-to-end test
+is what buys agreement.
+
+---
+
+## 2 Sep — 20/20
+
+All twenty acceptance criteria have automated verification and it passes: 161 Node
+tests and 8 browser tests. `npm run verify` runs both, because the gate counts browser
+criteria and a verification that skipped their tests would mark an AC verified by
+something it never executed.
+
+The state of the world, honestly: the pipeline is real end to end — utterance,
+compiled intent with a hardened contract, three genuinely different candidate
+programs, L0/L1/L2 in cascade, hot injection into a live world — and it runs with no
+API key and no network, because D-2 closed the generation surface so far that emitting
+the module became a rendering problem rather than a reasoning one.
+
+Still missing, and marked as missing: the L3 perceptual oracle, the model-backed
+generator upstream of the brief, Worker isolation for candidate code in the browser
+(proven in Node, interface unchanged), and the nightly evaluation.
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:
 
-- **Autonomous loop evidence.** Requires a running harness. Will be extracted from the
-  event log; if the loop does not occur, the extractor yields nothing.
+- **L3 perceptual oracle.** The capture seam exists; the critic does not.
+- **Worker isolation for candidate code in the browser.** Proven in Node (AC-08); the
+  `Prober` interface is unchanged, so it drops in without touching the cycle.
 - **Nightly evaluation results**, including failures and rejections per layer.
 - **The injection policy decision** — what may auto-inject and what requires approval.
 - **More failures during implementation.** The first is recorded above; there will

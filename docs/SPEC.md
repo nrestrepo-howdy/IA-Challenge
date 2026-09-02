@@ -42,6 +42,7 @@ These are not assumptions. Each is sourced, and each one forced a design decisio
 | **R-5** | `WebGPURenderer` requires `await renderer.init()`; skipping it ships a black first frame | Three.js r182 |
 | **R-6** | `timestamp-query` values are quantized to 100 µs by default | WebGPU |
 | **R-7** | Multimodal visual critic latency runs 4–16 s depending on model | 2026 vision-model benchmarks |
+| **R-11** | WebGPU is available in workers (`WorkerNavigator.gpu`) and multiple devices per page are explicitly supported — but Three.js has known friction with `WebGPURenderer` inside `OffscreenCanvas` (a regression in r179, and it expects `canvas.style` which `OffscreenCanvas` lacks) | WebGPU explainer; three.js #31605 |
 
 ### 3.2 Product constraints
 
@@ -109,6 +110,7 @@ succeeds 28% of the time, down to constrained composition over a known API surfa
 | **D-6** | Bounded injection budget per session | Unlimited injections | R-4: the leak is structural, so it is bounded rather than pretended away |
 | **D-7** | TSL rather than hand-written WGSL/GLSL | Native shader code | One source compiles to both; WebGL2 fallback comes free |
 | **D-8** | No voice in v1 | Voice as the differentiator | 12 h buys more as rubric coverage than as garnish |
+| **D-9** | Split the shadow: the **candidate's code** runs in a Worker, the **shadow render** runs on the main thread in a second offscreen context | Full `WebGPURenderer` inside the Worker | R-11. Isolation is needed for *code* — an infinite loop must be killable — not for pixels. Rendering where Three.js is supported avoids a known-broken path, and a device may drive any number of canvases, so a second context costs nothing. The `Prober` interface is unchanged, which is why this could be decided after it was built |
 
 ---
 

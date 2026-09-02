@@ -1,135 +1,157 @@
-# Verbo — Especificación de ingeniería
+# Verbo — Engineering Specification
 
-> Estado: v1 · 2 sep 2026 · Autor: humano (decisión no delegada)
-> Este documento es la referencia contra la que se verifica todo el trabajo.
-> Está protegido por un control determinista (`.claude/hooks/guard-protected.sh`).
-> Modificarlo exige `VERBO_SPEC_UNLOCK=1` y queda registrado en el event log.
+> **Status** v1 · 2 Sep 2026 · **Author** human (not delegated)
+> This document is the reference every piece of work is verified against.
+> It is protected by a deterministic control (`.claude/hooks/guard-protected.sh`).
+> Editing it requires `VERBO_SPEC_UNLOCK=1` and is recorded in the event log.
 
-## 1. Objetivo
+---
 
-Verbo es un mundo 3D en el navegador que el usuario **amplía hablándole**. Al pedir
-una capacidad nueva ("que llueva"), un sistema de agentes genera código, lo verifica
-en aislamiento, y lo **inyecta en caliente** en el mundo que el usuario está usando —
-sin recarga, sin parpadeo y sin perder estado.
+## 1. Objective
 
-La tesis de ingeniería no es la generación. Es la **verificación**: qué hace falta para
-que sea seguro inyectar código no escrito por humanos en un sistema en ejecución.
+Verbo is a 3D world in the browser that the user **extends by speaking to it**. When
+the user asks for a new capability — *"make it rain"* — a system of agents writes the
+code, verifies it in isolation, and **hot-injects it into the world the user is
+currently using**: no reload, no black frame, no lost state.
 
-## 2. No-objetivos
+The engineering thesis is not generation. It is **verification**: what it actually
+takes to make it safe to inject machine-written code into a running system.
 
-Explícitos, para proteger el alcance:
+## 2. Non-goals
 
-- **NO** es un generador de mundos desde cero. Se parte de una escena base autoral.
-- **NO** genera geometría ni assets. Compone primitivas tipadas ya existentes.
-- **NO** persigue autonomía máxima. Persigue autonomía **verificable**.
-- **NO** hay entrada por voz en v1 (sacrificada para invertir en cobertura de rúbrica).
-- **NO** hay backend multiusuario. Persistencia = serialización del mundo a un enlace.
+Stated explicitly, to protect scope.
 
-## 3. Restricciones
+- **Not** a world generator. Verbo starts from an authored base scene.
+- **Not** an asset or geometry generator. It composes typed primitives that exist.
+- **Not** a pursuit of maximum autonomy. It pursues **verifiable** autonomy.
+- **No** voice input in v1 (traded for rubric coverage; see D-8).
+- **No** multi-user backend. Persistence is world serialization to a shareable link.
 
-### Verificadas contra la literatura y la documentación
+## 3. Constraints
 
-| ID | Restricción | Origen |
-|----|-------------|--------|
-| R-1 | El estado del arte genera mundos Three.js **behavioralmente correctos ~28% de las veces** (mejor modelo 27,8% V-Cov; ninguno >30%) | WorldCoder-Bench |
-| R-2 | La evaluación **visual externa está descorrelacionada** con la corrección real (τb = −0,02) y un crítico agéntico aprueba el **45,6% de salidas gravemente defectuosas** | WorldCoder-Bench |
-| R-3 | En headless, la presentación del canvas WebGPU **no llega al compositor** en Windows/Linux. Obliga a textura offscreen + `copyTextureToBuffer` + `mapAsync` | WebGPU headless |
-| R-4 | Los módulos importados vía blob URL **no se pueden liberar de memoria**: la caché de namespaces no se puede limpiar | ES modules |
-| R-5 | `WebGPURenderer` requiere `await renderer.init()` o el primer frame sale negro | Three.js r182 |
-| R-6 | `timestamp-query` está cuantizado a 100 µs por defecto | WebGPU |
-| R-7 | Latencia de un crítico visual multimodal: 4–16 s según modelo | Benchmarks 2026 |
+### 3.1 Verified against literature and vendor documentation
 
-### De producto
+These are not assumptions. Each is sourced, and each one forced a design decision.
 
-| ID | Restricción |
-|----|-------------|
-| R-8 | Presupuesto extremo a extremo: **≤ 40 s** desde intención hasta inyección |
-| R-9 | El mundo del usuario **nunca** pierde estado, se pone negro ni baja de 30 fps por una inyección |
-| R-10 | Debe correr en la máquina de un juez con un comando y sin claves propias (modo BYOK) |
+| ID | Constraint | Source |
+|----|------------|--------|
+| **R-1** | State of the art produces *behaviorally correct* Three.js worlds roughly **28% of the time** (best model 27.8% Verification Coverage; no system exceeds 30%) | WorldCoder-Bench (arXiv 2606.01869) |
+| **R-2** | External visual scoring is **uncorrelated** with hidden-state correctness (Kendall τb = −0.02 over 1,434 pairs). An agentic visual evaluator costing ~400× more still **passes 45.6% of severely defective outputs** | WorldCoder-Bench |
+| **R-3** | In headless environments, WebGPU canvas presentation **never reaches the compositor** on Windows/Linux. Deterministic capture requires rendering to an offscreen texture and reading back via `copyTextureToBuffer` + `mapAsync` | WebGPU headless behaviour |
+| **R-4** | ES modules imported via blob URL **can never be released**: there is no way to clear the module namespace cache. The leak is structural, not a bug | ES module semantics |
+| **R-5** | `WebGPURenderer` requires `await renderer.init()`; skipping it ships a black first frame | Three.js r182 |
+| **R-6** | `timestamp-query` values are quantized to 100 µs by default | WebGPU |
+| **R-7** | Multimodal visual critic latency runs 4–16 s depending on model | 2026 vision-model benchmarks |
 
-## 4. Arquitectura
+### 3.2 Product constraints
 
-### 4.1 Las cuatro capas de verificación
+| ID | Constraint |
+|----|------------|
+| **R-8** | End-to-end budget: **≤ 40 s** from utterance to injection (p50) |
+| **R-9** | The user's world must **never** lose state, render black, or drop below 30 fps because of an injection |
+| **R-10** | A judge must run it on their own machine with one command and their own key (BYOK) |
 
-Cada candidato se ejecuta en un **Web Worker con `OffscreenCanvas`** — aislado, sin DOM,
-matable por timeout — y atraviesa cuatro oráculos en cascada con cortocircuito:
+---
 
-| Capa | Qué comprueba | Coste | Naturaleza |
-|------|---------------|-------|------------|
-| **L0 estático** | Compila (TSL→WGSL), solo toca su ámbito declarado, no usa APIs prohibidas | ~5 ms | Determinista |
-| **L1 runtime** | `init()` resuelto, sin excepción en 120 frames, frame time ≤ 16 ms, draw calls y memoria en presupuesto | ~200 ms | Determinista |
-| **L2 contrato de estado** | Aserciones sobre `window.__VERBO_STATE__` con snapshots antes/después de acciones guionizadas | ~1 s | **Oráculo principal** |
-| **L3 perceptual** | Diff de píxeles (¿cambió algo?) + crítico visual multimodal | ~5 s | **Juez de gusto, no de verdad** |
+## 4. Architecture
 
-### 4.2 Decisión central
+### 4.1 Four verification layers
 
-**L2 es el oráculo de corrección. L3 no.** R-2 mide que la evaluación visual aprueba
-casi la mitad de lo defectuoso. Un sistema que ponga el modelo de visión en el centro
-está construido sobre un oráculo que la literatura ya midió como insuficiente.
+Every candidate runs inside a **Web Worker with an `OffscreenCanvas`** — isolated, no
+DOM access, killable by timeout — and passes through four short-circuiting oracles:
 
-### 4.3 Contratos endurecidos por mutación
+| Layer | What it checks | Budget | Nature |
+|-------|----------------|--------|--------|
+| **L0 static** | Compiles (TSL→WGSL), writes only inside its declared scope, uses no forbidden APIs | ~5 ms | Deterministic |
+| **L1 runtime** | `init()` resolved, no exception across 120 frames, frame time ≤ 16 ms, draw-call and memory budgets held | ~200 ms | Deterministic |
+| **L2 state contract** | Assertions over `window.__VERBO_STATE__` with before/after snapshots around scripted actions | ~1 s | **Primary oracle** |
+| **L3 perceptual** | Pixel diff (did anything change at all) plus a multimodal visual critic | ~5 s | **Judge of taste, not of truth** |
 
-Un contrato de estado no se acepta por fe. Se inyectan defectos deliberados en el
-candidato (borrar la actualización de estado, corromper una constante, desconectar un
-manejador) y **si el contrato no los detecta, el contrato no vale y se regenera**.
+### 4.2 The central decision
 
-### 4.4 Biblioteca de primitivas
+**L2 decides correctness. L3 does not.**
 
-Por R-1, el agente **no inventa**: compone y parametriza primitivas tipadas del mundo
-(emisores, materiales, campos de fuerza, luces, moduladores), cada una con `dispose()`
-obligatorio (R-4) y su porción declarada de `__VERBO_STATE__`.
+R-2 measures that external visual evaluation passes nearly half of severely defective
+output. Any system that puts a vision model at the center of its correctness oracle is
+built on a foundation the literature has already measured as insufficient. Verbo
+inverts the obvious ordering: hidden-state contracts are authoritative, and the
+vision model is demoted to breaking ties on aesthetics.
 
-## 5. Decisiones mayores
+This inversion is the single most important engineering decision in the project.
 
-| # | Decisión | Alternativa descartada | Razón |
-|---|----------|------------------------|-------|
-| D-1 | Contrato de estado como oráculo principal | Crítico visual como oráculo principal | R-2: aprueba 45,6% de lo roto |
-| D-2 | Biblioteca de primitivas componibles | Generación libre de Three.js | R-1: 28% de acierto es inviable en vivo |
-| D-3 | Worker + OffscreenCanvas para candidatos | `try/catch` en el hilo principal | Un bucle infinito no se atrapa; el worker se mata |
-| D-4 | Render a textura offscreen + readback | Captura del canvas | R-3: única vía determinista multiplataforma |
-| D-5 | 3 candidatos en paralelo, gana el primero válido | Un candidato con reintentos en serie | R-8: la latencia es requisito de producto |
-| D-6 | Presupuesto acotado de inyecciones por sesión | Inyecciones ilimitadas | R-4: la fuga de memoria es estructural, se acota |
-| D-7 | TSL en vez de WGSL/GLSL a mano | Shaders nativos | Un solo código, compila a ambos; el fallback sale gratis |
-| D-8 | Sin voz en v1 | Voz como diferenciador | 12 h rinden más en cobertura de rúbrica |
+### 4.3 Contracts hardened by mutation
 
-## 6. Criterios de aceptación
+A state contract is not accepted on faith. Deliberate defects are injected into the
+candidate — drop a state update, corrupt a constant, swap an event target, null out a
+disposer — and **if the contract fails to catch them, the contract is worthless and is
+regenerated.** A verifier that cannot detect known-bad input is not a verifier.
 
-Cada AC es verificable por máquina. Un AC sin verificación que pase **falla el build**.
+### 4.4 Primitive library
 
-### Núcleo de render
-- **AC-01** La escena base carga con `await renderer.init()` resuelto y el primer frame no es negro.
-- **AC-02** La escena base mantiene ≥ 55 fps medianos durante 10 s en hardware de referencia.
-- **AC-03** Con WebGPU deshabilitado, cae a WebGL2 y AC-01 sigue cumpliéndose.
+Because of R-1, the agent **does not invent**. It composes and parameterizes typed
+world primitives — emitters, materials, force fields, lights, modulators — each with a
+mandatory `dispose()` (R-4) and a declared slice of `__VERBO_STATE__`.
+
+This collapses the task from open-ended Three.js synthesis, where the state of the art
+succeeds 28% of the time, down to constrained composition over a known API surface.
+
+---
+
+## 5. Major technical decisions
+
+| # | Decision | Rejected alternative | Rationale |
+|---|----------|---------------------|-----------|
+| **D-1** | State contract as the primary oracle | Visual critic as primary oracle | R-2: it passes 45.6% of broken output |
+| **D-2** | Composable typed primitive library | Free-form Three.js generation | R-1: a 28% hit rate is unusable live |
+| **D-3** | Worker + OffscreenCanvas per candidate | `try/catch` on the main thread | An infinite loop cannot be caught — only killed |
+| **D-4** | Offscreen texture render + readback | Canvas screenshot | R-3: the only deterministic cross-platform path |
+| **D-5** | 3 parallel candidates, first valid wins | One candidate with serial retries | R-8: latency is a product requirement, so parallelism buys something real |
+| **D-6** | Bounded injection budget per session | Unlimited injections | R-4: the leak is structural, so it is bounded rather than pretended away |
+| **D-7** | TSL rather than hand-written WGSL/GLSL | Native shader code | One source compiles to both; WebGL2 fallback comes free |
+| **D-8** | No voice in v1 | Voice as the differentiator | 12 h buys more as rubric coverage than as garnish |
+
+---
+
+## 6. Acceptance criteria
+
+Every AC is machine-verifiable. **An AC without a passing verification fails the build.**
+
+### Render core
+- **AC-01** The base scene loads with `await renderer.init()` resolved and a non-black first frame.
+- **AC-02** The base scene holds ≥ 55 median fps for 10 s on reference hardware.
+- **AC-03** With WebGPU disabled, it falls back to WebGL2 and AC-01 still holds.
 
 ### Harness
-- **AC-04** L0 rechaza un módulo que no compila, en < 50 ms.
-- **AC-05** L0 rechaza un módulo que escribe fuera de su ámbito declarado.
-- **AC-06** L1 rechaza un módulo cuyo frame time supera 16 ms.
-- **AC-07** L1 rechaza un módulo que produce frame negro.
-- **AC-08** L1 mata por timeout un candidato con bucle infinito, sin afectar al hilo principal.
-- **AC-09** L2 rechaza un candidato que no satisface su contrato de estado.
-- **AC-10** Un contrato que no detecta sus tres mutantes hermanos es descartado y regenerado.
-- **AC-11** L3 nunca puede aprobar por sí solo: un candidato que falla L2 no se inyecta aunque L3 lo apruebe.
+- **AC-04** L0 rejects a module that fails to compile, in < 50 ms.
+- **AC-05** L0 rejects a module that writes outside its declared scope.
+- **AC-06** L1 rejects a module whose median frame time exceeds 16 ms.
+- **AC-07** L1 rejects a module that produces an all-black frame.
+- **AC-08** L1 kills an infinite-loop candidate by timeout without affecting the main thread.
+- **AC-09** L2 rejects a candidate that does not satisfy its state contract.
+- **AC-10** A contract that fails to catch its three sibling mutants is discarded and regenerated.
+- **AC-11** L3 can never approve on its own: a candidate failing L2 is not injected even if L3 approves it.
 
-### Runtime e inyección
-- **AC-12** Tras una inyección, el estado de usuario previo (cámara, entradas, objetos creados) es idéntico.
-- **AC-13** Una inyección que lanza excepción en los primeros 3 s revierte automáticamente y el mundo queda como antes.
-- **AC-14** El mundo nunca renderiza un frame negro durante una inyección.
-- **AC-15** Tras 20 inyecciones consecutivas, la memoria no supera el presupuesto declarado.
+### Runtime and injection
+- **AC-12** After an injection, prior user state (camera, inputs, created objects) is identical.
+- **AC-13** An injection that throws within the first 3 s rolls back automatically and the world is restored.
+- **AC-14** The world never renders a black frame during an injection.
+- **AC-15** After 20 consecutive injections, memory stays within the declared budget.
 
-### Intención
-- **AC-16** Toda intención produce un par (código, contrato); nunca código sin contrato.
-- **AC-17** Una intención imposible produce rechazo explicado, no un intento silencioso.
+### Intent
+- **AC-16** Every intent produces a (code, contract) pair — never code without a contract.
+- **AC-17** An impossible intent produces an explained rejection, not a silent attempt.
 
-### Extremo a extremo
-- **AC-18** "Que llueva" completa el ciclo en ≤ 40 s en el percentil 50.
-- **AC-19** Con los tres candidatos fallando, el sistema reintenta ≤ 3 veces y luego informa; nunca cuelga.
-- **AC-20** El mundo se serializa a un enlace y se restaura con los mismos verbos aplicados.
+### End to end
+- **AC-18** "Make it rain" completes the full cycle in ≤ 40 s at p50.
+- **AC-19** With all three candidates failing, the system retries ≤ 3 times then reports; it never hangs.
+- **AC-20** A world serializes to a link and restores with the same verbs applied.
 
-## 7. Definición de hecho
+---
 
-1. Los 20 AC tienen verificación automática que pasa.
-2. El harness gobierna el desarrollo: ningún commit entra sin atravesarlo.
-3. La eval nocturna acumula ≥ 5 noches y publica tasa de éxito **y de fallo**.
-4. Un tercero clona, ejecuta un comando y ve el mundo, con su propia clave.
-5. `SYSTEM.md` y `AI-DEV-LOG.md` se generan del event log.
+## 7. Definition of done
+
+1. All 20 acceptance criteria have automated verification, and it passes.
+2. The harness governs development: no commit lands without passing through it.
+3. The nightly evaluation has accumulated ≥ 5 nights and publishes success **and failure** rates.
+4. A third party clones the repo, runs one command, and sees the world using their own key.
+5. `SYSTEM.md` and `AI-DEV-LOG.md` are generated from the event log rather than written from memory.

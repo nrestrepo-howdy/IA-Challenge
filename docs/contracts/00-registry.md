@@ -1,37 +1,45 @@
-# Contratos entre workstreams
+# Workstream contracts
 
-La fuente de verdad es [`src/contracts.ts`](../../src/contracts.ts). Este documento
-explica **por qué** las fronteras están donde están — que es lo que el rubro puntúa.
+The source of truth is [`src/contracts.ts`](../../src/contracts.ts). This document
+explains **why** the boundaries sit where they do — which is what the rubric actually
+scores. Drawing five boxes is easy; justifying the lines between them is the work.
 
-| WS | Nombre | Implementa | Consume | Aislado porque |
-|----|--------|-----------|---------|----------------|
-| 1 | core | `WorldHandle` | `Primitive` | No sabe que existen agentes |
-| 2 | runtime | `Injector` | `Verdict`, `WorldHandle` | No sabe cómo se ve nada |
-| 3 | harness | `Oracle[]`, `Prober` | `Candidate`, `StateContract` | Contrato puro; se testea sin mundo |
-| 4 | intent | `IntentCompiler` | — | Interfaz sin dependencias de render |
-| 5 | world | `Primitive[]`, escena base | `WorldHandle` | Puramente visual |
+| WS | Name | Implements | Consumes | Isolated because |
+|----|------|-----------|----------|------------------|
+| 1 | core | `WorldHandle` | `Primitive` | It does not know agents exist |
+| 2 | runtime | `Injector` | `Verdict`, `WorldHandle` | It does not know what anything looks like |
+| 3 | harness | `Oracle[]`, `Prober` | `Candidate`, `StateContract` | Pure contract; testable with no world at all |
+| 4 | intent | `IntentCompiler` | `WorldHandle` (read-only) | No rendering dependency whatsoever |
+| 5 | world | `Primitive[]`, base scene | `WorldHandle` | Purely visual |
 
-## Por qué estas fronteras y no otras
+## Why these boundaries
 
-**core / harness.** El harness verifica candidatos **sin** el mundo real: recibe un
-`Candidate` y un `Intent`, devuelve un `Verdict`. Esa frontera es lo que permite
-correr los oráculos en un Worker y en headless, y es también lo que permite testear
-el harness contra candidatos sintéticos sin abrir un navegador.
+**core / harness.** The harness verifies candidates *without* the real world: it takes
+a `Candidate` and an `Intent` and returns a `Verdict`. That boundary is what makes it
+possible to run the oracles inside a Worker and in headless CI — and it is also what
+lets the harness be tested against synthetic candidates without ever opening a browser.
+It is the boundary that makes the whole project testable.
 
-**runtime / harness.** El runtime **no puede** inyectar sin un `Verdict`. La firma
-lo impide: `inject(c, v)` exige el veredicto. AC-11 —L3 no basta por sí solo— se
-cumple porque `failedAt` es explícito y el injector rechaza cualquier veredicto que
-haya fallado L0, L1 o L2.
+**runtime / harness.** The runtime **cannot** inject without a `Verdict`; the signature
+`inject(c, v)` requires one. AC-11 — L3 alone is never sufficient — holds because
+`failedAt` is explicit and the injector refuses any verdict that failed L0, L1 or L2.
+This is a deterministic guarantee expressed in the type system rather than a rule an
+agent has to remember.
 
-**world / core.** Las primitivas declaran su `statePath`. Esa declaración es lo que
-hace posible L2: el contrato apunta a rutas dentro de `__VERBO_STATE__` que existen
-porque una primitiva las registró. Sin esta frontera no hay contrato verificable.
+**world / core.** Primitives declare a `statePath`. That declaration is what makes L2
+possible at all: a contract asserts over paths inside `__VERBO_STATE__` that exist
+because some primitive registered them. Without this boundary there is no verifiable
+contract, only screenshots — and R-2 says screenshots are not enough.
 
-**intent aislado.** Compila lenguaje a `(código, contrato)` sin tocar render. Es el
-único workstream que puede empezar sin que exista ninguna escena.
+**intent isolated.** It compiles language into a (code, contract) pair without touching
+rendering. It is the only workstream that can begin before any scene exists, which is
+why it starts on day one alongside the harness.
 
-## Regla de integración
+## Integration rule
 
-Nadie modifica `src/contracts.ts` desde un worktree. Un cambio de contrato es una
-decisión humana, se hace en `main` con `VERBO_SPEC_UNLOCK=1`, y queda en el event log.
-Es la razón por la que cinco flujos paralelos no producen conflictos de merge.
+Nobody edits `src/contracts.ts` from a worktree. A contract change is a human decision:
+it happens on `main`, with `VERBO_SPEC_UNLOCK=1`, and it lands in the event log.
+
+This is the mechanism by which five parallel workstreams produce no merge conflicts.
+The conflict count is tracked and reported — it is the evidence for integration quality,
+and a number is more convincing than a claim.

@@ -1,55 +1,74 @@
 /**
- * Verbo · Contratos entre workstreams.
+ * Verbo · Workstream contracts.
  *
- * Este archivo es la única dependencia compartida entre los cinco flujos de
- * trabajo. Cada uno se desarrolla en su propio worktree contra estas firmas,
- * en paralelo y sin coordinación. Cambiar algo aquí es una decisión humana
- * (control determinista en guard-protected.sh).
+ * This file is the only shared dependency between the five workstreams. Each one is
+ * developed in its own git worktree against these signatures, in parallel, with no
+ * coordination. Changing anything here is a human decision, enforced by a
+ * deterministic control (`.claude/hooks/guard-protected.sh`).
  *
- * WS1 core    → implementa WorldHandle, consume Primitive
- * WS2 runtime → implementa Injector, consume Verdict y WorldHandle
- * WS3 harness → implementa Oracle[] y Prober, consume Candidate y StateContract
- * WS4 intent  → implementa IntentCompiler, produce Intent
- * WS5 world   → implementa Primitive[] y la escena base
+ *   WS1 core    → implements WorldHandle,          consumes Primitive
+ *   WS2 runtime → implements Injector,             consumes Verdict, WorldHandle
+ *   WS3 harness → implements Oracle[], Prober,     consumes Candidate, StateContract
+ *   WS4 intent  → implements IntentCompiler,       produces Intent
+ *   WS5 world   → implements Primitive[] + scene,  consumes WorldHandle
+ *
+ * Reference: docs/SPEC.md. Constraint and decision IDs below (R-n, D-n, AC-n) point
+ * at that document.
  */
 
 // ─── WS4 → WS2 ───────────────────────────────────────────────────────────────
 
-/** Lo que sale de "que llueva": nunca código sin contrato (AC-16). */
+/** What "make it rain" compiles to. Never code without a contract (AC-16). */
 export interface Intent {
   readonly id: string;
   readonly utterance: string;
-  /** Primitivas que el agente puede componer. Cerrado por diseño (D-2). */
+  /** Primitives the agent may compose. Closed by design (D-2). */
   readonly allowedPrimitives: readonly string[];
-  /** Ámbito de escritura permitido. L0 rechaza cualquier cosa fuera (AC-05). */
+  /** Permitted write scope. L0 rejects anything outside it (AC-05). */
   readonly scope: readonly string[];
   readonly contract: StateContract;
 }
 
-// ─── WS3: el oráculo principal (D-1) ─────────────────────────────────────────
+export interface IntentCompiler {
+  /** An impossible request is rejected with an explanation, never attempted silently (AC-17). */
+  compile(utterance: string, world: WorldHandle): Promise<Intent | IntentRejection>;
+}
 
-/** Aserciones sobre estado oculto. StateProbe: la vista no basta (R-2). */
+export interface IntentRejection {
+  readonly rejected: true;
+  readonly reason: string;
+  readonly suggestion: string | null;
+}
+
+// ─── WS3 · the primary oracle (D-1) ──────────────────────────────────────────
+
+/**
+ * Assertions over hidden runtime state. Modelled on StateProbe: looking at the
+ * render is not enough, because external visual scoring is uncorrelated with
+ * behavioural correctness (R-2).
+ */
 export interface StateContract {
   readonly id: string;
   readonly assertions: readonly Assertion[];
-  /** Acciones guionizadas ejecutadas entre snapshots. */
+  /** Scripted actions executed between the before and after snapshots. */
   readonly actions: readonly ScriptedAction[];
   /**
-   * Defectos deliberados. Si el contrato no los detecta, no vale (AC-10).
-   * Endurecimiento por mutación, como en StateProbe.
+   * Deliberate defects. If the contract fails to catch these, the contract itself
+   * is worthless and gets regenerated (AC-10). A verifier that cannot detect
+   * known-bad input is not a verifier.
    */
   readonly mutants: readonly Mutant[];
 }
 
 export interface Assertion {
   readonly id: string;
-  /** Ruta dentro de window.__VERBO_STATE__ */
+  /** Path inside window.__VERBO_STATE__ */
   readonly path: string;
   readonly kind: 'exists' | 'inRange' | 'changesOverTime' | 'boundedBy' | 'equals';
   readonly expected?: unknown;
   readonly min?: number;
   readonly max?: number;
-  /** Frames entre el snapshot previo y el posterior. */
+  /** Frames between the before and after snapshots. */
   readonly window?: number;
 }
 
@@ -60,8 +79,9 @@ export interface ScriptedAction {
 
 export interface Mutant {
   readonly id: string;
+  /** The four dominant failure modes catalogued by WorldCoder-Bench. */
   readonly kind: 'dropStateUpdate' | 'corruptConstant' | 'swapEventTarget' | 'nullifyDisposer';
-  /** El contrato DEBE fallar con este mutante aplicado. */
+  /** The contract MUST fail once this mutant is applied. */
   readonly mustBeCaughtBy: string;
 }
 
@@ -70,8 +90,9 @@ export interface Mutant {
 export interface Candidate {
   readonly id: string;
   readonly intentId: string;
+  /** Candidates differ by strategy, so the three are not three samples of one thing (D-5). */
   readonly strategy: string;
-  /** Módulo ES como texto. Se importa vía blob URL; presupuesto acotado (R-4). */
+  /** ES module source. Imported via blob URL under a bounded budget (R-4, D-6). */
   readonly source: string;
 }
 
@@ -82,9 +103,9 @@ export type Layer = 'L0' | 'L1' | 'L2' | 'L3';
 export interface Verdict {
   readonly candidateId: string;
   readonly passed: boolean;
-  /** Primera capa que rechazó. null si pasó todas. */
+  /** First layer that rejected. `null` when every layer passed. */
   readonly failedAt: Layer | null;
-  /** Accionable para el agente, no un número (ReLook). */
+  /** Actionable for the agent, not a score. A number cannot be acted on. */
   readonly diagnosis: string | null;
   readonly metrics: {
     readonly compileMs: number | null;
@@ -94,20 +115,20 @@ export interface Verdict {
     readonly assertionsPassed: number;
     readonly assertionsTotal: number;
   };
-  /** PNG del render sombra. Prueba visual del rechazo, va en el demo. */
+  /** PNG from the shadow render. Visual proof of the rejection; used in the demo. */
   readonly frame: Uint8Array | null;
 }
 
-/** Un oráculo. Cascada con cortocircuito: el orden es el presupuesto (R-8). */
+/** One oracle. Short-circuiting cascade — the ordering *is* the latency budget (R-8). */
 export interface Oracle {
   readonly layer: Layer;
   readonly budgetMs: number;
   evaluate(c: Candidate, i: Intent): Promise<Omit<Verdict, 'candidateId'>>;
 }
 
-/** Ejecuta el candidato aislado en Worker + OffscreenCanvas (D-3, D-4). */
+/** Runs a candidate isolated in a Worker + OffscreenCanvas (D-3, D-4). */
 export interface Prober {
-  /** Rechaza por timeout matando el worker; no atrapa, mata (AC-08). */
+  /** Rejects by killing the worker on timeout. It does not catch — it kills (AC-08). */
   probe(c: Candidate, i: Intent, timeoutMs: number): Promise<ProbeResult>;
 }
 
@@ -115,27 +136,28 @@ export interface ProbeResult {
   readonly crashed: boolean;
   readonly timedOut: boolean;
   readonly frames: readonly FrameSample[];
-  /** Snapshots de __VERBO_STATE__ antes y después de las acciones. */
+  /** Snapshots of __VERBO_STATE__ taken around the scripted actions. */
   readonly stateBefore: unknown;
   readonly stateAfter: unknown;
-  /** Readback offscreen: única vía determinista en headless (R-3). */
+  /** Offscreen readback — the only deterministic path in headless (R-3). */
   readonly pixels: Uint8Array | null;
 }
 
 export interface FrameSample {
   readonly index: number;
-  /** timestamp-query, cuantizado a 100 µs; suficiente (R-6). */
+  /** From timestamp-query. Quantized to 100 µs, which is ample here (R-6). */
   readonly gpuMs: number;
   readonly allBlack: boolean;
 }
 
 // ─── WS5 → WS1 ───────────────────────────────────────────────────────────────
 
-/** Unidad componible. El agente parametriza; no inventa (D-2). */
+/** A composable unit. The agent parameterizes; it does not invent (D-2). */
 export interface Primitive<P = Record<string, unknown>> {
   readonly name: string;
+  /** JSON Schema. L0 validates parameters against it before anything runs. */
   readonly schema: unknown;
-  /** Porción de __VERBO_STATE__ que esta primitiva declara y mantiene. */
+  /** The slice of __VERBO_STATE__ this primitive declares and maintains. */
   readonly statePath: string;
   mount(world: WorldHandle, params: P): PrimitiveInstance;
 }
@@ -143,20 +165,20 @@ export interface Primitive<P = Record<string, unknown>> {
 export interface PrimitiveInstance {
   readonly id: string;
   update(dt: number): void;
-  /** Obligatorio. Sin esto la fuga estructural se vuelve inaceptable (R-4). */
+  /** Mandatory. Without it the structural leak becomes unacceptable (R-4). */
   dispose(): void;
 }
 
-// ─── WS1 → todos ─────────────────────────────────────────────────────────────
+// ─── WS1 → everyone ──────────────────────────────────────────────────────────
 
 export interface WorldHandle {
   readonly scene: unknown;
   readonly clock: { readonly elapsed: number };
   register(inst: PrimitiveInstance, statePath: string): void;
   unregister(id: string): void;
-  /** El estado observable. Es lo que L2 verifica. */
+  /** The observable state. This is precisely what L2 verifies. */
   readonly state: Readonly<Record<string, unknown>>;
-  /** Serialización para AC-20. */
+  /** Serialization for AC-20. */
   snapshot(): WorldSnapshot;
   restore(s: WorldSnapshot): void;
 }
@@ -167,14 +189,18 @@ export interface WorldSnapshot {
   readonly userState: unknown;
 }
 
-// ─── WS2: inyección en caliente ──────────────────────────────────────────────
+// ─── WS2 · hot injection ─────────────────────────────────────────────────────
 
 export interface Injector {
-  /** Solo se llama con un Verdict que pasó L0–L2. L3 nunca basta (AC-11). */
+  /**
+   * Only ever called with a Verdict that cleared L0–L2. The signature is the
+   * enforcement: there is no way to inject without a verdict, so AC-11 stops
+   * depending on anyone remembering it.
+   */
   inject(c: Candidate, v: Verdict): Promise<InjectResult>;
-  /** Revierte si hay excepción en los primeros 3 s (AC-13). */
+  /** Rolls back on an exception within this window (AC-13). */
   readonly rollbackWindowMs: number;
-  /** Presupuesto acotado por sesión (D-6, R-4). */
+  /** Bounded per session (D-6, R-4). */
   readonly remainingBudget: number;
 }
 

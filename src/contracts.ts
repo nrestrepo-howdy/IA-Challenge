@@ -18,7 +18,32 @@
 
 // ─── WS4 → WS2 ───────────────────────────────────────────────────────────────
 
-/** What "make it rain" compiles to. Never code without a contract (AC-16). */
+/** One composition step: which primitive, imported how, parameterized with what. */
+export interface PrimitiveDirective {
+  readonly name: string;
+  /** L0 only admits `verbo:*` specifiers listed in `allowedPrimitives`. */
+  readonly importSpecifier: string;
+  readonly statePath: string;
+  readonly params: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The code-generation half of an intent. A brief, not a prompt: it names primitives
+ * that exist and parameters that validated, so the generator composes rather than
+ * invents (D-2). It crosses the WS4 -> WS2 boundary, which is why it lives here.
+ */
+export interface CodeBrief {
+  readonly goal: string;
+  readonly rationale: string;
+  readonly directives: readonly PrimitiveDirective[];
+  readonly steps: readonly string[];
+  readonly constraints: readonly string[];
+}
+
+/**
+ * What "make it rain" compiles to. Both halves are required, so code without a
+ * contract is unrepresentable rather than merely discouraged (AC-16).
+ */
 export interface Intent {
   readonly id: string;
   readonly utterance: string;
@@ -27,6 +52,7 @@ export interface Intent {
   /** Permitted write scope. L0 rejects anything outside it (AC-05). */
   readonly scope: readonly string[];
   readonly contract: StateContract;
+  readonly brief: CodeBrief;
 }
 
 export interface IntentCompiler {
@@ -176,6 +202,15 @@ export interface WorldHandle {
   readonly clock: { readonly elapsed: number };
   register(inst: PrimitiveInstance, statePath: string): void;
   unregister(id: string): void;
+  /**
+   * The live, mutable slice owned by one instance. Handing back the same object the
+   * oracle later reads means there is no copy between a primitive's write and the
+   * assertion about it -- a copy is exactly where a passing contract and a wrong
+   * world would diverge.
+   */
+  slice(id: string): Record<string, unknown>;
+  /** Records an accepted injection so `snapshot()` can replay it (AC-20). */
+  recordVerb(verb: WorldSnapshot['verbs'][number]): void;
   /** The observable state. This is precisely what L2 verifies. */
   readonly state: Readonly<Record<string, unknown>>;
   /** Serialization for AC-20. */

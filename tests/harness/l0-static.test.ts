@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { analyze, evaluateL0 } from '../../src/harness/l0-static.js';
 import type { Candidate, Intent } from '../../src/contracts.js';
+import { EMPTY_BRIEF } from '../fixtures.js';
 
 const intent: Intent = {
   id: 'i1',
@@ -8,6 +9,7 @@ const intent: Intent = {
   allowedPrimitives: ['emitter', 'forceField'],
   scope: ['weather.rain'],
   contract: { id: 'c1', assertions: [], actions: [], mutants: [] },
+  brief: EMPTY_BRIEF,
 };
 
 const candidate = (source: string): Candidate =>

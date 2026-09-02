@@ -6,7 +6,7 @@ set -u
 [ "${VERBO_SPEC_UNLOCK:-0}" = "1" ] && exit 0
 PAYLOAD="$(cat)"
 TARGET="$(printf '%s' "$PAYLOAD" | jq -r '(.tool_input.file_path // .tool_input.path // "") + " " + (.tool_input.command // "")')"
-for P in "docs/SPEC.md" "docs/contracts/" ".verbo/" ".claude/hooks/"; do
+for P in "docs/SPEC.md" "docs/contracts/" "src/contracts.ts" ".verbo/" ".claude/hooks/"; do
   case "$TARGET" in
     *"$P"*)
       echo "BLOQUEADO por control determinista: '$P' es un artefacto protegido." >&2

@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { runCascade, isInjectable, AUTHORITATIVE_LAYERS, firstInjectable } from '../../src/harness/cascade.js';
 import type { Candidate, Intent, Layer, Oracle, Verdict } from '../../src/contracts.js';
+import { EMPTY_BRIEF } from '../fixtures.js';
 
 const intent: Intent = {
   id: 'i1', utterance: 'make it rain', allowedPrimitives: ['emitter'],
   scope: ['weather.rain'], contract: { id: 'c', assertions: [], actions: [], mutants: [] },
+  brief: EMPTY_BRIEF,
 };
 const candidate: Candidate = { id: 'cand-1', intentId: 'i1', strategy: 's', source: '' };
 

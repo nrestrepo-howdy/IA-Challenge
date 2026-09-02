@@ -9,6 +9,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { NodeProber } from '../../src/harness/prober-node.js';
 import { createL1Oracle } from '../../src/harness/l1-runtime.js';
 import type { Candidate, Intent } from '../../src/contracts.js';
+import { EMPTY_BRIEF } from '../fixtures.js';
 
 const intent: Intent = {
   id: 'i1',
@@ -21,6 +22,7 @@ const intent: Intent = {
     actions: [{ kind: 'advanceFrames', payload: 30 }],
     mutants: [],
   },
+  brief: EMPTY_BRIEF,
 };
 
 const candidate = (source: string): Candidate =>

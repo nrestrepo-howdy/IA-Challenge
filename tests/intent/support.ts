@@ -22,6 +22,8 @@ export function fakeWorld(state: Record<string, unknown> = {}): WorldHandle {
     clock: { elapsed: 0 },
     register: (_inst: PrimitiveInstance, _statePath: string) => {},
     unregister: (_id: string) => {},
+  slice: (_id: string) => ({}),
+  recordVerb: () => {},
     state,
     snapshot: (): WorldSnapshot => ({ version: 1, verbs: [], userState: null }),
     restore: (_s: WorldSnapshot) => {},

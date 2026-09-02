@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { verdictFromProbe, createL1Oracle, FRAME_BUDGET_MS } from '../../src/harness/l1-runtime.js';
 import type { Candidate, FrameSample, Intent, ProbeResult } from '../../src/contracts.js';
+import { EMPTY_BRIEF } from '../fixtures.js';
 
 const intent: Intent = {
   id: 'i1',
@@ -15,6 +16,7 @@ const intent: Intent = {
   allowedPrimitives: ['emitter'],
   scope: ['weather.rain'],
   contract: { id: 'c1', assertions: [], actions: [], mutants: [] },
+  brief: EMPTY_BRIEF,
 };
 
 const candidate: Candidate = { id: 'c', intentId: 'i1', strategy: 'test', source: '' };

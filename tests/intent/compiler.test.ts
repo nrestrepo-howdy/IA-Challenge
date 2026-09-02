@@ -1,0 +1,161 @@
+import { describe, expect, it } from 'vitest';
+import type { Intent, IntentRejection } from '../../src/contracts.js';
+import { CATALOGUE } from '../../src/intent/catalogue.js';
+import { CatalogueIntentCompiler, isRejection, type CompiledIntent } from '../../src/intent/compiler.js';
+import { keywordModel } from '../../src/intent/model.js';
+import { failingModel, fakeWorld, stubModel } from './support.js';
+
+const world = fakeWorld({ weather: {}, lighting: { ambient: { intensity: 1 } } });
+
+function expectIntent(r: CompiledIntent | IntentRejection): CompiledIntent {
+  if (isRejection(r)) throw new Error(`expected an intent, got a rejection: ${r.reason}`);
+  return r;
+}
+
+function expectRejection(r: CompiledIntent | IntentRejection): IntentRejection {
+  if (!isRejection(r)) throw new Error(`expected a rejection, got intent ${r.id}`);
+  return r;
+}
+
+describe('AC-16 · every intent produces a (code, contract) pair', () => {
+  it('compiles "make it rain" into a brief and a contract together', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+    const intent = expectIntent(await compiler.compile('make it rain', world));
+
+    expect(intent.brief.directives.map((d) => d.name)).toEqual(['rain-emitter']);
+    expect(intent.brief.directives[0]?.importSpecifier).toBe('verbo:rain-emitter');
+    expect(intent.contract.assertions.length).toBeGreaterThan(0);
+    expect(intent.contract.mutants.length).toBeGreaterThan(0);
+    // The declared write scope is what L0's out-of-scope check is checked against.
+    expect(intent.scope).toEqual(['weather.rain']);
+    expect(intent.allowedPrimitives).toEqual(['rain-emitter']);
+  });
+
+  it('carries a contract for every primitive in the closed catalogue', async () => {
+    for (const spec of CATALOGUE) {
+      const compiler = new CatalogueIntentCompiler({ model: stubModel({ primitives: [{ name: spec.name }] }) });
+      const intent = expectIntent(await compiler.compile(`use ${spec.name}`, world));
+
+      expect(intent.contract.assertions.length).toBeGreaterThan(0);
+      expect(intent.brief.directives).toHaveLength(1);
+      expect(intent.scope).toEqual([spec.statePath]);
+      // Every assertion addresses the slice the intent is allowed to write.
+      for (const a of intent.contract.assertions) expect(a.path.startsWith(spec.statePath)).toBe(true);
+    }
+  });
+
+  it('composes several primitives into one intent, contract included', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+    const intent = expectIntent(await compiler.compile('make it storm', world));
+
+    expect(intent.allowedPrimitives).toEqual(expect.arrayContaining(['rain-emitter', 'wind-field']));
+    expect(intent.scope).toEqual(expect.arrayContaining(['weather.rain', 'forces.wind']));
+    const paths = new Set(intent.contract.assertions.map((a) => a.path));
+    expect([...paths].some((p) => p.startsWith('weather.rain'))).toBe(true);
+    expect([...paths].some((p) => p.startsWith('forces.wind'))).toBe(true);
+  });
+
+  it('makes code-without-a-contract unrepresentable, not merely untested (AC-16)', () => {
+    // Structural, per the task: this is a typecheck assertion, and `npm run typecheck`
+    // fails if the contract ever becomes optional on Intent.
+    // @ts-expect-error — a brief with no contract is not a CompiledIntent.
+    const withoutContract: CompiledIntent = {
+      id: 'i-1',
+      utterance: 'make it rain',
+      allowedPrimitives: ['rain-emitter'],
+      scope: ['weather.rain'],
+      brief: { goal: '', rationale: '', directives: [], steps: [], constraints: [] },
+    };
+    expect(withoutContract).toBeTruthy();
+
+    const asIntent: Intent = expectTypeIsAssignable();
+    expect(asIntent.contract).toBeDefined();
+  });
+
+  it('gives the same utterance the same intent id, so a failure is reproducible', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+    const a = expectIntent(await compiler.compile('make it rain', world));
+    const b = expectIntent(await compiler.compile('make it rain', world));
+    expect(a.id).toBe(b.id);
+    expect(a.contract.id).toBe(b.contract.id);
+  });
+});
+
+describe('AC-17 · an impossible intent is explained, never silently attempted', () => {
+  it('rejects a primitive outside the catalogue and suggests the nearest one', async () => {
+    const compiler = new CatalogueIntentCompiler({
+      model: stubModel({ primitives: [{ name: 'drain-emitter' }] }),
+    });
+    const r = expectRejection(await compiler.compile('make it drain', world));
+
+    expect(r.reason).toContain("'drain-emitter' is not a primitive in the catalogue");
+    expect(r.reason).toContain('rain-emitter');
+    expect(r.suggestion).toBe("did you mean 'rain-emitter'?");
+  });
+
+  it('rejects a request the catalogue cannot express, with no invented suggestion', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+    const r = expectRejection(await compiler.compile('give the world a talking dragon', world));
+
+    expect(r.reason).toContain('nothing in the primitive catalogue expresses');
+    // A wrong suggestion costs the user a whole verification cycle, so none is offered.
+    expect(r.suggestion).toBeNull();
+  });
+
+  it('rejects out-of-range parameters and suggests a value that would be accepted', async () => {
+    const compiler = new CatalogueIntentCompiler({
+      model: stubModel({ primitives: [{ name: 'rain-emitter', params: { count: 5_000_000 } }] }),
+    });
+    const r = expectRejection(await compiler.compile('make it rain very hard', world));
+
+    expect(r.reason).toContain('outside [100, 20000]');
+    expect(r.suggestion).toBe('use count = 20000');
+  });
+
+  it('rejects a parameter that is not part of the primitive surface', async () => {
+    const compiler = new CatalogueIntentCompiler({
+      model: stubModel({ primitives: [{ name: 'rain-emitter', params: { wetness: 3 } }] }),
+    });
+    const r = expectRejection(await compiler.compile('make it rain wetly', world));
+    expect(r.reason).toContain("'wetness' is not a parameter");
+  });
+
+  it('rejects malformed model output instead of guessing at it', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: stubModel('sure! I will make it rain') });
+    const r = expectRejection(await compiler.compile('make it rain', world));
+    expect(r.reason).toContain('not JSON');
+    expect(r.suggestion).toBe('rephrase the request');
+  });
+
+  it('reports a model failure rather than falling back to an attempt', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: failingModel('429 rate limited') });
+    const r = expectRejection(await compiler.compile('make it rain', world));
+    expect(r.reason).toContain('429 rate limited');
+  });
+
+  it('rejects an empty utterance', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+    const r = expectRejection(await compiler.compile('   ', world));
+    expect(r.reason).toContain('nothing to resolve');
+    expect(r.suggestion).toContain('rain');
+  });
+
+  it('never returns a rejection without a reason (AC-17)', async () => {
+    const compiler = new CatalogueIntentCompiler({ model: stubModel({ primitives: [{ name: 'unicorn' }] }) });
+    const r = expectRejection(await compiler.compile('summon a unicorn', world));
+    expect(r.rejected).toBe(true);
+    expect(r.reason.length).toBeGreaterThan(20);
+  });
+});
+
+/** Exists only to assert, at compile time, that a CompiledIntent *is* an Intent. */
+function expectTypeIsAssignable(): CompiledIntent {
+  return {
+    id: 'i-2',
+    utterance: 'make it rain',
+    allowedPrimitives: ['rain-emitter'],
+    scope: ['weather.rain'],
+    contract: { id: 'c-2', assertions: [], actions: [], mutants: [] },
+    brief: { goal: 'make it rain', rationale: '', directives: [], steps: [], constraints: [] },
+  };
+}

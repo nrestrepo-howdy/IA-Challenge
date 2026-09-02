@@ -46,10 +46,19 @@ export function applyMutant(
       }
       break;
     }
-    case 'corruptConstant':
-      if (typeof node?.[leaf] === 'number') node[leaf] = node[leaf] * 1000 + 1;
-      else if (Array.isArray(node?.[leaf])) node[leaf] = node[leaf].map((n: number) => n * 1000 + 1);
+    case 'corruptConstant': {
+      // The offset must be large and unconditional. An earlier version used
+      // `v * 1000 + 1`, which cannot leave a [0, 1] box starting from zero -- so a
+      // legitimately bounded field such as a black colour channel produced a mutant
+      // its own assertion provably could not catch, and WS4 had to omit those
+      // mutants to keep hardening honest. A mutant that cannot be caught is not a
+      // weak test of the contract; it is a false accusation against it.
+      const corrupt = (n: number): number => n * 1000 + 9973;
+      const v = node?.[leaf];
+      if (typeof v === 'number') node[leaf] = corrupt(v);
+      else if (Array.isArray(v)) node[leaf] = v.map((n: number) => (typeof n === 'number' ? corrupt(n) : n));
       break;
+    }
     case 'swapEventTarget':
       // Schema drift: the field the contract asks for stops existing.
       if (node && leaf in node) { node[`${leaf}_renamed`] = node[leaf]; delete node[leaf]; }

@@ -1,23 +1,12 @@
 {
   "hooks": {
-    "SessionStart": [
+    "PermissionDenied": [
       {
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
@@ -26,9 +15,9 @@
       {
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
@@ -37,53 +26,9 @@
       {
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "WorktreeCreate": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
@@ -92,20 +37,80 @@
       {
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
     ],
-    "TaskCreated": [
+    "PreToolUse": [
       {
         "hooks": [
           {
-            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-protected.sh",
+            "timeout": 5,
+            "type": "command"
+          },
+          {
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|NotebookEdit|Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "^(?!Edit$|Write$|NotebookEdit$|Bash$).*"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
@@ -114,47 +119,42 @@
       {
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
     ],
-    "PermissionDenied": [
+    "TaskCreated": [
       {
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
     ],
-    "PreToolUse": [
+    "UserPromptSubmit": [
       {
-        "matcher": "Edit|Write|NotebookEdit|Bash",
         "hooks": [
           {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-protected.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
-      },
+      }
+    ],
+    "WorktreeCreate": [
       {
-        "matcher": "^(?!Edit$|Write$|NotebookEdit$|Bash$).*",
         "hooks": [
           {
-            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-event.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }

@@ -6,6 +6,12 @@
 # elsewhere would silently record nothing. Development evidence is the one artifact
 # that cannot be reconstructed later, so it gets a belt and braces.
 #
+# NOT registered on WorktreeCreate. That event treats the hook's stdout as the
+# worktree path, so a logger attached to it returns an empty path and aborts
+# worktree creation outright. Worktree spans are reconstructed from
+# SubagentStart/SubagentStop instead, which is what the parallelism evidence
+# actually needs.
+#
 # Outside the Verbo repo this is a no-op: it must never pollute other work.
 # It never blocks: any failure exits 0 and the agent continues.
 set -u

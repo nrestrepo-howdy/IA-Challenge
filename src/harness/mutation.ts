@@ -14,6 +14,21 @@ import type { Mutant, StateContract } from '../contracts.js';
 import { evaluateContract, readPath } from './l2-contract.js';
 
 /**
+ * The corruption `corruptConstant` applies.
+ *
+ * Exported because WS4 needs to know whether a corrupted value would escape a
+ * field's declared bounds -- and a second module re-deriving the formula is how the
+ * two drift. WS5 caught exactly that: a stale mirror still computing `v*1000+1`
+ * after this moved to `+9973`. Conservative in that instance, and a coin-flip in
+ * general.
+ *
+ * The offset must be large and unconditional: `v * 1000 + 1` cannot leave a [0, 1]
+ * box starting from zero, so a bounded field such as a black colour channel produced
+ * a mutant its own assertion provably could not catch.
+ */
+export const corruptValue = (n: number): number => n * 1000 + 9973;
+
+/**
  * Applies a mutant, producing plausibly-broken state.
  *
  * Takes both snapshots because 'dropStateUpdate' is only meaningful relative to the
@@ -47,16 +62,16 @@ export function applyMutant(
       break;
     }
     case 'corruptConstant': {
+      // Formula lives in `corruptValue` so no other module has to mirror it.
       // The offset must be large and unconditional. An earlier version used
       // `v * 1000 + 1`, which cannot leave a [0, 1] box starting from zero -- so a
       // legitimately bounded field such as a black colour channel produced a mutant
       // its own assertion provably could not catch, and WS4 had to omit those
       // mutants to keep hardening honest. A mutant that cannot be caught is not a
       // weak test of the contract; it is a false accusation against it.
-      const corrupt = (n: number): number => n * 1000 + 9973;
       const v = node?.[leaf];
-      if (typeof v === 'number') node[leaf] = corrupt(v);
-      else if (Array.isArray(v)) node[leaf] = v.map((n: number) => (typeof n === 'number' ? corrupt(n) : n));
+      if (typeof v === 'number') node[leaf] = corruptValue(v);
+      else if (Array.isArray(v)) node[leaf] = v.map((n: number) => (typeof n === 'number' ? corruptValue(n) : n));
       break;
     }
     case 'swapEventTarget':

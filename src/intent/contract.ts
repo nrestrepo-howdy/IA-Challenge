@@ -12,7 +12,7 @@
  * because assertion strength is not uniform —
  *
  *   role     → assertion         → mutants it can actually catch
- *   constant → equals            → corruptConstant (x*1000+1 ≠ x), swapEventTarget (absent)
+ *   constant → equals            → corruptConstant (corruptValue(x) ≠ x), swapEventTarget (absent)
  *   vector   → boundedBy         → corruptConstant (components leave the volume)
  *   animated → changesOverTime   → dropStateUpdate (value rewound to its prior frame)
  *   resource → exists            → nullifyDisposer (null is not present)
@@ -23,6 +23,7 @@
  */
 import type { Assertion, Mutant, ScriptedAction, StateContract } from '../contracts.js';
 import type { PrimitiveSpec } from './catalogue.js';
+import { corruptValue } from '../harness/mutation.js';
 
 /** A catalogue entry with its parameters resolved and validated. */
 export interface Selection {
@@ -72,7 +73,7 @@ export function buildContract(id: string, selections: readonly Selection[]): Sta
           const bounds = { min: [...field.bounds.min], max: [...field.bounds.max] };
           assertions.push({ id: aid, path, kind: 'boundedBy', expected: bounds });
           // Only nominate the mutant this assertion can genuinely catch. A corrupted
-          // component is c*1000+1, which escapes the volume for every realistic value
+          // component is corruptValue(c), which escapes the volume for every realistic value
           // but not for an all-zero vector inside a [0,1] box (black, say). Nominating
           // it anyway would make the contract fail hardening and reject a request that
           // is perfectly legal — so the check is made here rather than discovered later.
@@ -150,7 +151,7 @@ function setPath(root: Record<string, unknown>, path: string, value: unknown): v
   node[leaf] = value;
 }
 
-/** Mirrors `applyMutant`'s corruptConstant on a vector: does c*1000+1 leave the box? */
+/** Uses `applyMutant`'s own corruption, imported rather than mirrored: does it leave the box? */
 function escapesBounds(
   value: unknown,
   bounds: { readonly min: readonly number[]; readonly max: readonly number[] },
@@ -158,7 +159,7 @@ function escapesBounds(
   if (!Array.isArray(value)) return false;
   return value.some((c: unknown, k: number) => {
     if (typeof c !== 'number') return false;
-    const corrupted = c * 1000 + 1;
+    const corrupted = corruptValue(c);
     return corrupted < (bounds.min[k] ?? -Infinity) || corrupted > (bounds.max[k] ?? Infinity);
   });
 }

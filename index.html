@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verbo</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; background: #0b0e14; }
+      #stage { display: block; width: 100vw; height: 100vh; }
+      #status {
+        position: fixed; left: 16px; bottom: 14px;
+        font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        letter-spacing: .11em; text-transform: uppercase;
+        color: #6b7684; pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <div id="status">starting</div>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

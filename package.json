@@ -12,13 +12,21 @@
     "typecheck": "tsc --noEmit",
     "gate": "node tools/evidence/ac-gate.mjs",
     "verify": "npm run typecheck && npm run test && npm run gate",
-    "evidence": "node tools/evidence/report.mjs --write"
+    "evidence": "node tools/evidence/report.mjs --write",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "@types/three": "^0.185.4",
     "acorn": "^8.14.0",
     "acorn-walk": "^8.3.4",
     "typescript": "^5.7.2",
+    "vite": "^6.4.3",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "three": "^0.182.0"
   }
 }

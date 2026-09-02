@@ -15,6 +15,15 @@ import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, type CycleStep } from './cycle.js';
 
+/** What one utterance produced. Shaped for the nightly evaluation, not for the UI. */
+export interface SayResult {
+  readonly ok: boolean;
+  readonly ms: number;
+  readonly rejectedAt: string | null;
+  readonly steps: readonly { kind: string; text: string }[];
+  readonly reason: string | null;
+}
+
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const status = document.getElementById('status') as HTMLElement;
 
@@ -124,8 +133,8 @@ let busy = false;
  * person does -- a test that calls a private seam proves the seam works, not the
  * product (AC-18).
  */
-async function say(utterance: string): Promise<{ ok: boolean; ms: number }> {
-  if (busy) return { ok: false, ms: 0 };
+async function say(utterance: string): Promise<SayResult> {
+  if (busy) return { ok: false, ms: 0, rejectedAt: null, steps: [], reason: 'busy' };
   busy = true;
   input.disabled = true;
   line(utterance, 'you');
@@ -134,12 +143,21 @@ async function say(utterance: string): Promise<{ ok: boolean; ms: number }> {
     if (isRejection(compiled)) {
       // AC-17: an impossible request is explained, never silently attempted.
       line(compiled.suggestion ? `${compiled.reason} — ${compiled.suggestion}` : compiled.reason, 'reject');
-      return { ok: false, ms: 0 };
+      return { ok: false, ms: 0, rejectedAt: 'intent', steps: [], reason: compiled.reason };
     }
     const outcome = await runCycle(compiled, loader, world, (s) => line(s.text, s.kind));
     line(outcome.ok ? `done in ${(outcome.ms / 1000).toFixed(1)}s` : (outcome.reason ?? 'failed'),
       outcome.ok ? 'accept' : 'reject');
-    return { ok: outcome.ok, ms: outcome.ms };
+    // The full shape is returned, not just ok/ms, because the nightly evaluation
+    // needs to know *which layer* rejected. An aggregate pass rate hides the thing
+    // worth knowing: whether failures are concentrated somewhere fixable.
+    return {
+      ok: outcome.ok,
+      ms: outcome.ms,
+      rejectedAt: outcome.ok ? null : (outcome.verdicts.at(-1)?.failedAt ?? 'unknown'),
+      steps: outcome.steps.map((s) => ({ kind: s.kind, text: s.text })),
+      reason: outcome.reason,
+    };
   } finally {
     busy = false;
     input.disabled = false;

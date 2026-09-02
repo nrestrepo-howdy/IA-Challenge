@@ -14,3 +14,5 @@ dist/
 
 test-results/
 playwright-report/
+
+.verbo/eval/

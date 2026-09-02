@@ -263,6 +263,39 @@ Still missing, and marked as missing: the L3 perceptual oracle, the model-backed
 generator upstream of the brief, Worker isolation for candidate code in the browser
 (proven in Node, interface unchanged), and the nightly evaluation.
 
+## 2 Sep — Night one of the evaluation, and it disagreed with us immediately
+
+The nightly evaluation drives the real application through a browser rather than
+re-implementing the pipeline in Node, because an evaluation that exercises a parallel
+copy of the system measures the copy.
+
+**Night one: 14 of 15 utterances behaved as expected.** The disagreement is worth more
+than the fourteen agreements.
+
+`"make it rain money"` was **accepted**. The corpus expected a rejection. The keyword
+resolver matched `rain`, mounted a rain emitter, satisfied its contract, and reported
+success — while the salient word in the request, `money`, was never addressed and never
+mentioned.
+
+**This is not a bug in the matcher. It is a missing product decision.** There are two
+defensible behaviours: reject, because the catalogue cannot express money; or accept
+and *disclose* — "it will rain; I cannot make it money." What is not defensible is the
+current one, which is to silently deliver a subset and call it done. That is the same
+failure the rules name — *an agent that claims work is complete without meaningful
+verification* — appearing in the intent layer rather than the harness.
+
+**What was deliberately not done:** the corpus was not edited to match the behaviour.
+Changing the expectation to fit the result is how an evaluation stops being one. The
+disagreement stays red until the decision is made.
+
+**Latency, honestly.** p50 is 3 ms and p95 is 26 ms against a 40 s budget (R-8). That
+number is real but it is not yet meaningful: the deterministic generator does no
+reasoning, so this measures template expansion. The budget exists for the model-backed
+resolver upstream, and the figure to watch is the one after that lands. Publishing 3 ms
+as though it were the answer would be the most flattering possible way to mislead.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

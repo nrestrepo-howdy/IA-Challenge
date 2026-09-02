@@ -1,0 +1,21 @@
+{
+  "expectSuccess": [
+    "make it rain",
+    "let it snow",
+    "add fog",
+    "make it foggy and windy",
+    "a storm",
+    "heavy rain",
+    "light snow with wind",
+    "dim the light",
+    "make the light move",
+    "rain and fog together"
+  ],
+  "expectRejection": [
+    "summon a sentient octopus",
+    "delete the world",
+    "make it rain money",
+    "compile a kernel",
+    ""
+  ]
+}

@@ -17,7 +17,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:browser": "playwright test",
-    "verify:fast": "npm run typecheck && npm test && npm run gate"
+    "verify:fast": "npm run typecheck && npm test && npm run gate",
+    "eval": "node tools/eval/nightly.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

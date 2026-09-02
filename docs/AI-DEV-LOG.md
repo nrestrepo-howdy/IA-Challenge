@@ -109,6 +109,43 @@ behaviour: the escape hatch is explicit, human, and audited.
 
 ---
 
+## 2 Sep — First closed loop: the mutation engine mutated nothing
+
+**Context.** The harness landed as three pure modules — L0 static analysis, L2 contract
+evaluation, and the mutation hardener — deliberately chosen because they need no
+browser and no GPU, which is what makes the oracle that decides correctness testable
+in plain Node.
+
+**The loop, with no human instruction between the steps:**
+
+1. **Act.** Wrote the three modules and 27 tests bound to AC-04, AC-05, AC-09, AC-10.
+2. **Verify.** `npm test` — 26 passed, 1 failed. `hardenContract` reported a sound
+   contract as unsound.
+3. **Observe.** The failing case was the `dropStateUpdate` mutant. `applyMutant` was
+   implementing it as `node[leaf] = structuredClone(node[leaf])` — cloning the value
+   in place. For a number, that is a no-op. The mutant changed nothing, so the
+   `changesOverTime` assertion still passed, so the mutant "escaped".
+4. **Fix.** A dropped state update is only meaningful *relative to the prior frame*:
+   it means the value never moved off where it started. `applyMutant` needed the
+   before-snapshot, which it did not receive. Signature changed to
+   `applyMutant(before, after, mutant, path)`, and the mutation now rewinds the value
+   to its pre-action state.
+5. **Verify again.** 27/27, typecheck clean.
+
+**Why this one is worth recording.** The bug was in the component whose entire job is
+to prove the primary oracle is not a rubber stamp. A mutation engine that mutates
+nothing reports every contract as sound — including contracts that assert nothing. It
+would have silently disabled L2, the layer the whole architecture was reorganized
+around on the same day, and the harness would have looked green while verifying
+nothing at all.
+
+It was caught in the first minute of the first test run because the hardener is tested
+against a deliberately weak contract that it *must* reject. Testing the verifier
+against known-bad input is the same principle the verifier applies to candidates,
+turned on itself.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:
@@ -117,5 +154,5 @@ Recorded here as absent so their absence is not mistaken for omission:
   event log; if the loop does not occur, the extractor yields nothing.
 - **Nightly evaluation results**, including failures and rejections per layer.
 - **The injection policy decision** — what may auto-inject and what requires approval.
-- **Failures during implementation.** There will be some, and this section will be
-  worth more than any of the successes above.
+- **More failures during implementation.** The first is recorded above; there will
+  be more, and they will be worth more than any of the successes.

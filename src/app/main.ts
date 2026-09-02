@@ -51,6 +51,32 @@ function reconcile(): void {
   }
 }
 
+/**
+ * Frame capture, performed inside the loop immediately after `render()`.
+ *
+ * Reading the canvas from outside the loop returns an empty buffer: presentation does
+ * not survive the frame, and in headless it never reaches the compositor at all (R-3).
+ * So capture happens where the pixels exist. This is also the exact mechanism the L3
+ * shadow renderer needs, which is why it lives here rather than in the test.
+ */
+const pending: ((d: ImageData) => void)[] = [];
+let scratch: HTMLCanvasElement | null = null;
+
+function capture(): Promise<ImageData> {
+  return new Promise((resolve) => pending.push(resolve));
+}
+
+function drain(): void {
+  if (pending.length === 0) return;
+  scratch ??= document.createElement('canvas');
+  const w = 160, h = 90;
+  scratch.width = w; scratch.height = h;
+  const ctx = scratch.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(canvas, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h);
+  for (const resolve of pending.splice(0)) resolve(data);
+}
+
 let last = performance.now();
 handle.renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -65,8 +91,12 @@ handle.renderer.setAnimationLoop(() => {
   }
   base.update(world.clock.elapsed);
   handle.renderer.render(base.scene, base.camera);
+  drain();
 });
 
 // Exposed for the browser-level acceptance tests (AC-01..03) and for the harness's
 // state snapshots. The name matches what StateContracts address.
-Object.assign(globalThis, { __VERBO_STATE__: world.state, __VERBO__: { world, primitives, handle } });
+Object.assign(globalThis, {
+  __VERBO_STATE__: world.state,
+  __VERBO__: { world, primitives, handle, capture },
+});

@@ -176,6 +176,41 @@ depended on it.
 
 ---
 
+## 2 Sep — The scene was rendering; the test was reading an empty buffer
+
+**The loop, with no human instruction between the steps:**
+
+1. **Act.** Wrote the base scene, the WebGPU bootstrap and three browser-level tests
+   for AC-01, AC-02 and AC-03.
+2. **Verify.** `npm run test:browser` — 2 passed, 2 failed. Both failures were the
+   same shape: zero non-black pixels in the readback.
+3. **Observe.** The evidence contradicted the obvious diagnosis. AC-02 measured six
+   hundred real frames, and `__VERBO_STATE__` was populated — so the renderer was
+   demonstrably running. A scene that renders and reads back black is not a broken
+   scene; it is a broken reading.
+4. **Fix.** The test was drawing the canvas from *outside* the animation loop.
+   Presentation does not survive the frame, and in headless it never reaches the
+   compositor at all — which is R-3, already written into the spec on day two as a
+   constraint on the shadow renderer. The same constraint applies to the app's own
+   canvas, which the spec had not said out loud. Capture moved inside the loop,
+   immediately after `render()`, and is exposed as `__VERBO__.capture()`.
+5. **Verify again.** 4/4 passing. 18/20 acceptance criteria.
+
+**Why it is worth recording.** The failure was a constraint the project had already
+documented, arriving somewhere nobody had thought to apply it. R-3 was written as a
+fact about the *shadow* renderer; it is a fact about WebGPU presentation, and the
+scope was too narrow.
+
+The fix is also load-bearing beyond this test: reading pixels from inside the loop is
+exactly the mechanism the L3 perceptual oracle needs, so a bug in the acceptance suite
+produced the seam the harness was going to need anyway.
+
+Worth noting what stopped this becoming an hour of chasing the renderer: two other
+signals disagreed with the failing one. A single red test invites you to fix the thing
+it points at. Three signals that contradict each other tell you where to look.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

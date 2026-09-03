@@ -156,6 +156,47 @@ function expectTypeIsAssignable(): CompiledIntent {
     allowedPrimitives: ['rain-emitter'],
     scope: ['weather.rain'],
     contract: { id: 'c-2', assertions: [], actions: [], mutants: [] },
+    unaddressed: [],
     brief: { goal: 'make it rain', rationale: '', directives: [], steps: [], constraints: [] },
   };
 }
+
+/**
+ * The night-one evaluation finding, now a test.
+ *
+ * "make it rain money" resolved to rain and dropped "money", and success was reported
+ * for something the system did not do. The decision was to accept and disclose rather
+ * than reject: the world genuinely can rain, and refusing a request it can partly
+ * satisfy is worse service. What is not acceptable is delivering the subset silently.
+ */
+describe('partial fulfilment is disclosed, never silent', () => {
+  it('carries what the catalogue could not express onto the intent', async () => {
+    const compiler = new CatalogueIntentCompiler({
+      model: {
+        propose: async () =>
+          JSON.stringify({
+            primitives: [{ name: 'rain-emitter', params: {} }],
+            rationale: 'matched rain',
+            unaddressed: ['money'],
+          }),
+      },
+    });
+    const r = await compiler.compile('make it rain money', fakeWorld());
+    if (isRejection(r)) throw new Error(`expected acceptance, got: ${r.reason}`);
+    expect(r.unaddressed).toEqual(['money']);
+    // Also in the brief's prose, so it survives into logs and world snapshots.
+    expect(r.brief.rationale).toContain('money');
+  });
+
+  it('is empty when the request was fully expressible', async () => {
+    const compiler = new CatalogueIntentCompiler({
+      model: {
+        propose: async () =>
+          JSON.stringify({ primitives: [{ name: 'rain-emitter', params: {} }], rationale: 'ok' }),
+      },
+    });
+    const r = await compiler.compile('make it rain', fakeWorld());
+    if (isRejection(r)) throw new Error('expected acceptance');
+    expect(r.unaddressed).toEqual([]);
+  });
+});

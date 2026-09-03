@@ -20,6 +20,8 @@ export interface SayResult {
   readonly ok: boolean;
   readonly ms: number;
   readonly rejectedAt: string | null;
+  /** What the catalogue could not express. Empty on a fully satisfied request. */
+  readonly unaddressed?: readonly string[];
   readonly steps: readonly { kind: string; text: string }[];
   readonly reason: string | null;
 }
@@ -145,6 +147,11 @@ async function say(utterance: string): Promise<SayResult> {
       line(compiled.suggestion ? `${compiled.reason} — ${compiled.suggestion}` : compiled.reason, 'reject');
       return { ok: false, ms: 0, rejectedAt: 'intent', steps: [], reason: compiled.reason };
     }
+    if (compiled.unaddressed.length) {
+      // Accepted, and said out loud. Delivering a subset in silence is the failure
+      // the rules name; delivering it with the gap stated is honest service.
+      line(`cannot express: ${compiled.unaddressed.map((u) => `"${u}"`).join(', ')}`, 'reject');
+    }
     const outcome = await runCycle(compiled, loader, world, (s) => line(s.text, s.kind));
     line(outcome.ok ? `done in ${(outcome.ms / 1000).toFixed(1)}s` : (outcome.reason ?? 'failed'),
       outcome.ok ? 'accept' : 'reject');
@@ -155,6 +162,7 @@ async function say(utterance: string): Promise<SayResult> {
       ok: outcome.ok,
       ms: outcome.ms,
       rejectedAt: outcome.ok ? null : (outcome.verdicts.at(-1)?.failedAt ?? 'unknown'),
+      unaddressed: compiled.unaddressed,
       steps: outcome.steps.map((s) => ({ kind: s.kind, text: s.text })),
       reason: outcome.reason,
     };

@@ -53,7 +53,8 @@ try {
         results.push({
           ts: new Date().toISOString(), pass, group, utterance,
           ok: r.ok, ms: Math.round(r.ms), rejectedAt: r.rejectedAt, reason: r.reason,
-          expected: group === 'expectSuccess',
+          expected: group !== 'expectRejection',
+          unaddressed: r.unaddressed ?? [],
           pageErrors: pageErrors.slice(before),
         });
       }
@@ -66,7 +67,13 @@ try {
 for (const r of results) appendFileSync(file, JSON.stringify(r) + '\n');
 
 // ── Summary ──────────────────────────────────────────────────────────────────
-const agreed = results.filter((r) => r.ok === r.expected);
+// A disclosure case must be accepted *and* say what it could not do. Counting it as
+// a plain success would let the system regress back to silent partial fulfilment --
+// the exact failure this category was created to catch.
+const agreed = results.filter((r) =>
+  r.group === 'expectDisclosure'
+    ? r.ok && r.unaddressed.length > 0
+    : r.ok === r.expected);
 const times = results.filter((r) => r.ok).map((r) => r.ms).sort((a, b) => a - b);
 const p = (q) => times.length ? times[Math.min(times.length - 1, Math.floor(times.length * q))] : 0;
 
@@ -81,12 +88,16 @@ console.log(`  rejections by layer ${Object.entries(byLayer).map(([k, v]) => `${
 
 // Disagreements are printed in full. A summary that hides which utterance failed is
 // a number nobody can act on, and the failures are the reason this runs at all.
-const wrong = results.filter((r) => r.ok !== r.expected);
+const wrong = results.filter((r) => !agreed.includes(r));
 if (wrong.length) {
   console.log(`\n  disagreements (${wrong.length}):`);
   for (const r of wrong) {
-    console.log(`    ${r.expected ? 'expected success' : 'expected rejection'}: ${JSON.stringify(r.utterance)}`
-      + `  ->  ${r.ok ? 'accepted' : `rejected at ${r.rejectedAt}`}${r.reason ? ` (${r.reason})` : ''}`);
+    const want = r.group === 'expectDisclosure' ? 'expected acceptance with a disclosure'
+      : r.expected ? 'expected success' : 'expected rejection';
+    const got = r.ok
+      ? `accepted${r.unaddressed.length ? ` disclosing ${JSON.stringify(r.unaddressed)}` : ' silently'}`
+      : `rejected at ${r.rejectedAt}`;
+    console.log(`    ${want}: ${JSON.stringify(r.utterance)}  ->  ${got}${r.reason ? ` (${r.reason})` : ''}`);
   }
 }
 

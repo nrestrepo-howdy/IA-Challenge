@@ -11,10 +11,14 @@
     "make the light move",
     "rain and fog together"
   ],
+  "expectDisclosure": [
+    "make it rain money",
+    "make it rain frogs",
+    "add pink neon fog"
+  ],
   "expectRejection": [
     "summon a sentient octopus",
     "delete the world",
-    "make it rain money",
     "compile a kernel",
     ""
   ]

@@ -296,6 +296,52 @@ as though it were the answer would be the most flattering possible way to mislea
 
 ---
 
+## 3 Sep — Closing the night-one finding, and the model that earns its keep
+
+**The decision.** "make it rain money" is accepted **and disclosed**, not rejected.
+Refusing a request the world can partly satisfy is worse service than the alternative;
+delivering the subset in silence is the failure the rules name by name. So the unmet
+part travels with the intent, is stated to the user, and survives into the brief's
+rationale and therefore into the world snapshot.
+
+**Why the schema is where this lives.** Research on constrained generation is blunt
+about the boundary: native structured output guarantees the *shape* of a response, not
+its *meaning* — a schema cannot stop a model answering a different question. Two
+consequences shaped the resolver:
+
+- **Primitive names are an enum built from the catalogue**, so a name outside it is
+  unrepresentable rather than rejected downstream. D-2 expressed where it cannot be
+  forgotten, and derived from the catalogue so the two cannot drift.
+- **`unaddressed` is a required field.** The one thing a schema *can* do about meaning
+  is force the model to state what it did not do. A silent omission becomes a value
+  the caller has to handle.
+
+**The correction the evaluation forced.** First run after the change: 14/17. All three
+disclosure cases came back *"accepted silently"*. The reason was real — only the
+model-backed resolver emitted `unaddressed`, and the app runs the deterministic
+resolver by default because it needs no API key.
+
+That is not acceptable. A property that holds only on the paid path cannot be defended
+by the offline test suite, and the offline path is what a judge runs. The keyword
+resolver now computes the field too — less precisely than a model would, and honestly.
+17/17.
+
+**What was deliberately not done, twice.** The corpus was not edited to match the
+behaviour on either night. On night one the expectation stayed red until the decision
+was made; tonight the disclosure cases became their own category, `expectDisclosure`,
+which requires acceptance **and** a non-empty disclosure. Counting them as plain
+successes would let the system regress to silent partial fulfilment — the exact
+failure the category exists to catch.
+
+**On the resolver itself.** It is the only place a language model is used, and
+everything downstream is deterministic: the brief becomes a module by template, the
+oracles are code, the injection is code. A model failure degrades to an explained
+rejection rather than to broken code reaching a live world. The system prompt and
+catalogue are byte-identical across requests so the cached prefix survives; only the
+utterance varies.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

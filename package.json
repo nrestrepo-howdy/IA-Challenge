@@ -31,6 +31,8 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
-    "three": "^0.182.0"
+    "@anthropic-ai/sdk": "^0.123.0",
+    "three": "^0.182.0",
+    "zod": "^4.5.4"
   }
 }

@@ -53,6 +53,12 @@ export interface CodeBrief {
 /** An `Intent` (contract required) plus its brief. Neither half exists alone (AC-16). */
 export interface CompiledIntent extends Intent {
   readonly brief: CodeBrief;
+  /**
+   * Quoted fragments the catalogue could not express. A machine-checkable field, not
+   * only prose in the rationale: a disclosure the caller cannot test for is a
+   * disclosure the caller will forget to make.
+   */
+  readonly unaddressed: readonly string[];
 }
 
 export function isRejection(r: CompiledIntent | IntentRejection): r is IntentRejection {
@@ -148,12 +154,24 @@ export class CatalogueIntentCompiler implements IntentCompiler {
       );
     }
 
+    // The night-one evaluation finding, decided.
+    //
+    // "make it rain money" resolves to rain and drops "money". Rejecting outright is
+    // wrong -- the world genuinely can rain, and refusing a request it can partly
+    // satisfy is worse service than the alternative. Accepting silently is what the
+    // rules call an agent claiming work is complete without verification.
+    //
+    // So: accept, and disclose. The unmet part travels with the intent and is stated
+    // to the user. The one case that still rejects is a request where nothing at all
+    // was addressed, which `selections.length === 0` above already covers.
+    const unaddressed = parsed.proposal.unaddressed ?? [];
     return compileIntent({
       id: `intent-${key}`,
       utterance: goal,
       selections,
       contract,
       rationale: parsed.proposal.rationale ?? 'resolved against the primitive catalogue',
+      unaddressed,
     });
   }
 }
@@ -169,6 +187,8 @@ function compileIntent(input: {
   selections: readonly Selection[];
   contract: StateContract;
   rationale: string;
+  /** Quoted fragments the catalogue could not express. Empty is the common case. */
+  unaddressed?: readonly string[];
 }): CompiledIntent {
   const directives = input.selections.map((s) => ({
     name: s.spec.name,
@@ -177,9 +197,14 @@ function compileIntent(input: {
     params: s.params,
   }));
 
+  const unmet = input.unaddressed ?? [];
   const brief: CodeBrief = {
     goal: input.utterance,
-    rationale: input.rationale,
+    // The disclosure travels inside the brief, so it survives into the world snapshot
+    // and into any log that records what was actually built.
+    rationale: unmet.length
+      ? `${input.rationale}. Not expressible by the catalogue: ${unmet.map((u) => `"${u}"`).join(', ')}`
+      : input.rationale,
     directives,
     steps: [
       ...directives.map(
@@ -198,6 +223,7 @@ function compileIntent(input: {
   };
 
   return {
+    unaddressed: unmet,
     id: input.id,
     utterance: input.utterance,
     allowedPrimitives: input.selections.map((s) => s.spec.name),

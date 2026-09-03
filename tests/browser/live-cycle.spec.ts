@@ -104,3 +104,37 @@ test.describe('AC-14 · the world never renders a black frame during an injectio
     expect(after).toBeGreaterThan(before);
   });
 });
+
+test.describe('AC-20 · a world survives a link', () => {
+  test('the URL records the verbs, and opening it rebuilds the world', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => (globalThis as never as Record<string, Api>)['__VERBO__']!.say('make it rain'));
+
+    const shared = page.url();
+    expect(shared).toMatch(/#v1:/);
+
+    // A different page, given only the link.
+    const fresh = await page.context().newPage();
+    await fresh.goto(shared);
+    await expect(fresh.locator('#status')).not.toHaveText('starting', { timeout: 30_000 });
+    await expect(fresh.locator('#log .accept').first()).toBeVisible({ timeout: 30_000 });
+
+    const state = await fresh.evaluate(() =>
+      (globalThis as never as Record<string, Api>)['__VERBO__']!.world.state['weather']);
+    expect(state).toBeTruthy();
+    await fresh.close();
+  });
+
+  test('the link carries intent, not code', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => (globalThis as never as Record<string, Api>)['__VERBO__']!.say('make it rain'));
+    const hash = new URL(page.url()).hash;
+    const decoded = Buffer.from(
+      hash.replace('#v1:', '').replace(/-/g, '+').replace(/_/g, '/'), 'base64',
+    ).toString('utf8');
+    // There is no way to hand someone a Verbo link that injects code into their
+    // browser, because the link never contains any.
+    expect(decoded).toBe(JSON.stringify(['make it rain']));
+    expect(decoded).not.toMatch(/import|function|=>|mount/);
+  });
+});

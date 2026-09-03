@@ -14,6 +14,7 @@ import { readPath } from '../harness/l2-contract.js';
 import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, type CycleStep } from './cycle.js';
+import { encodeWorld, decodeWorld } from './share.js';
 
 /** What one utterance produced. Shaped for the nightly evaluation, not for the UI. */
 export interface SayResult {
@@ -155,6 +156,13 @@ async function say(utterance: string): Promise<SayResult> {
     const outcome = await runCycle(compiled, loader, world, (s) => line(s.text, s.kind));
     line(outcome.ok ? `done in ${(outcome.ms / 1000).toFixed(1)}s` : (outcome.reason ?? 'failed'),
       outcome.ok ? 'accept' : 'reject');
+    if (outcome.ok) {
+      // The link carries intent, never code. replaceState rather than push: the world
+      // is cumulative, so each verb refines one address instead of stacking history
+      // entries a back button would have to unwind.
+      const verbs = world.snapshot().verbs.map((v) => v.utterance);
+      history.replaceState(null, '', `#${encodeWorld(verbs)}`);
+    }
     // The full shape is returned, not just ok/ms, because the nightly evaluation
     // needs to know *which layer* rejected. An aggregate pass rate hides the thing
     // worth knowing: whether failures are concentrated somewhere fixable.
@@ -178,7 +186,33 @@ input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && input.value.trim()) void say(input.value.trim());
 });
 
+/**
+ * Replaying a shared link.
+ *
+ * The verbs run through the same pipeline that built them originally, so a shared
+ * world is re-verified on arrival rather than trusted: if a primitive has changed, the
+ * oracles judge the new result on its own merits and a verb that no longer satisfies
+ * its contract simply does not appear. The honest cost is that a replayed world is not
+ * guaranteed pixel-identical to the original, only contract-identical.
+ */
+async function replayFromLink(): Promise<void> {
+  const verbs = decodeWorld(location.hash);
+  if (verbs.length === 0) return;
+  line(`restoring ${verbs.length} verb${verbs.length === 1 ? '' : 's'} from a shared world`, 'info');
+  for (const v of verbs) await say(v);
+}
+
+status.addEventListener('click', () => {
+  void navigator.clipboard?.writeText(location.href).then(() => {
+    const was = status.textContent;
+    status.textContent = 'link copied';
+    setTimeout(() => { status.textContent = was; }, 1400);
+  });
+});
+
 Object.assign(globalThis, {
   __VERBO_STATE__: world.state,
-  __VERBO__: { world, primitives, handle, capture, say, loader },
+  __VERBO__: { world, primitives, handle, capture, say, loader, replayFromLink },
 });
+
+await replayFromLink();

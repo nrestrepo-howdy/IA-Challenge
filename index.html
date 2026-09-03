@@ -36,8 +36,9 @@
         position: fixed; left: 16px; bottom: 14px;
         font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
         letter-spacing: .11em; text-transform: uppercase;
-        color: #6b7684; pointer-events: none;
+        color: #6b7684; cursor: pointer;
       }
+      #status:hover { color: #9aa7b6; }
     </style>
   </head>
   <body>
@@ -45,7 +46,7 @@
     <div id="log"></div>
     <input id="say" autocomplete="off" spellcheck="false"
            placeholder="tell the world what to become — try &ldquo;make it rain&rdquo;" />
-    <div id="status">starting</div>
+    <div id="status" title="copy a link to this world">starting</div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

@@ -13,7 +13,7 @@ import { BINDINGS, type Binding } from '../render/bindings.js';
 import { readPath } from '../harness/l2-contract.js';
 import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
-import { runCycle, type CycleStep } from './cycle.js';
+import { runCycle, prober, type CycleStep } from './cycle.js';
 import { encodeWorld, decodeWorld } from './share.js';
 import { VerificationPanel } from './verification-panel.js';
 
@@ -220,7 +220,7 @@ status.addEventListener('click', () => {
 
 Object.assign(globalThis, {
   __VERBO_STATE__: world.state,
-  __VERBO__: { world, primitives, handle, capture, say, loader, replayFromLink },
+  __VERBO__: { world, primitives, handle, capture, say, loader, replayFromLink, prober },
 });
 
 await replayFromLink();

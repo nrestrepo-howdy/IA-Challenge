@@ -342,13 +342,40 @@ utterance varies.
 
 ---
 
+## 3 Sep — Closing the one place the code disagreed with the spec
+
+D-9 said the candidate's code runs isolated and the pixels render on the main thread.
+The browser cycle did neither half of that: it probed candidates on the main thread
+against a scratch `World`. State was isolated; execution was not. A candidate with an
+infinite loop would have wedged the page.
+
+The gap was written into the module's own doc comment on the day it was introduced,
+which is the only reason it did not quietly become permanent. A known deviation that is
+documented is a task; an undocumented one is a surprise during a demo.
+
+**Now:** candidates run in a Worker that builds its own `World` and its own primitive
+registry. It cannot receive them from the page -- a Worker has a separate global, and a
+structured clone of a live object graph would not be the same world anyway -- and
+building them there is what makes the scratch world genuinely scratch.
+
+**The negative property is the point.** `probe-worker.ts` contains no timeout logic. A
+module that spins forever cannot be asked to stop, and a `try/catch` around an infinite
+loop catches nothing. The timeout lives on the main thread, where `terminate()` exists,
+and it destroys the thread.
+
+The browser test proves it the same way the Node one does: a `setInterval` heartbeat on
+the main thread keeps ticking straight through the spin, `2 + 2` is still 4 afterwards,
+and `activeWorkers` returns to zero -- terminated, not merely abandoned. An abandoned
+worker still burns a core, and a test that only checked the promise resolved would pass
+on one.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:
 
 - **L3 perceptual oracle.** The capture seam exists; the critic does not.
-- **Worker isolation for candidate code in the browser.** Proven in Node (AC-08); the
-  `Prober` interface is unchanged, so it drops in without touching the cycle.
 - **Nightly evaluation results**, including failures and rejections per layer.
 - **The injection policy decision** — what may auto-inject and what requires approval.
 - **More failures during implementation.** The first is recorded above; there will

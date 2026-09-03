@@ -167,3 +167,44 @@ test.describe('the harness is visible while it works', () => {
     await expect(page.locator('#verify .vp-lane')).toHaveCount(3);
   });
 });
+
+test.describe('AC-08 · a spinning candidate is killed, not caught', () => {
+  test('an infinite loop is terminated and the page keeps running', async ({ page }) => {
+    await boot(page);
+
+    const result = await page.evaluate(async () => {
+      const a = (globalThis as never as Record<string, {
+        prober: { probe(r: unknown, ms: number): Promise<{ timedOut: boolean; failure: string | null }>; activeWorkers: number };
+      }>)['__VERBO__']!;
+
+      // A heartbeat on the main thread. If isolation were a lie -- if the candidate
+      // ran here -- this would stop dead for the duration of the spin.
+      let beats = 0;
+      const hb = setInterval(() => { beats++; }, 10);
+
+      const r = await a.prober.probe(
+        { source: 'export function mount() { while (true) {} }', frames: 120, actions: [] },
+        700,
+      );
+
+      clearInterval(hb);
+      // 2 + 2 afterwards: proof the main thread is not merely alive but correct.
+      return { ...r, beats, arithmetic: 2 + 2, active: a.prober.activeWorkers };
+    });
+
+    expect(result.timedOut).toBe(true);
+    expect(result.failure).toMatch(/terminated/);
+    // The heartbeat kept ticking through the spin: the loop never touched this thread.
+    expect(result.beats).toBeGreaterThan(20);
+    expect(result.arithmetic).toBe(4);
+    // Terminated, not abandoned. An abandoned worker still burns a core.
+    expect(result.active).toBe(0);
+  });
+
+  test('a healthy candidate still probes after a kill on the same prober', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() =>
+      (globalThis as never as Record<string, Api>)['__VERBO__']!.say('make it rain'));
+    expect(r.ok).toBe(true);
+  });
+});

@@ -7,21 +7,21 @@
  *
  *   utterance -> IntentCompiler -> 3 candidates -> cascade (L0, L1, L2) -> injection
  *
- * **Shadow, honestly.** A candidate is probed against a *scratch* `World` -- its own
- * state tree, its own clock, never the live one -- so a candidate that corrupts state
- * corrupts nothing anyone is looking at. What this does not yet do is run the
- * candidate's code inside a Worker, which is what D-9 specifies and what the Node
- * prober already proves (AC-08). The `Prober` interface is unchanged, so that drops in
- * without touching this file; until it does, a candidate with an infinite loop would
- * wedge the page. That is a real gap and it is written down rather than glossed.
+ * **The shadow.** A candidate is probed inside a Worker, against a scratch `World`
+ * built there -- its own state tree, its own clock, never the live one. A candidate
+ * that corrupts state corrupts nothing anyone is looking at, and one that spins
+ * forever is killed rather than caught (D-9, AC-08). Pixels are still rendered on the
+ * main thread, where Three.js is supported: isolation is needed for code, not for
+ * pictures.
  */
 import type { Candidate, Intent, Verdict } from '../contracts.js';
-import { World } from '../core/world.js';
+import type { World } from '../core/world.js';
 import { evaluateL0 } from '../harness/l0-static.js';
 import { evaluateContract, readPath, toVerdict } from '../harness/l2-contract.js';
 import { isInjectable, AUTHORITATIVE_LAYERS } from '../harness/cascade.js';
 import { generateCandidates } from '../runtime/generate.js';
-import type { BrowserModuleLoader, LoadedModule } from '../runtime/browser-loader.js';
+import type { BrowserModuleLoader } from '../runtime/browser-loader.js';
+import { BrowserProber } from '../runtime/browser-prober.js';
 
 export interface CycleStep {
   readonly at: number;
@@ -51,72 +51,64 @@ const PROBE_FRAMES = 120;
 const FRAME_DT = 1 / 60;
 const MAX_ATTEMPTS = 3;
 
-/** L1 in the browser: run the candidate in a scratch world and watch the frames. */
+/** L1 in the browser: run the candidate in a killable Worker and watch the frames. */
+export const prober = new BrowserProber();
+
+/** Generous relative to the 120-frame probe; tight enough that a spin is caught fast. */
+const PROBE_TIMEOUT_MS = 4000;
+
 async function probe(
   candidate: Candidate,
   intent: Intent,
-  loader: BrowserModuleLoader,
 ): Promise<{ verdict: Omit<Verdict, 'candidateId'>; stateBefore: unknown; stateAfter: unknown }> {
-  const scratch = new World();
-  const fail = (layer: 'L1', diagnosis: string): Omit<Verdict, 'candidateId'> => ({
-    passed: false, failedAt: layer, diagnosis, frame: null,
-    metrics: { compileMs: null, medianFrameMs: null, drawCalls: null, pixelDelta: null, assertionsPassed: 0, assertionsTotal: 0 },
-  });
+  const noMetrics = {
+    compileMs: null, medianFrameMs: null, drawCalls: null,
+    pixelDelta: null, assertionsPassed: 0, assertionsTotal: 0,
+  } as const;
+  const fail = (diagnosis: string): Omit<Verdict, 'candidateId'> =>
+    ({ passed: false, failedAt: 'L1', diagnosis, frame: null, metrics: noMetrics });
 
-  let mod: LoadedModule;
-  try {
-    mod = await loader.load(candidate.source);
-  } catch (err) {
-    return { verdict: fail('L1', `module failed to load: ${String(err)}`), stateBefore: {}, stateAfter: {} };
+  const report = await prober.probe(
+    { source: candidate.source, frames: PROBE_FRAMES, actions: intent.contract.actions },
+    PROBE_TIMEOUT_MS,
+  );
+
+  if (!report.ok) {
+    return {
+      verdict: fail(report.failure ?? 'the probe reported no result'),
+      stateBefore: report.stateBefore,
+      stateAfter: report.stateAfter,
+    };
   }
 
-  try {
-    // `mount()` registers with the world itself (src/world/base.ts:179), because a
-    // primitive cannot publish its declared state slice until it has one. The module
-    // ABI returns what it mounted so the caller can track it -- not so the caller can
-    // register it again. Doing both threw 'already registered' on every candidate.
-    mod.mount(scratch);
-  } catch (err) {
-    return { verdict: fail('L1', `mount threw: ${String(err)}`), stateBefore: {}, stateAfter: {} };
-  }
-
-  const stateBefore = structuredClone(scratch.state);
-  const frames: number[] = [];
-  for (let i = 0; i < PROBE_FRAMES; i++) {
-    const t0 = performance.now();
-    try {
-      scratch.tick(FRAME_DT);
-    } catch (err) {
-      return { verdict: fail('L1', `threw on frame ${i}: ${String(err)}`), stateBefore, stateAfter: {} };
-    }
-    frames.push(performance.now() - t0);
-  }
-  const stateAfter = structuredClone(scratch.state);
-
-  // Median, not mean: one scheduler hitch would fail a candidate that is in fact
-  // within budget. Same reasoning as the Node prober (AC-06).
-  const sorted = [...frames].sort((a, b) => a - b);
+  // Median, not mean: one scheduler hitch would fail a candidate that is within
+  // budget. Same reasoning as the Node prober (AC-06).
+  const sorted = [...report.frameMs].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
   if (median > 16) {
-    return { verdict: fail('L1', `median frame ${median.toFixed(2)} ms exceeds the 16 ms budget`), stateBefore, stateAfter };
+    return {
+      verdict: fail(`median frame ${median.toFixed(2)} ms exceeds the 16 ms budget`),
+      stateBefore: report.stateBefore,
+      stateAfter: report.stateAfter,
+    };
   }
 
   return {
     verdict: {
       passed: true, failedAt: null, diagnosis: null, frame: null,
-      metrics: { compileMs: null, medianFrameMs: median, drawCalls: null, pixelDelta: null, assertionsPassed: 0, assertionsTotal: 0 },
+      metrics: { ...noMetrics, medianFrameMs: median },
     },
-    stateBefore,
-    stateAfter,
+    stateBefore: report.stateBefore,
+    stateAfter: report.stateAfter,
   };
 }
 
 /**
  * What each state path currently holds, so re-uttering a verb supersedes rather than
- * collides. The world owns paths exclusively (a shared path would make every contract
- * over it non-deterministic), so the previous occupant is retired before the new one
- * claims it. The module ABI returns its mounted instances precisely so a caller can
- * track them; this is that use.
+ * collides. The world owns paths exclusively -- a shared path would make every
+ * contract over it non-deterministic -- so the previous occupant is retired before the
+ * new one claims it. The module ABI returns its mounted instances precisely so a
+ * caller can track them; this is that use.
  */
 const injected = new Map<string, string>();
 
@@ -149,7 +141,7 @@ export async function runCycle(
         continue;
       }
 
-      const { verdict: l1, stateBefore, stateAfter } = await probe(candidate, intent, loader);
+      const { verdict: l1, stateBefore, stateAfter } = await probe(candidate, intent);
       if (!l1.passed) {
         verdicts.push({ ...l1, candidateId: candidate.id });
         say(`${candidate.strategy}: L1 — ${l1.diagnosis}`, 'reject',

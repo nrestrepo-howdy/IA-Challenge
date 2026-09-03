@@ -32,6 +32,37 @@
       #log .you   { color: #dde4ec; font-size: 13px; }
       #log .accept { color: #6fd3a8; }
       #log .reject { color: #d98878; }
+      #verify {
+        position: fixed; right: 24px; top: 24px; width: min(400px, calc(100vw - 48px));
+        display: none; flex-direction: column; gap: 1px;
+        padding: 12px 14px; border-radius: 10px;
+        border: 1px solid #1e2733; background: rgba(10,14,20,.78);
+        backdrop-filter: blur(14px);
+        font: 400 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #verify[data-open="true"] { display: flex; }
+      .vp-head {
+        color: #8e9caa; padding-bottom: 9px; margin-bottom: 5px;
+        border-bottom: 1px solid #1c2531; letter-spacing: .01em;
+      }
+      .vp-lane {
+        display: grid; grid-template-columns: 68px repeat(4, 26px) 1fr;
+        align-items: center; gap: 4px; padding: 5px 0;
+      }
+      .vp-name { color: #7d8b9a; }
+      .vp-cell {
+        text-align: center; padding: 3px 0; border-radius: 3px;
+        border: 1px solid #212b38; color: #3f4b59; font-size: 9.5px; letter-spacing: .04em;
+      }
+      .vp-cell[data-state="passed"]   { border-color: #1f5c46; color: #58c497; }
+      .vp-cell[data-state="failed"]   { border-color: #6b3128; color: #e08774; }
+      .vp-cell[data-state="skipped"]  { border-color: #1a222c; color: #2c3542; }
+      .vp-cell[data-state="advisory"] { border-color: #2c4256; color: #6d8ba6; }
+      .vp-note {
+        padding-left: 8px; color: #6a7787; font-size: 10px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .vp-lane[data-outcome="accepted"] .vp-note { color: #6fd3a8; }
       #status {
         position: fixed; left: 16px; bottom: 14px;
         font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
@@ -43,6 +74,7 @@
   </head>
   <body>
     <canvas id="stage"></canvas>
+    <div id="verify"></div>
     <div id="log"></div>
     <input id="say" autocomplete="off" spellcheck="false"
            placeholder="tell the world what to become — try &ldquo;make it rain&rdquo;" />

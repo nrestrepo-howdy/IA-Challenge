@@ -15,6 +15,7 @@ import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, type CycleStep } from './cycle.js';
 import { encodeWorld, decodeWorld } from './share.js';
+import { VerificationPanel } from './verification-panel.js';
 
 /** What one utterance produced. Shaped for the nightly evaluation, not for the UI. */
 export interface SayResult {
@@ -120,6 +121,7 @@ const compiler = new CatalogueIntentCompiler();
 const loader = new BrowserModuleLoader(primitives as never);  // publishes __VERBO_PRIMITIVES__
 const input = document.getElementById('say') as HTMLInputElement;
 const log = document.getElementById('log') as HTMLElement;
+const panel = new VerificationPanel(document.getElementById('verify') as HTMLElement);
 
 function line(text: string, kind: CycleStep['kind'] | 'you'): void {
   const el = document.createElement('div');
@@ -141,6 +143,7 @@ async function say(utterance: string): Promise<SayResult> {
   busy = true;
   input.disabled = true;
   line(utterance, 'you');
+  panel.begin(utterance);
   try {
     const compiled = await compiler.compile(utterance, world);
     if (isRejection(compiled)) {
@@ -153,7 +156,12 @@ async function say(utterance: string): Promise<SayResult> {
       // the rules name; delivering it with the gap stated is honest service.
       line(`cannot express: ${compiled.unaddressed.map((u) => `"${u}"`).join(', ')}`, 'reject');
     }
-    const outcome = await runCycle(compiled, loader, world, (s) => line(s.text, s.kind));
+    const outcome = await runCycle(compiled, loader, world, (s) => {
+      panel.step(s);
+      // Generation notices belong in the panel's lanes, not duplicated in the log.
+      if (!(s.candidate && s.kind === 'info')) line(s.text, s.kind);
+    });
+    panel.end();
     line(outcome.ok ? `done in ${(outcome.ms / 1000).toFixed(1)}s` : (outcome.reason ?? 'failed'),
       outcome.ok ? 'accept' : 'reject');
     if (outcome.ok) {

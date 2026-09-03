@@ -138,3 +138,32 @@ test.describe('AC-20 · a world survives a link', () => {
     expect(decoded).not.toMatch(/import|function|=>|mount/);
   });
 });
+
+test.describe('the harness is visible while it works', () => {
+  test('shows one lane per candidate, and which layers each cleared', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => (globalThis as never as Record<string, Api>)['__VERBO__']!.say('make it rain'));
+
+    await expect(page.locator('#verify')).toHaveAttribute('data-open', 'true');
+    // D-5: three genuinely different programs race; the panel shows all three, not
+    // just the one that won.
+    await expect(page.locator('#verify .vp-lane')).toHaveCount(3);
+
+    const winner = page.locator('#verify .vp-lane[data-outcome="accepted"]');
+    await expect(winner).toHaveCount(1);
+    // The authoritative layers show as passed on the winner; L3 shows as advisory,
+    // because it is (AC-11).
+    for (const layer of ['L0', 'L1', 'L2']) {
+      await expect(winner.locator(`.vp-cell[data-state="passed"]`).filter({ hasText: layer })).toHaveCount(1);
+    }
+    await expect(winner.locator('.vp-cell[data-state="advisory"]').filter({ hasText: 'L3' })).toHaveCount(1);
+    await expect(winner.locator('.vp-note')).toHaveText('injected');
+  });
+
+  test('the panel stays open after a decision, because the losers are the evidence', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => (globalThis as never as Record<string, Api>)['__VERBO__']!.say('add fog'));
+    await expect(page.locator('#verify')).toHaveAttribute('data-open', 'true');
+    await expect(page.locator('#verify .vp-lane')).toHaveCount(3);
+  });
+});

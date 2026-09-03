@@ -27,6 +27,16 @@ export interface CycleStep {
   readonly at: number;
   readonly text: string;
   readonly kind: 'info' | 'reject' | 'accept';
+  /**
+   * Structured alongside the prose, not instead of it.
+   *
+   * The text is for a human reading a log; these fields are for anything that draws.
+   * A renderer that parses the display string would break the moment the wording
+   * changed, and the wording is the part most likely to change.
+   */
+  readonly candidate?: string;
+  readonly layer?: 'L0' | 'L1' | 'L2' | 'L3';
+  readonly attempt?: number;
 }
 
 export interface CycleOutcome {
@@ -119,28 +129,31 @@ export async function runCycle(
   const t0 = performance.now();
   const steps: CycleStep[] = [];
   const verdicts: Verdict[] = [];
-  const say = (text: string, kind: CycleStep['kind'] = 'info'): void => {
-    const s = { at: performance.now() - t0, text, kind };
+  const say = (text: string, kind: CycleStep['kind'] = 'info', extra: Partial<CycleStep> = {}): void => {
+    const s: CycleStep = { at: performance.now() - t0, text, kind, ...extra };
     steps.push(s);
     onStep?.(s);
   };
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const candidates = generateCandidates(intent, attempt);
-    say(`attempt ${attempt + 1}: ${candidates.length} candidates`);
+    say(`attempt ${attempt + 1}: ${candidates.length} candidates`, 'info', { attempt });
+    for (const c of candidates) say(`${c.strategy}: generated`, 'info', { candidate: c.strategy, attempt });
 
     for (const candidate of candidates) {
       const l0 = evaluateL0(candidate, intent);
       if (!l0.passed) {
         verdicts.push({ ...l0, candidateId: candidate.id });
-        say(`${candidate.strategy}: L0 — ${l0.diagnosis?.split('\n')[0]}`, 'reject');
+        say(`${candidate.strategy}: L0 — ${l0.diagnosis?.split('\n')[0]}`, 'reject',
+          { candidate: candidate.strategy, layer: 'L0', attempt });
         continue;
       }
 
       const { verdict: l1, stateBefore, stateAfter } = await probe(candidate, intent, loader);
       if (!l1.passed) {
         verdicts.push({ ...l1, candidateId: candidate.id });
-        say(`${candidate.strategy}: L1 — ${l1.diagnosis}`, 'reject');
+        say(`${candidate.strategy}: L1 — ${l1.diagnosis}`, 'reject',
+          { candidate: candidate.strategy, layer: 'L1', attempt });
         continue;
       }
 
@@ -148,12 +161,14 @@ export async function runCycle(
       const l2 = { ...toVerdict(outcome), candidateId: candidate.id, frame: null };
       verdicts.push(l2);
       if (!isInjectable(l2)) {
-        say(`${candidate.strategy}: L2 — ${l2.diagnosis?.split('\n')[0]}`, 'reject');
+        say(`${candidate.strategy}: L2 — ${l2.diagnosis?.split('\n')[0]}`, 'reject',
+          { candidate: candidate.strategy, layer: 'L2', attempt });
         continue;
       }
 
       // Cleared every authoritative layer. L3 is advisory and cannot veto (AC-11).
-      say(`${candidate.strategy}: cleared ${AUTHORITATIVE_LAYERS.join(', ')} — injecting`, 'accept');
+      say(`${candidate.strategy}: cleared ${AUTHORITATIVE_LAYERS.join(', ')} — injecting`, 'accept',
+        { candidate: candidate.strategy, attempt });
       const mod = await loader.load(candidate.source);
       for (const d of intent.brief.directives) {
         const previous = injected.get(d.statePath);

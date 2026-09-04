@@ -12,8 +12,8 @@
  * look right while its contract passed for the wrong reason.
  */
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, Color, Fog, Points,
-  PointsMaterial, Scene, Vector3,
+  AdditiveBlending, BufferAttribute, BufferGeometry, Color, Fog, LineBasicMaterial,
+  LineSegments, Scene, Vector3,
 } from 'three/webgpu';
 
 export interface Binding {
@@ -34,23 +34,32 @@ const num = (v: unknown, fallback: number): number =>
  * from anything else would let the picture and the contract disagree.
  */
 export const rainBinding: BindingFactory = (scene, statePath) => {
-  const MAX = 20000;
+  const MAX = 14000;
+  // Segments, not points. A falling drop is a streak; drawn as a dot it reads as
+  // static noise, which is what the first screenshot showed and what no amount of
+  // opacity tuning was going to fix.
   const geometry = new BufferGeometry();
-  const positions = new Float32Array(MAX * 3);
+  const positions = new Float32Array(MAX * 6);
   const seeds = new Float32Array(MAX);
+  const lengths = new Float32Array(MAX);
   for (let i = 0; i < MAX; i++) {
-    positions[i * 3] = (Math.random() - 0.5) * 900;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * 900;
+    const x = (Math.random() - 0.5) * 1100;
+    const z = (Math.random() - 0.5) * 1100;
+    positions[i * 6] = x;
+    positions[i * 6 + 2] = z;
+    positions[i * 6 + 3] = x;
+    positions[i * 6 + 5] = z;
     seeds[i] = Math.random();
+    lengths[i] = 5 + Math.random() * 11;
   }
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
-  const material = new PointsMaterial({
-    size: 1.6, color: new Color(0.62, 0.72, 0.85),
-    transparent: true, opacity: 0.55, blending: AdditiveBlending, depthWrite: false,
+  const material = new LineBasicMaterial({
+    color: new Color(0.66, 0.76, 0.94),
+    transparent: true, opacity: 0.42, blending: AdditiveBlending, depthWrite: false,
   });
-  const points = new Points(geometry, material);
-  points.frustumCulled = false;
-  scene.add(points);
+  const rain = new LineSegments(geometry, material);
+  rain.frustumCulled = false;
+  scene.add(rain);
 
   return {
     statePath,
@@ -58,19 +67,22 @@ export const rainBinding: BindingFactory = (scene, statePath) => {
       const count = Math.min(MAX, Math.max(0, Math.floor(num(slice['particles'], 0))));
       const headY = num(slice['headY'], 300);
       const spread = num(slice['fallHeight'], 320);
-      geometry.setDrawRange(0, count);
+      geometry.setDrawRange(0, count * 2);
       const attr = geometry.getAttribute('position') as BufferAttribute;
       const arr = attr.array as Float32Array;
       for (let i = 0; i < count; i++) {
-        // Each drop is the head offset by its own seeded fraction of the column, so
-        // one authoritative value animates the whole field.
-        arr[i * 3 + 1] = ((headY - seeds[i]! * spread) % spread + spread) % spread;
+        // One authoritative value — headY, the field the contract asserts over —
+        // animates the whole field. Drawing from anything else would let the picture
+        // and the contract disagree.
+        const y = ((headY - seeds[i]! * spread) % spread + spread) % spread;
+        arr[i * 6 + 1] = y + lengths[i]!;
+        arr[i * 6 + 4] = y;
       }
       attr.needsUpdate = true;
-      material.opacity = 0.25 + 0.4 * Math.min(1, count / 8000);
+      material.opacity = 0.2 + 0.32 * Math.min(1, count / 7000);
     },
     dispose() {
-      scene.remove(points);
+      scene.remove(rain);
       geometry.dispose();
       material.dispose();
     },

@@ -432,6 +432,48 @@ interval on both ends — correct, and more machinery for the same guarantee.
 
 ---
 
+## 4 Sep — I could have looked at the scene on day three, and did not
+
+The plan named one risk above all others: that the base world would not be beautiful,
+and that this is the single thing engineering cannot compensate for. It also set a rule
+— if it does not impress, change it, do not hope. Then I built the scene, wrote that I
+could not judge it, and moved on to other work for a day.
+
+That was wrong, and not for a subtle reason: **the screenshot was one command away.**
+Playwright was already installed, the app already exposed an in-loop frame capture built
+for the acceptance tests, and images can simply be looked at. The check was free and I
+treated the question as unanswerable because it was aesthetic.
+
+**What the screenshot showed.** A Three.js tutorial. Flat grey boxes on a flat grey
+plane, every pixel inside a two-stop value range, no light source anywhere in frame, and
+"rain" rendering as scattered static dots.
+
+**What fixed it was not more geometry.** It was value range and a light anchor:
+
+- A sky gradient, baked into **vertex colours** rather than a GLSL `ShaderMaterial`. Raw
+  GLSL is not dependable under `WebGPURenderer`, and a sky that silently falls back to a
+  flat fill is the worst kind of failure — nothing errors, the frame just goes dull.
+- A moon that is actually in frame. Without a visible source, a directional light reads
+  as an arbitrary global tint rather than as light coming from somewhere.
+- Buildings pushed to near-black so they read as silhouette. The first version made
+  buildings and sky the same value, which is why nothing had an edge.
+- Rain as **line segments, not points**. A falling drop is a streak; as a dot it is
+  static noise, and no amount of opacity tuning was going to fix that.
+- Lit windows placed on the faces that turn toward the origin. The first attempt
+  scattered them with sign flips that cancelled out and buried most of them inside the
+  geometry, where they are invisible.
+
+**And one artifact worth naming.** The ground used `metalness: 0.62` against a 2.1 key
+light, which clipped a specular lobe to pure white directly in front of the camera. The
+brightest thing in the opening frame was a mistake.
+
+**The lesson is about process, not shaders.** I declared a question out of scope because
+it was aesthetic, when the tooling to answer it was already built and already paid for.
+The rule the plan wrote — look, and change it if it does not impress — only works if
+somebody actually looks.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

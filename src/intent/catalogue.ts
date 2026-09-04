@@ -201,6 +201,34 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     ],
   },
   {
+    name: 'lightning',
+    summary: 'Occasional bright flash with a decaying afterglow.',
+    statePath: 'weather.lightning',
+    schema: {
+      type: 'object',
+      properties: {
+        intensity: { type: 'number', minimum: 0.1, maximum: 20 },
+        decay: { type: 'number', minimum: 0.2, maximum: 12 },
+        frequency: { type: 'number', minimum: 0.02, maximum: 4 },
+      },
+      required: ['intensity', 'decay', 'frequency'],
+      additionalProperties: false,
+    },
+    defaults: { intensity: 6, decay: 3.5, frequency: 0.35 },
+    keywords: ['lightning', 'thunder', 'thunderstorm', 'thunderbolt', 'bolt', 'flash', 'flashes', 'flashing', 'strike', 'strikes'],
+    fields: [
+      { key: 'peak', role: 'constant', fromParam: 'intensity' },
+      { key: 'decay', role: 'constant', fromParam: 'decay' },
+      // The flash itself is episodic, so it cannot be the animated witness: a window
+      // that happens to fall between two strikes would read identical glow at both
+      // ends and reject a primitive that is behaving exactly as asked. `phase` is the
+      // strictly-increasing storm clock the strikes are scheduled against, so it moves
+      // on every step for every frequency the schema admits.
+      { key: 'phase', role: 'animated', witness: [0, 0.18] },
+      { key: 'instance', role: 'resource', witness: 'lightning#0' },
+    ],
+  },
+  {
     name: 'orbit-modulator',
     summary: 'Drives an existing object around a circular path.',
     statePath: 'motion.orbit',

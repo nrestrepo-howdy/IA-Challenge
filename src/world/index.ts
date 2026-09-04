@@ -1,5 +1,5 @@
 /**
- * WS5 · world. The six catalogue primitives, made real.
+ * WS5 · world. The catalogue primitives, made real.
  *
  * The catalogue is the specification: WS4 derives a state contract from the declared
  * fields of an entry, and the implementation here maintains exactly those fields. The
@@ -13,6 +13,7 @@ import { CATALOGUE } from '../intent/catalogue.js';
 import type { Params, PrimitiveOptions } from './base.js';
 import { createAmbientLight } from './ambient-light.js';
 import { createFogVolume } from './fog-volume.js';
+import { createLightning } from './lightning.js';
 import { createOrbitModulator } from './orbit-modulator.js';
 import { createRainEmitter } from './rain-emitter.js';
 import { createSnowEmitter } from './snow-emitter.js';
@@ -30,6 +31,7 @@ export { makeRng, hashSeed } from './prng.js';
 export type { Rng } from './prng.js';
 export { createAmbientLight, ambientLight, AMBIENT_STATE_PATH } from './ambient-light.js';
 export { createFogVolume, fogVolume, FOG_STATE_PATH } from './fog-volume.js';
+export { createLightning, lightning, LIGHTNING_STATE_PATH } from './lightning.js';
 export { createOrbitModulator, orbitModulator, ORBIT_STATE_PATH } from './orbit-modulator.js';
 export { createRainEmitter, rainEmitter, RAIN_STATE_PATH } from './rain-emitter.js';
 export { createSnowEmitter, snowEmitter, SNOW_STATE_PATH } from './snow-emitter.js';
@@ -56,6 +58,7 @@ export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegis
     createFogVolume(options),
     createAmbientLight(options),
     createOrbitModulator(options),
+    createLightning(options),
   ];
 
   const registry = new Map<string, Primitive<Params>>(all.map((p) => [p.name, p]));

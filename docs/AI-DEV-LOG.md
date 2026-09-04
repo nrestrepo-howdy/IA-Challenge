@@ -371,6 +371,67 @@ on one.
 
 ---
 
+## 3 Sep — What the written context is worth, measured — and it is not what I expected
+
+Two agents, the same task (add a `lightning` primitive), the same repository, the same
+success criterion (`npm run verify`). One was pointed at `CLAUDE.md`, the spec and the
+contracts; the other was asked to infer the conventions from source alone.
+
+This is deliberately **not** an orchestration A/B. A real one would mean building the
+project twice, which the budget does not allow, and comparing two different tasks
+measures nothing. Context is the one variable that can be isolated honestly: identical
+task, identical repo, one input removed.
+
+| run | tool calls | files | tests added | outside scope |
+|---|---|---|---|---|
+| **A** guided by the written context | 54 | 5 | **11** | none |
+| **B** source only | 41 | 6 | **0** | `src/render/bindings.ts` |
+
+Both passed typecheck and the gate. Both produced a working primitive.
+
+**The result contradicts the obvious hypothesis.** Written context did not make the
+agent faster — the guided run used **33% more** tool calls, not fewer. What it produced
+instead was thoroughness and boundaries: a dedicated test file with eleven cases against
+zero, and no file touched outside its remit against one.
+
+That is a more useful finding than the one I would have written down in advance.
+`CLAUDE.md` says *"every acceptance criterion needs a test that names it"* and
+*"stay inside your workstream"*. Both instructions were followed, both cost calls, and
+both bought exactly what they asked for. Guidance is not a shortcut; it is a
+specification of what "done" means, and meeting a higher bar takes longer.
+
+**What B had to reconstruct.** Five conventions, each stated in one line of prose it
+was not allowed to read: that every `animated` field must move on *every* tick or the
+oracle reports "present but inert"; that catalogue witness values are real rounded
+measurements rather than invented numbers; that a `constant` field publishes its
+parameter verbatim with the time-varying value in a separate field; that adding a
+shared keyword would change the resolution of utterances existing tests pin; and that
+visual bindings are optional. It got all five right, from the code, at a cost.
+
+**On the experiment's integrity.** B reported, unprompted, that the harness
+auto-injected `CLAUDE.md` into its context late in the run, after the implementation was
+written, and that it did not act on it. The contamination pushes *against* the measured
+effect: if B had partial access to the context and still had to infer, the real gap is
+wider than the table shows. An experiment whose known flaw biases toward the null result
+is more credible than a spotless one — and an agent that volunteers what dirties its own
+number is worth more than one that reports a clean one.
+
+**A found a bug in my process, not in the code.** All fourteen of its browser tests
+failed at first. The cause was a `vite preview` I had left running six hours earlier and
+then invalidated by changing the base path; Playwright's `reuseExistingServer` reused
+it and served a build whose assets 404 under `/verbo/`. A reproduced it on a stashed
+tree to prove the failure was pre-existing, verified its own change on a different port,
+and killed the stale process. That is the diagnosis I would want from a person, and the
+mess was mine.
+
+**Which implementation shipped, and why.** A's. It makes the animated field a strictly
+increasing storm clock rather than the flash itself: `glow` is episodic and can read
+near-identical at both ends of a 30-frame window at low frequency, which would make the
+*primary* oracle flaky. B hit the same trap and solved it by bounding the strike
+interval on both ends — correct, and more machinery for the same guarantee.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

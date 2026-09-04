@@ -62,6 +62,7 @@ describe('catalogue -> compiler -> world -> oracle', () => {
       'add some fog',
       'make it brighter',
       'make it spin',
+      'lightning',
     ];
 
     for (const utterance of utterances) {

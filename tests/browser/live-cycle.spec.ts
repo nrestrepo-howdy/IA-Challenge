@@ -8,7 +8,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 type Api = {
-  say(u: string): Promise<{ ok: boolean; ms: number }>;
+  say(u: string): Promise<{ ok: boolean; ms: number; steps: { kind: string; text: string }[] }>;
   capture(): Promise<ImageData>;
   world: { state: Record<string, unknown> };
   loader: { residentCount: number };
@@ -105,6 +105,25 @@ test.describe('AC-14 · the world never renders a black frame during an injectio
   });
 });
 
+test.describe('AC-11 · L3 runs on the injected world without deciding anything', () => {
+  test('reports on the frame, and says outright that no critic judged it', async ({ page }) => {
+    await boot(page);
+    const result = await page.evaluate(() =>
+      (globalThis as never as Record<string, Api>)['__VERBO__']!.say('make it rain'));
+
+    expect(result.ok).toBe(true);
+    const l3 = result.steps.filter((s) => s.text.startsWith('L3'));
+    expect(l3.length, 'the perceptual layer reported nothing at all').toBe(1);
+    // No key is configured in the suite, and nothing here needs one (R-10). What the
+    // layer must not do is let that silence read as approval.
+    expect(l3[0]!.text).toMatch(/not judged|no visual critic configured/);
+    // Advisory to the end: the world changed regardless of what L3 had to say.
+    const rain = await page.evaluate(() =>
+      (globalThis as never as Record<string, Api>)['__VERBO__']!.world.state['weather']);
+    expect(rain).toBeTruthy();
+  });
+});
+
 test.describe('AC-20 · a world survives a link', () => {
   test('the URL records the verbs, and opening it rebuilds the world', async ({ page }) => {
     await boot(page);
@@ -119,9 +138,12 @@ test.describe('AC-20 · a world survives a link', () => {
     await expect(fresh.locator('#status')).not.toHaveText('starting', { timeout: 30_000 });
     await expect(fresh.locator('#log .accept').first()).toBeVisible({ timeout: 30_000 });
 
-    const state = await fresh.evaluate(() =>
-      (globalThis as never as Record<string, Api>)['__VERBO__']!.world.state['weather']);
-    expect(state).toBeTruthy();
+    // Polled, not sampled once. The 'injecting' line is written before the module is
+    // loaded and mounted, so a single read the instant it appears races the mount --
+    // which made this assertion fail roughly one run in six.
+    await expect.poll(() => fresh.evaluate(() =>
+      (globalThis as never as Record<string, Api>)['__VERBO__']!.world.state['weather'] !== undefined,
+    ), { timeout: 30_000 }).toBe(true);
     await fresh.close();
   });
 

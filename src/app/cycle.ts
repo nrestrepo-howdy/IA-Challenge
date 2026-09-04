@@ -19,6 +19,9 @@ import type { World } from '../core/world.js';
 import { evaluateL0 } from '../harness/l0-static.js';
 import { evaluateContract, readPath, toVerdict } from '../harness/l2-contract.js';
 import { isInjectable, AUTHORITATIVE_LAYERS } from '../harness/cascade.js';
+import { evaluateL3, L3_LAYER, type Frame, type VisualCritic } from '../harness/l3-perceptual.js';
+import { encodePng } from '../harness/png.js';
+import { rulesRepairAgent, type RepairGuidance } from '../runtime/agents.js';
 import { generateCandidates } from '../runtime/generate.js';
 import type { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { BrowserProber } from '../runtime/browser-prober.js';
@@ -45,6 +48,37 @@ export interface CycleOutcome {
   readonly steps: readonly CycleStep[];
   readonly verdicts: readonly Verdict[];
   readonly reason: string | null;
+  /**
+   * What L3 disliked about the world that was injected anyway, phrased as guidance.
+   * Information for whoever asks next, never a reason the injection did not happen.
+   */
+  readonly advisory?: RepairGuidance;
+}
+
+/**
+ * Where L3 gets its pixels and its opinion.
+ *
+ * Both optional, and both absent by default. With no `capture` there is no frame to
+ * judge; with no `critic` -- the case whenever no API key is configured -- the delta
+ * still runs and `evaluateL3` says in its diagnosis that appearance went unjudged.
+ * Neither absence is allowed to look like approval, and neither can stall the cycle.
+ */
+export interface VisualReview {
+  readonly capture?: (() => Promise<Frame>) | undefined;
+  readonly critic?: VisualCritic | undefined;
+}
+
+/**
+ * The live capture published by `main.ts`, found rather than injected.
+ *
+ * Reading the canvas from outside the animation loop returns an empty buffer (R-3),
+ * so the only correct capture is the one inside the loop -- which lives in `main.ts`
+ * and is published on `__VERBO__` for exactly this consumer. Resolved lazily because
+ * this module is imported before that assignment runs.
+ */
+function liveCapture(): (() => Promise<Frame>) | undefined {
+  const app = (globalThis as { __VERBO__?: { capture?: () => Promise<Frame> } }).__VERBO__;
+  return app?.capture;
 }
 
 const PROBE_FRAMES = 120;
@@ -104,6 +138,48 @@ async function probe(
 }
 
 /**
+ * L3, run on the world that was just injected (D-1).
+ *
+ * It runs last and it runs *after* the mount, which is the honest place for it: the
+ * only frame worth judging is the one the person is now looking at, and there is no
+ * shadow renderer to produce one earlier. That ordering also removes the temptation
+ * to let taste decide -- by the time this returns, the decision has been made by the
+ * layers that are allowed to make it.
+ *
+ * Everything in here is therefore best-effort. No capture, no critic, a model that
+ * times out, a frame that will not encode: each ends in a step that says what went
+ * unchecked, and none of them changes what happened to the world.
+ */
+async function reviewVisually(
+  candidate: Candidate,
+  intent: Intent,
+  before: Frame,
+  after: Frame,
+  critic: VisualCritic | undefined,
+  attempt: number,
+): Promise<{ verdict: Verdict; guidance: RepairGuidance | null }> {
+  const l3 = await evaluateL3(before, after, intent.utterance, { critic });
+  const verdict: Verdict = { ...l3, candidateId: candidate.id, frame: encodePng(after) };
+  if (l3.passed) return { verdict, guidance: null };
+
+  // A dissatisfied critic produces guidance, not a rollback. `rulesRepairAgent`
+  // already knows what an L3 rejection means and says so in the guidance it writes;
+  // routing through it keeps that wording in one place instead of a second opinion
+  // about L3 forming here.
+  const guidance = await rulesRepairAgent.repair({
+    intent,
+    attempt: attempt + 1,
+    failures: [{
+      candidateId: candidate.id,
+      strategy: candidate.strategy,
+      failedAt: L3_LAYER,
+      diagnosis: l3.diagnosis ?? 'the critic reported no reason',
+    }],
+  });
+  return { verdict, guidance };
+}
+
+/**
  * What each state path currently holds, so re-uttering a verb supersedes rather than
  * collides. The world owns paths exclusively -- a shared path would make every
  * contract over it non-deterministic -- so the previous occupant is retired before the
@@ -117,6 +193,7 @@ export async function runCycle(
   loader: BrowserModuleLoader,
   live: World,
   onStep?: (s: CycleStep) => void,
+  visual: VisualReview = {},
 ): Promise<CycleOutcome> {
   const t0 = performance.now();
   const steps: CycleStep[] = [];
@@ -158,6 +235,13 @@ export async function runCycle(
         continue;
       }
 
+      // The 'before' frame is taken here rather than next to the mount: nothing about
+      // the picture changes between these two points, and a capture waits for the next
+      // rendered frame -- which, placed later, would put a visible delay between the
+      // decision and the world changing.
+      const capture = visual.capture ?? liveCapture();
+      const before = capture ? await capture() : null;
+
       // Cleared every authoritative layer. L3 is advisory and cannot veto (AC-11).
       say(`${candidate.strategy}: cleared ${AUTHORITATIVE_LAYERS.join(', ')} — injecting`, 'accept',
         { candidate: candidate.strategy, attempt });
@@ -173,7 +257,36 @@ export async function runCycle(
         injected.set(m.statePath, (m.instance as { id: string }).id);
       }
       live.recordVerb({ intentId: intent.id, utterance: intent.utterance, source: candidate.source });
-      return { ok: true, ms: performance.now() - t0, steps, verdicts, reason: null };
+
+      let advisory: RepairGuidance | undefined;
+      if (!capture || !before) {
+        say('L3 — no frame capture available, so appearance was not judged', 'info',
+          { layer: 'L3', attempt });
+      } else {
+        try {
+          // Two frames, and the second is the one judged. Bindings are created by the
+          // renderer's own reconcile pass, so the first frame after a mount is still
+          // the picture from before it -- comparing against that would report every
+          // successful injection as having changed nothing.
+          await capture();
+          const { verdict, guidance } = await reviewVisually(
+            candidate, intent, before, await capture(), visual.critic, attempt,
+          );
+          verdicts.push(verdict);
+          say(`L3 — ${verdict.diagnosis}`, 'info', { layer: 'L3', attempt });
+          if (guidance) {
+            advisory = guidance;
+            say(guidance.instructions.join(' '), 'info', { layer: 'L3', attempt });
+          }
+        } catch (err) {
+          // Including a critic that threw. The world keeps the injection; the log
+          // keeps the fact that nobody looked at it.
+          say(`L3 — did not complete (${String(err)}), so appearance was not judged`, 'info',
+            { layer: 'L3', attempt });
+        }
+      }
+
+      return { ok: true, ms: performance.now() - t0, steps, verdicts, reason: null, ...(advisory ? { advisory } : {}) };
     }
   }
 

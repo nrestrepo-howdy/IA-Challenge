@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { pixelDelta, evaluateL3, type Frame, type VisualCritic } from '../../src/harness/l3-perceptual.js';
+import { isInjectable } from '../../src/harness/cascade.js';
 
 const frame = (w: number, h: number, fill: (i: number) => [number, number, number]): Frame => {
   const data = new Uint8ClampedArray(w * h * 4);
@@ -66,5 +67,26 @@ describe('AC-11 · L3 is advisory, and says what it did not check', () => {
     const v = await evaluateL3(dark, lit, 'make it rain', { critic });
     expect(v.passed).toBe(false);
     expect(v.diagnosis).toBe('it rains, but the drops pass through the terrain');
+  });
+});
+
+describe('AC-11 · a dissatisfied critic does not prevent injection', () => {
+  const displeased: VisualCritic = {
+    async judge() { return { satisfied: false, note: 'the rain is there but far too sparse to read as rain' }; },
+  };
+
+  it('produces an L3-only failure, which the injection gate still admits', async () => {
+    const l3 = await evaluateL3(dark, lit, 'make it rain', { critic: displeased });
+    expect(l3.passed).toBe(false);
+    expect(l3.failedAt).toBe('L3');
+    // The gate, not a restatement of it: taste is advisory, and this is the whole
+    // reason the critic is allowed to have an opinion at all.
+    expect(isInjectable({ ...l3, candidateId: 'c1', frame: null })).toBe(true);
+  });
+
+  it('carries the critic note through as the diagnosis a repair agent reads', async () => {
+    const l3 = await evaluateL3(dark, lit, 'make it rain', { critic: displeased });
+    expect(l3.diagnosis).toMatch(/too sparse/);
+    expect(l3.diagnosis).not.toMatch(/\d+(\.\d+)?\s*(\/|out of)/);
   });
 });

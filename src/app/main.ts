@@ -108,6 +108,14 @@ handle.renderer.setAnimationLoop(() => {
     const slice = readPath(world.state, path);
     if (slice && typeof slice === 'object') b.update(slice as Record<string, unknown>, dt);
   }
+  // Framing follows the world's own published state, not a flag the cycle sets: a
+  // primitive that grows the city does not have to know a camera exists.
+  const skyline = readPath(world.state, 'structures.skyline.heightScale');
+  const tower = readPath(world.state, 'structures.tower.height');
+  base.setFraming(Math.max(
+    typeof skyline === 'number' ? (skyline - 1) / 4 : 0,
+    typeof tower === 'number' ? tower / 900 : 0,
+  ));
   base.update(world.clock.elapsed);
   handle.renderer.render(base.scene, base.camera);
   drain();
@@ -126,9 +134,13 @@ const panel = new VerificationPanel(document.getElementById('verify') as HTMLEle
 function line(text: string, kind: CycleStep['kind'] | 'you'): void {
   const el = document.createElement('div');
   el.className = `l ${kind}`;
-  el.textContent = text;
+  // One line each. A diagnosis is written for a repair agent and runs to several
+  // sentences; printed in full it wraps across the world and buries the verb the user
+  // just typed. The full text stays in the panel and in the cycle outcome.
+  el.textContent = text.length > 96 ? text.slice(0, 95).trimEnd() + '…' : text;
+  el.title = text;
   log.prepend(el);
-  while (log.childElementCount > 9) log.lastElementChild?.remove();
+  while (log.childElementCount > 6) log.lastElementChild?.remove();
 }
 
 let busy = false;

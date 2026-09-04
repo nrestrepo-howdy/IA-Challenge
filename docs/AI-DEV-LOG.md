@@ -474,6 +474,52 @@ somebody actually looks.
 
 ---
 
+## 4 Sep — The perceptual layer earned its place by telling me my product was wrong
+
+Two workstreams landed in parallel: three structural primitives (`tower`,
+`skyline-shift`, `ground-tint`), and the L3 critic wired into the live cycle. The
+interesting outcome was neither of them working.
+
+**L3 rejected a candidate, on screen, for a true reason.**
+
+> *the frame changed by 0.194% of pixels, below the 0.2% floor. State satisfied its
+> contract but nothing became visible — check that the primitive is bound to something
+> the renderer draws.*
+>
+> *L3 rejected 1 candidate — only taste was unhappy, which never blocks injection —
+> treat this as advisory (AC-11).*
+
+Both halves of the design worked at once. The layer caught a real defect **and** was
+structurally unable to act on it, exactly as D-1 requires. And what it caught was not a
+bug in the code: `tower` passed every authoritative layer, satisfied its contract, and
+mounted correctly. It was simply **too small to see** — one slender tower at the far end
+of a 260-building skyline. Defaults raised. A verb whose result nobody can notice has
+not run.
+
+That is the argument for keeping an advisory layer that cannot veto. A vetoing critic
+would have blocked a correct implementation over a product judgement; a critic with no
+voice would have let an invisible feature ship as a success.
+
+**Three dead bindings, found by the workstream that needed them alive.** `fogBinding`
+read `slice['colour']` where the field is `color`; `rainBinding` read `fallHeight` where
+it is `spread`; `windBinding` read `vector` where it is `direction`. All three ran
+silently on their fallbacks — fog colour was never visible, and the `spread` parameter
+did nothing on screen at all. Written by me, and invisible to every test, because the
+contracts assert over *state* and the bindings read state by string key. The state was
+always right; the picture was reading a key nobody wrote.
+
+L2 could never have caught this: it verifies that the world is correct, not that anyone
+can see it. That gap is precisely what L3 is for, and it existed for two days before
+there was a layer whose job was to notice.
+
+**And a framing bug I caused by fixing a product gap.** With structural verbs available,
+the first "make the buildings taller" put the camera inside a wall with the moon
+occluded — and the moon is the frame's light anchor. The scene now pulls back and up as
+the world grows, fed from the world's own published state, so a primitive that grows the
+city still does not have to know a camera exists.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

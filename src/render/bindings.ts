@@ -12,9 +12,11 @@
  * look right while its contract passed for the wrong reason.
  */
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, Color, Fog, LineBasicMaterial,
-  LineSegments, Scene, Vector3,
+  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, Fog,
+  InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, MeshStandardMaterial,
+  Points, PointsMaterial, Quaternion, Scene, Vector3,
 } from 'three/webgpu';
+import { sceneHandles } from './scene.js';
 
 export interface Binding {
   readonly statePath: string;
@@ -66,7 +68,11 @@ export const rainBinding: BindingFactory = (scene, statePath) => {
     update(slice) {
       const count = Math.min(MAX, Math.max(0, Math.floor(num(slice['particles'], 0))));
       const headY = num(slice['headY'], 300);
-      const spread = num(slice['fallHeight'], 320);
+      // `spread` is what the emitter publishes. This read said `fallHeight`, which no
+      // primitive has ever written, so every drop fell through the fallback and the
+      // `spread` parameter did nothing on screen — a binding reading a key that is not
+      // there is exactly the silent no-op this layer exists to prevent.
+      const spread = num(slice['spread'], 320);
       geometry.setDrawRange(0, count * 2);
       const attr = geometry.getAttribute('position') as BufferAttribute;
       const arr = attr.array as Float32Array;
@@ -95,7 +101,9 @@ export const fogBinding: BindingFactory = (scene, statePath) => {
     statePath,
     update(slice) {
       const density = num(slice['density'], 0);
-      const colour = Array.isArray(slice['colour']) ? (slice['colour'] as number[]) : [0.05, 0.07, 0.1];
+      // The catalogue field is `color`; reading `colour` silently pinned every fog to
+      // the fallback, so the colour parameter was never visible.
+      const colour = Array.isArray(slice['color']) ? (slice['color'] as number[]) : [0.05, 0.07, 0.1];
       const near = 40;
       const far = 40 + 1400 * (1 - Math.min(0.95, density));
       scene.fog = new Fog(new Color(colour[0] ?? 0, colour[1] ?? 0, colour[2] ?? 0), near, far);
@@ -109,7 +117,8 @@ export const windBinding: BindingFactory = (scene, statePath) => {
   return {
     statePath,
     update(slice) {
-      const v = Array.isArray(slice['vector']) ? (slice['vector'] as number[]) : [0, 0, 0];
+      // `direction` is the declared field; `vector` never existed.
+      const v = Array.isArray(slice['direction']) ? (slice['direction'] as number[]) : [0, 0, 0];
       direction.set(v[0] ?? 0, v[1] ?? 0, v[2] ?? 0);
       // Wind is felt through what it moves, not drawn directly. Rain reads it via
       // its own state, so there is nothing to render here -- the binding exists so
@@ -119,10 +128,164 @@ export const windBinding: BindingFactory = (scene, statePath) => {
   };
 };
 
+// ─── structural bindings ─────────────────────────────────────────────────────
+// The atmospheric bindings above all add something in front of the base scene. These
+// three change the world's own substance, which is why two of them reach the authored
+// geometry through `sceneHandles()` — and why both of those restore it in `dispose()`:
+// R-4 makes the module leak structural, so putting the world back is the only cleanup
+// there is, and a structural verb that could not be undone would leave the user's world
+// permanently altered by a rolled-back injection (AC-12, AC-13).
+
+/**
+ * Towers, drawn from the heights the primitive is currently publishing.
+ *
+ * `grown` is the authoritative per-site height and the mesh is scaled straight from it,
+ * so a tower that is half-risen in state is half-risen on screen. Deriving the height
+ * from a local clock instead would let the picture and the contract disagree about a
+ * value the contract is asserting over.
+ */
+export const towerBinding: BindingFactory = (scene, statePath) => {
+  // The schema's maximum count. Allocated once: an InstancedMesh cannot grow, and
+  // rebuilding one mid-verb is how an injection drops a frame (AC-14).
+  const MAX = 8;
+  const geometry = new BoxGeometry(1, 1, 1);
+  const material = new MeshStandardMaterial({
+    color: new Color(0.02, 0.026, 0.04), roughness: 0.7, metalness: 0.35,
+  });
+  const mesh = new InstancedMesh(geometry, material, MAX);
+  mesh.count = 0;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+
+  // A warm crown on each tower. A near-black silhouette against a near-black skyline
+  // is a shape nobody can find; the light on top is what says "this is new".
+  const crownGeo = new BufferGeometry();
+  crownGeo.setAttribute('position', new BufferAttribute(new Float32Array(MAX * 3), 3));
+  const crownMat = new PointsMaterial({
+    size: 9, color: new Color(1, 0.72, 0.42), transparent: true, opacity: 0.95,
+    blending: AdditiveBlending, depthWrite: false,
+  });
+  const crowns = new Points(crownGeo, crownMat);
+  crowns.frustumCulled = false;
+  scene.add(crowns);
+
+  const m = new Matrix4(), q = new Quaternion(), pos = new Vector3(), scl = new Vector3();
+  const axisY = new Vector3(0, 1, 0);
+
+  return {
+    statePath,
+    update(slice) {
+      const sites = Array.isArray(slice['sites']) ? (slice['sites'] as unknown[]) : [];
+      const grown = Array.isArray(slice['grown']) ? (slice['grown'] as unknown[]) : [];
+      const count = Math.min(MAX, sites.length);
+      const crownPos = (crownGeo.getAttribute('position') as BufferAttribute).array as Float32Array;
+
+      for (let i = 0; i < count; i++) {
+        const site = sites[i] as number[] | undefined;
+        if (!site) continue;
+        const [x = 0, z = 0, width = 1, depth = 1, , spin = 0] = site;
+        // A zero-height instance still renders a degenerate quad, so the floor is a
+        // sliver rather than nothing: the tower appears as a foundation and grows.
+        const height = Math.max(0.5, num(grown[i], 0));
+        pos.set(x, height / 2, z);
+        scl.set(width, height, depth);
+        q.setFromAxisAngle(axisY, spin);
+        mesh.setMatrixAt(i, m.compose(pos, q, scl));
+        crownPos[i * 3] = x;
+        crownPos[i * 3 + 1] = height + 4;
+        crownPos[i * 3 + 2] = z;
+      }
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+      crownGeo.setDrawRange(0, count);
+      (crownGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(mesh);
+      scene.remove(crowns);
+      geometry.dispose();
+      material.dispose();
+      crownGeo.dispose();
+      crownMat.dispose();
+      mesh.dispose();
+    },
+  };
+};
+
+/**
+ * The authored city, rescaled.
+ *
+ * The only binding that touches geometry it did not create, so it is also the only one
+ * that has to be able to hand it back. `reset()` on dispose restores the authored
+ * heights and count exactly — the handle keeps the authored values, so restoration does
+ * not depend on this binding having remembered them correctly.
+ */
+export const skylineBinding: BindingFactory = (scene, statePath) => {
+  const handles = sceneHandles(scene);
+  const skyline = handles?.skyline ?? null;
+  // Redrawing 520 instances every frame for a city that stopped moving two seconds ago
+  // is budget spent against R-9 for no picture. The shift is eased, so "unchanged"
+  // means unchanged to well below a pixel.
+  let lastScale = Number.NaN;
+  let lastVisible = -1;
+
+  return {
+    statePath,
+    update(slice) {
+      if (!skyline) return;
+      const scale = num(slice['heightNow'], 1);
+      const visible = Math.max(
+        1,
+        Math.min(skyline.maxCount, Math.round(skyline.baseCount * num(slice['densityNow'], 1))),
+      );
+      if (Math.abs(scale - lastScale) < 1e-4 && visible === lastVisible) return;
+      lastScale = scale;
+      lastVisible = visible;
+      skyline.apply(scale, visible);
+    },
+    dispose() {
+      skyline?.reset();
+    },
+  };
+};
+
+/**
+ * What the world is made of.
+ *
+ * The cross-fade runs from the *authored* material rather than from the material's
+ * current value, so the tint converges on the requested colour instead of chasing its
+ * own previous frame, and `reset()` lands back exactly where the world started.
+ */
+export const groundBinding: BindingFactory = (scene, statePath) => {
+  const handles = sceneHandles(scene);
+  const ground = handles?.ground ?? null;
+  const target = new Color();
+
+  return {
+    statePath,
+    update(slice) {
+      if (!ground) return;
+      const c = Array.isArray(slice['color']) ? (slice['color'] as number[]) : null;
+      if (!c) return;
+      const mix = Math.max(0, Math.min(1, num(slice['mix'], 0)));
+      target.setRGB(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0);
+      ground.material.color.copy(ground.baseColor).lerp(target, mix);
+      ground.material.roughness =
+        ground.baseRoughness + (num(slice['roughness'], ground.baseRoughness) - ground.baseRoughness) * mix;
+    },
+    dispose() {
+      ground?.reset();
+    },
+  };
+};
+
 /** Primitive name -> how it is drawn. A name with no binding is state without a picture. */
 export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'rain-emitter': rainBinding,
   'snow-emitter': rainBinding,
   'fog-volume': fogBinding,
   'wind-field': windBinding,
+  'tower': towerBinding,
+  'skyline-shift': skylineBinding,
+  'ground-tint': groundBinding,
 };

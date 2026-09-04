@@ -251,6 +251,116 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       { key: 'instance', role: 'resource', witness: 'orbit-modulator#0' },
     ],
   },
+
+  // ─── structural primitives ─────────────────────────────────────────────────
+  // Everything above changes the weather. These three change the world itself: they
+  // raise geometry, rescale the authored city, and restate what the ground is made
+  // of. They are declared exactly like the atmospheric entries — the role tags are
+  // what make their contracts derivable (§4.4), and the closed set is what keeps the
+  // model composing rather than inventing (D-2).
+  {
+    name: 'tower',
+    summary: 'Raises a distinctive structure out of the ground.',
+    statePath: 'structures.tower',
+    schema: {
+      type: 'object',
+      properties: {
+        height: { type: 'number', minimum: 20, maximum: 600 },
+        girth: { type: 'number', minimum: 4, maximum: 120 },
+        count: { type: 'integer', minimum: 1, maximum: 8 },
+        placement: { type: 'string', enum: ['center', 'ring', 'avenue'] },
+      },
+      required: ['height', 'girth', 'count', 'placement'],
+      additionalProperties: false,
+    },
+    // Raised from 260x28x1 after L3 measured the default at 0.194% of pixels changed
+    // -- below its own visibility floor. The perceptual layer was right: a single
+    // slender tower at the far end of a 260-building skyline is not something a person
+    // would notice happened. A verb whose result nobody can see has not run.
+    defaults: { height: 420, girth: 46, count: 3, placement: 'center' },
+    keywords: [
+      'tower', 'towers', 'skyscraper', 'spire', 'monolith', 'obelisk', 'monument',
+      'landmark', 'pillar', 'build', 'raise',
+    ],
+    fields: [
+      { key: 'height', role: 'constant', fromParam: 'height' },
+      { key: 'girth', role: 'constant', fromParam: 'girth' },
+      { key: 'towers', role: 'constant', fromParam: 'count' },
+      { key: 'placement', role: 'constant', fromParam: 'placement' },
+      // `growth` is the visible quantity and it is the wrong witness, for the same
+      // reason lightning's `glow` was: it eases to 1 and then stops moving, so a
+      // window taken after the rise finished reads identical at both ends and rejects
+      // a tower standing exactly where it was asked to stand. `risePhase` is the
+      // monotonic clock the growth is a function of, so it advances on every step for
+      // every parameter the schema admits.
+      { key: 'risePhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'tower#0' },
+    ],
+  },
+  {
+    name: 'skyline-shift',
+    summary: 'Rescales the authored city: taller, denser or sparser.',
+    statePath: 'structures.skyline',
+    schema: {
+      type: 'object',
+      properties: {
+        heightScale: { type: 'number', minimum: 0.25, maximum: 5 },
+        density: { type: 'number', minimum: 0.1, maximum: 2 },
+      },
+      required: ['heightScale', 'density'],
+      additionalProperties: false,
+    },
+    // Tuned down from 2x/1.35 after looking at the result: at the default the camera
+    // ends up inside the city with the moon occluded, and the moon is the frame's
+    // light anchor. A verb that improves the world by removing its composition is
+    // doing what was asked and not what was wanted. The full range stays reachable
+    // when a request actually asks for it.
+    defaults: { heightScale: 1.45, density: 1.15 },
+    keywords: [
+      'skyline', 'city', 'cityscape', 'buildings', 'metropolis', 'downtown', 'urban',
+      'taller', 'denser', 'sparser', 'district', 'blocks',
+    ],
+    fields: [
+      { key: 'heightScale', role: 'constant', fromParam: 'heightScale' },
+      { key: 'density', role: 'constant', fromParam: 'density' },
+      // Same trap, same answer: `blend` saturates at 1 once the city has finished
+      // moving; `shiftPhase` never stops.
+      { key: 'shiftPhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'skyline-shift#0' },
+    ],
+  },
+  {
+    name: 'ground-tint',
+    summary: 'Restates what the ground is made of: its colour and roughness.',
+    statePath: 'surface.ground',
+    schema: {
+      type: 'object',
+      properties: {
+        color: {
+          type: 'array',
+          items: { type: 'number', minimum: 0, maximum: 1 },
+          minItems: 3,
+          maxItems: 3,
+        },
+        roughness: { type: 'number', minimum: 0, maximum: 1 },
+      },
+      required: ['color', 'roughness'],
+      additionalProperties: false,
+    },
+    // Sand rather than the base scene's wet asphalt: a default that resembles what is
+    // already on screen makes the verb read as a no-op even when it worked.
+    defaults: { color: [0.46, 0.36, 0.24], roughness: 0.92 },
+    keywords: [
+      'ground', 'floor', 'terrain', 'desert', 'sand', 'sandy', 'dunes', 'obsidian',
+      'asphalt', 'concrete', 'grass', 'soil', 'dirt', 'rock',
+    ],
+    fields: [
+      { key: 'color', role: 'vector', fromParam: 'color', bounds: UNIT_RGB },
+      { key: 'roughness', role: 'constant', fromParam: 'roughness' },
+      { key: 'tintPhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'ground-tint#0' },
+    ],
+  },
 ];
 
 export function findPrimitive(

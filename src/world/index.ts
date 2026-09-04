@@ -13,10 +13,13 @@ import { CATALOGUE } from '../intent/catalogue.js';
 import type { Params, PrimitiveOptions } from './base.js';
 import { createAmbientLight } from './ambient-light.js';
 import { createFogVolume } from './fog-volume.js';
+import { createGroundTint } from './ground-tint.js';
 import { createLightning } from './lightning.js';
 import { createOrbitModulator } from './orbit-modulator.js';
 import { createRainEmitter } from './rain-emitter.js';
+import { createSkylineShift } from './skyline-shift.js';
 import { createSnowEmitter } from './snow-emitter.js';
+import { createTower } from './tower.js';
 import { createWindField } from './wind-field.js';
 
 export {
@@ -36,6 +39,9 @@ export { createOrbitModulator, orbitModulator, ORBIT_STATE_PATH } from './orbit-
 export { createRainEmitter, rainEmitter, RAIN_STATE_PATH } from './rain-emitter.js';
 export { createSnowEmitter, snowEmitter, SNOW_STATE_PATH } from './snow-emitter.js';
 export { createWindField, windField, sampleWind, WIND_STATE_PATH } from './wind-field.js';
+export { createTower, tower, TOWER_STATE_PATH } from './tower.js';
+export { createSkylineShift, skylineShift, SKYLINE_STATE_PATH } from './skyline-shift.js';
+export { createGroundTint, groundTint, GROUND_STATE_PATH } from './ground-tint.js';
 export type { WindSample } from './wind-field.js';
 
 /** A `name -> Primitive` registry. Closed: it holds the catalogue and nothing else (D-2). */
@@ -59,6 +65,9 @@ export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegis
     createAmbientLight(options),
     createOrbitModulator(options),
     createLightning(options),
+    createTower(options),
+    createSkylineShift(options),
+    createGroundTint(options),
   ];
 
   const registry = new Map<string, Primitive<Params>>(all.map((p) => [p.name, p]));

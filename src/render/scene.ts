@@ -21,8 +21,87 @@ import {
 export interface BaseScene {
   readonly scene: Scene;
   readonly camera: PerspectiveCamera;
+  /** 0..1 — how far the world has grown beyond its authored height. */
+  setFraming(v: number): void;
+  /** The authored city, for the binding of a primitive that reshapes it. */
+  readonly skyline: SkylineHandle;
+  /** The authored ground material, for the binding of a primitive that restates it. */
+  readonly ground: GroundHandle;
   resize(w: number, h: number): void;
   update(elapsed: number): void;
+}
+
+/**
+ * The handle `skyline-shift` needs.
+ *
+ * Structural verbs are the first ones that change something the base scene already
+ * drew, so the base scene has to hand out something to change. It hands out its own
+ * geometry plus the two operations that keep it coherent — a building's lit windows
+ * have to move with its roof, and there is exactly one correct way to do that, so it
+ * lives here beside the data rather than being reimplemented by every caller. What the
+ * binding still owns is the decision: *how tall*, *how many*, and *when*, all read from
+ * world state.
+ *
+ * `reset()` is not a convenience. R-4 makes the module leak structural, so a binding's
+ * `dispose()` is the only thing that can put the user's world back the way it was
+ * (AC-12), and a scene that cannot be un-shifted would make `skyline-shift` a one-way
+ * door.
+ */
+export interface SkylineHandle {
+  readonly mesh: InstancedMesh;
+  /** Instances the authored city uses. The mesh has capacity for more, for `density`. */
+  readonly baseCount: number;
+  /** Upper bound on `visible`; more than this is capacity the scene does not have. */
+  readonly maxCount: number;
+  /** Draws `visible` buildings at `heightScale` times their authored height. */
+  apply(heightScale: number, visible: number): void;
+  reset(): void;
+}
+
+/** The handle `ground-tint` needs: the material, and what it was before anyone touched it. */
+export interface GroundHandle {
+  readonly material: MeshStandardMaterial;
+  readonly baseColor: Color;
+  readonly baseRoughness: number;
+  reset(): void;
+}
+
+/** What a binding can reach through the `Scene` it is handed. */
+export interface SceneHandles {
+  readonly skyline: SkylineHandle;
+  readonly ground: GroundHandle;
+}
+
+/** Where the handles are parked on the scene graph. */
+const HANDLES_KEY = 'verbo';
+
+/**
+ * The authored handles, reached from the `Scene` alone.
+ *
+ * A binding is constructed with a `Scene` and a state path — that is the seam `main.ts`
+ * uses, and widening it would make every existing binding know about a base scene it
+ * has no business knowing about. Structural bindings need more than the graph, so the
+ * base scene parks its handles on `scene.userData` and they are read back through this
+ * one typed accessor rather than by reaching into `userData` from four places.
+ *
+ * Returns null for any other `Scene` — a test's, or a shadow render's — so a binding
+ * degrades to drawing nothing instead of throwing inside the frame loop.
+ */
+export function sceneHandles(scene: Scene): SceneHandles | null {
+  const handles = (scene.userData as Record<string, unknown>)[HANDLES_KEY];
+  return (handles as SceneHandles | undefined) ?? null;
+}
+
+/** One building: authored once, redrawn whenever the skyline is shifted. */
+interface Slot {
+  readonly x: number;
+  readonly z: number;
+  readonly width: number;
+  readonly depth: number;
+  readonly height: number;
+  readonly rotation: number;
+  /** Window offsets from the building's centre, with the height fraction each sits at. */
+  readonly windows: readonly { readonly dx: number; readonly dz: number; readonly t: number }[];
 }
 
 /** Deterministic: the scene is identical on every load, so a screenshot is a fact. */
@@ -105,67 +184,140 @@ export function createBaseScene(): BaseScene {
   scene.add(halo);
 
   // ── Ground ─────────────────────────────────────────────────────────────────
-  const ground = new Mesh(
-    new PlaneGeometry(4000, 4000),
-    new MeshStandardMaterial({
-      // Wet-looking, not mirrored. metalness 0.62 against a 2.1 key clipped a
-      // specular lobe to pure white right in front of the camera — the brightest
-      // thing in frame was an artifact.
-      color: new Color(0.026, 0.033, 0.048), roughness: 0.72, metalness: 0.18,
-    }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
+  const groundMaterial = new MeshStandardMaterial({
+    // Wet-looking, not mirrored. metalness 0.62 against a 2.1 key clipped a
+    // specular lobe to pure white right in front of the camera — the brightest
+    // thing in frame was an artifact.
+    color: new Color(0.026, 0.033, 0.048), roughness: 0.72, metalness: 0.18,
+  });
+  const groundMesh = new Mesh(new PlaneGeometry(4000, 4000), groundMaterial);
+  groundMesh.rotation.x = -Math.PI / 2;
+  scene.add(groundMesh);
+
+  // The authored values are captured here, not in the binding: `ground-tint` blends
+  // *from* what the world was made of, and a binding that read the current material
+  // would blend from whatever the previous tint left behind and never find its way
+  // home on dispose() (AC-12).
+  const ground: GroundHandle = {
+    material: groundMaterial,
+    baseColor: groundMaterial.color.clone(),
+    baseRoughness: groundMaterial.roughness,
+    reset() {
+      groundMaterial.color.copy(this.baseColor);
+      groundMaterial.roughness = this.baseRoughness;
+    },
+  };
 
   // ── Skyline ────────────────────────────────────────────────────────────────
   // Near-black, so it reads as silhouette against the sky. The previous version made
   // buildings and sky the same value, which is why nothing had an edge.
+  //
+  // The city is authored as data first and drawn from it second. That indirection is
+  // what makes `skyline-shift` possible at all: a building's height has to be readable
+  // to be multiplied, and its lit windows have to be expressed as a *fraction* of that
+  // height or they stay at ground level while the roof leaves without them.
   const COUNT = 260;
-  const blocks = new InstancedMesh(
-    new BoxGeometry(1, 1, 1),
-    new MeshStandardMaterial({ color: new Color(0.017, 0.022, 0.033), roughness: 0.82, metalness: 0.25 }),
-    COUNT,
-  );
-  const m = new Matrix4(), q = new Quaternion(), pos = new Vector3(), scl = new Vector3();
-  const windows: number[] = [];
-  for (let i = 0; i < COUNT; i++) {
+  // Capacity for exactly twice the authored city, which is the schema's maximum
+  // density. Instances are allocated once, at load: growing an InstancedMesh means
+  // rebuilding it, and rebuilding geometry mid-verb is how an injection drops a frame
+  // (AC-14).
+  const CAPACITY = COUNT * 2;
+  const slots: Slot[] = [];
+  for (let i = 0; i < CAPACITY; i++) {
     const angle = rand() * Math.PI * 2;
-    const radius = 170 + rand() * 1000;
-    const height = 28 + rand() * rand() * 300;
+    // Infill sits closer in and lower than the authored ring, so "denser" fills the
+    // middle distance rather than adding a second horizon nobody can see.
+    const infill = i >= COUNT;
+    const radius = infill ? 150 + rand() * 620 : 170 + rand() * 1000;
+    const height = (infill ? 24 + rand() * rand() * 200 : 28 + rand() * rand() * 300);
     const width = 16 + rand() * 30;
     const depth = width * (0.7 + rand() * 0.6);
-    pos.set(Math.cos(angle) * radius, height / 2, Math.sin(angle) * radius);
-    scl.set(width, height, depth);
-    q.setFromAxisAngle(new Vector3(0, 1, 0), rand() * Math.PI);
-    blocks.setMatrixAt(i, m.compose(pos, q, scl));
+    const nx = Math.cos(angle), nz = Math.sin(angle);
 
     // Lit windows, placed on the two faces that face the origin so the camera sees
     // them. The first attempt scattered them with sign flips that cancelled out and
     // put most of them inside the geometry, where they are invisible.
+    const windows: { dx: number; dz: number; t: number }[] = [];
     const rows = Math.max(1, Math.floor(height / 22));
-    const nx = Math.cos(angle), nz = Math.sin(angle);
     for (let r = 0; r < rows; r++) {
       for (let k = 0; k < 3; k++) {
         if (rand() > 0.3) continue;
         const lateral = (k - 1) * width * 0.3;
-        windows.push(
-          pos.x - nx * (depth / 2 + 1.2) - nz * lateral,
-          14 + r * 22 + rand() * 6,
-          pos.z - nz * (depth / 2 + 1.2) + nx * lateral,
-        );
+        windows.push({
+          dx: -nx * (depth / 2 + 1.2) - nz * lateral,
+          dz: -nz * (depth / 2 + 1.2) + nx * lateral,
+          t: (14 + r * 22 + rand() * 6) / height,
+        });
       }
     }
+
+    slots.push({
+      x: nx * radius, z: nz * radius, width, depth, height,
+      rotation: rand() * Math.PI, windows,
+    });
   }
-  blocks.instanceMatrix.needsUpdate = true;
+
+  const blocks = new InstancedMesh(
+    new BoxGeometry(1, 1, 1),
+    new MeshStandardMaterial({ color: new Color(0.017, 0.022, 0.033), roughness: 0.82, metalness: 0.25 }),
+    CAPACITY,
+  );
   scene.add(blocks);
 
+  // One window buffer for every slot the mesh can draw, filled in slot order. Visible
+  // buildings are always a prefix of `slots`, so the draw range is a prefix sum.
+  const windowStart: number[] = [0];
+  for (const slot of slots) windowStart.push(windowStart[windowStart.length - 1]! + slot.windows.length);
   const winGeo = new BufferGeometry();
-  winGeo.setAttribute('position', new BufferAttribute(new Float32Array(windows), 3));
+  winGeo.setAttribute(
+    'position',
+    new BufferAttribute(new Float32Array(windowStart[windowStart.length - 1]! * 3), 3),
+  );
   const winMat = new PointsMaterial({
     size: 3.4, color: new Color(1, 0.83, 0.55),
     transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false,
   });
-  scene.add(new Points(winGeo, winMat));
+  const winPoints = new Points(winGeo, winMat);
+  winPoints.frustumCulled = false;
+  scene.add(winPoints);
+
+  const m = new Matrix4(), q = new Quaternion(), pos = new Vector3(), scl = new Vector3();
+  const axisY = new Vector3(0, 1, 0);
+
+  function drawSkyline(heightScale: number, visible: number): void {
+    const shown = Math.max(0, Math.min(CAPACITY, Math.round(visible)));
+    const attr = winGeo.getAttribute('position') as BufferAttribute;
+    const out = attr.array as Float32Array;
+    for (let i = 0; i < shown; i++) {
+      const slot = slots[i]!;
+      const height = slot.height * heightScale;
+      pos.set(slot.x, height / 2, slot.z);
+      scl.set(slot.width, height, slot.depth);
+      q.setFromAxisAngle(axisY, slot.rotation);
+      blocks.setMatrixAt(i, m.compose(pos, q, scl));
+      for (let w = 0; w < slot.windows.length; w++) {
+        const win = slot.windows[w]!;
+        const o = (windowStart[i]! + w) * 3;
+        out[o] = slot.x + win.dx;
+        out[o + 1] = win.t * height;
+        out[o + 2] = slot.z + win.dz;
+      }
+    }
+    blocks.count = shown;
+    blocks.instanceMatrix.needsUpdate = true;
+    winGeo.setDrawRange(0, windowStart[shown]!);
+    attr.needsUpdate = true;
+  }
+
+  drawSkyline(1, COUNT);
+
+  const skyline: SkylineHandle = {
+    mesh: blocks,
+    baseCount: COUNT,
+    maxCount: CAPACITY,
+    apply: drawSkyline,
+    reset: () => drawSkyline(1, COUNT),
+  };
 
   // ── Light ──────────────────────────────────────────────────────────────────
   const key = new DirectionalLight(new Color(0.68, 0.78, 1), 1.15);
@@ -174,10 +326,22 @@ export function createBaseScene(): BaseScene {
   scene.add(new AmbientLight(new Color(0.16, 0.22, 0.38), 0.5));
 
   const camera = new PerspectiveCamera(48, 1, 0.5, 4000);
+  let dolly = 165;
+  let framing = 0;
+
+  (scene.userData as Record<string, unknown>)[HANDLES_KEY] = { skyline, ground } satisfies SceneHandles;
 
   return {
     scene,
     camera,
+    skyline,
+    ground,
+    /**
+     * How much taller the world has become than it was authored, 0..1. The app feeds
+     * this from world state; the scene stays renderer-only and knows nothing about
+     * primitives or contracts.
+     */
+    setFraming(v: number) { framing = Math.max(0, Math.min(1, v)); },
     resize(w, h) {
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
@@ -187,8 +351,14 @@ export function createBaseScene(): BaseScene {
       // base scene is what makes an injected change read as an addition to a living
       // world rather than a page that swapped itself out.
       const a = elapsed * 0.028;
-      camera.position.set(Math.sin(a) * 165, 26 + Math.sin(elapsed * 0.09) * 4, Math.cos(a) * 165);
-      camera.lookAt(0, 62, 0);
+      // The frame reframes itself. When the world grows the camera pulls back and up,
+      // because a world that can be reshaped needs a viewpoint that survives being
+      // reshaped -- otherwise the first structural verb puts the camera inside a wall.
+      // Eased, so the move reads as the world settling rather than a cut.
+      const want = 150 + framing * 130;
+      dolly += (want - dolly) * 0.02;
+      camera.position.set(Math.sin(a) * dolly, 26 + dolly * 0.16 + Math.sin(elapsed * 0.09) * 4, Math.cos(a) * dolly);
+      camera.lookAt(0, 50 + framing * 70, 0);
       winMat.opacity = 0.72 + Math.sin(elapsed * 1.7) * 0.06;
     },
   };

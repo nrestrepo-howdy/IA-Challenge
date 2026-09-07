@@ -200,3 +200,32 @@ describe('partial fulfilment is disclosed, never silent', () => {
     expect(r.unaddressed).toEqual([]);
   });
 });
+
+/**
+ * The offline resolver used to select a primitive and leave every parameter at its
+ * default, so "make it night" and "sunset" both resolved to noon — daylight's default.
+ * The primitive ran, the contract passed, and the user got the opposite of what they
+ * asked for: success reported for the wrong thing.
+ */
+describe('the offline resolver honours words that pin a parameter', () => {
+  const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+
+  it.each([
+    ['make it night', 0],
+    ['make it day', 0.5],
+    ['sunset', 0.75],
+    ['dawn', 0.25],
+  ])('resolves %s to phase %s', async (utterance, phase) => {
+    const r = await compiler.compile(utterance, fakeWorld());
+    if (isRejection(r)) throw new Error(`expected acceptance, got: ${r.reason}`);
+    const daylight = r.brief.directives.find((d) => d.name === 'daylight');
+    expect(daylight?.params['phase']).toBe(phase);
+  });
+
+  it('leaves the default alone when no word pins it', async () => {
+    const r = await compiler.compile('change the light', fakeWorld());
+    if (isRejection(r)) return;   // resolving to something else is fine; guessing is not
+    const daylight = r.brief.directives.find((d) => d.name === 'daylight');
+    if (daylight) expect(daylight.params['phase']).toBe(0.5);
+  });
+});

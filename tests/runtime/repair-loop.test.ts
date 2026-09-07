@@ -36,6 +36,7 @@ import { HotInjector } from '../../src/runtime/injector.js';
 import type { LoadedModule } from '../../src/runtime/loader.js';
 import { makeIntent } from '../fixtures.js';
 import { fakeClock, stubModule, StubModuleLoader } from './support.js';
+import type { CodeBrief } from '../../src/contracts.js';
 
 const noMetrics = {
   compileMs: null,
@@ -245,5 +246,41 @@ describe('AC-19 · the retry loop is a repair loop: attempt N+1 is informed by a
     const flat = emitted.flat();
     expect(new Set(flat).size).toBe(flat.length);
     expect(emitted.map((sources) => countInSource(sources[0] as string))).toEqual([12000, 6000, 3000]);
+  });
+});
+
+describe('a repair may re-point a parameter, never take it out of range', () => {
+  it('clamps a repaired value to the catalogue maximum', () => {
+    // rain-emitter.speed defaults to 24 against a declared maximum of 80. Two
+    // doublings sit inside REPAIR_BAND (x4) and land at 96 — legal as a *movement*,
+    // illegal as a *value*. The band bounds the reach of a repair; the schema bounds
+    // where it may land, and only the second keeps the primitive's own promise.
+    const brief: CodeBrief = {
+      goal: 'heavy rain', rationale: '', steps: [], constraints: [],
+      directives: [{
+        name: 'rain-emitter', importSpecifier: 'verbo:rain-emitter',
+        statePath: 'weather.rain', params: { speed: 24 },
+      }],
+    };
+    const repaired = applyGuidance(brief, {
+      summary: 'faster', instructions: [], avoidStrategies: [], preferStrategies: [],
+      params: [{ primitive: 'rain-emitter', param: 'speed', value: 96, reason: 'L1 wanted denser rain' }],
+    });
+    expect(repaired.directives[0]!.params['speed']).toBe(80);
+  });
+
+  it('leaves an in-range repair untouched', () => {
+    const brief: CodeBrief = {
+      goal: 'rain', rationale: '', steps: [], constraints: [],
+      directives: [{
+        name: 'rain-emitter', importSpecifier: 'verbo:rain-emitter',
+        statePath: 'weather.rain', params: { speed: 24 },
+      }],
+    };
+    const repaired = applyGuidance(brief, {
+      summary: 'faster', instructions: [], avoidStrategies: [], preferStrategies: [],
+      params: [{ primitive: 'rain-emitter', param: 'speed', value: 48, reason: 'L1 wanted denser rain' }],
+    });
+    expect(repaired.directives[0]!.params['speed']).toBe(48);
   });
 });

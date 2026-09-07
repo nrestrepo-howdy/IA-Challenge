@@ -158,7 +158,7 @@ export const keywordModel: LanguageModel = {
 
     return Promise.resolve(
       JSON.stringify({
-        primitives: hits.map((h) => ({ name: h.spec.name, params: {} })),
+        primitives: hits.map((h) => ({ name: h.spec.name, params: hintedParams(h.spec, words) })),
         rationale: hits.length
           ? `matched ${hits.map((h) => h.spec.name).join(', ')} on catalogue keywords`
           : 'no catalogue keyword matched the utterance',
@@ -179,6 +179,23 @@ const FILLER = new Set([
   'world', 'scene', 'it', 'its', 'a', 'an', 'to', 'of', 'in', 'on', 'up', 'down',
   'together', 'also', 'then', 'again',
 ]);
+
+/**
+ * Parameters the utterance pinned, by word.
+ *
+ * Only for words the catalogue declared. A resolver that guessed at numbers would be
+ * the hosted model's job done badly; this only reads a mapping the primitive itself
+ * published, which is why it is safe to run with no model at all.
+ */
+function hintedParams(spec: PrimitiveSpec, words: Set<string>): Record<string, unknown> {
+  const hints = spec.paramHints;
+  if (!hints) return {};
+  const params: Record<string, unknown> = {};
+  for (const [word, values] of Object.entries(hints)) {
+    if (words.has(word)) Object.assign(params, values);
+  }
+  return params;
+}
 
 function tokenize(utterance: string): Set<string> {
   return new Set(utterance.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));

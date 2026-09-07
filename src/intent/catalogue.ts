@@ -64,6 +64,18 @@ export interface PrimitiveSpec {
   /** The slice of `__VERBO_STATE__` this primitive owns. Becomes the intent's scope. */
   readonly statePath: string;
   readonly defaults: Readonly<Record<string, unknown>>;
+  /**
+   * Words that pin a parameter to a value, for the offline resolver.
+   *
+   * Without this, the keyword resolver only ever selects a primitive and leaves every
+   * parameter at its default — so "make it night", "sunset" and "dawn" all resolved to
+   * noon, because noon is `daylight`'s default. The primitive ran, the contract passed,
+   * and the user got the opposite of what they asked for: a success reported for the
+   * wrong thing, which is the failure mode this project exists to refuse.
+   *
+   * A ranking signal, not a parser. The hosted resolver still does the real work.
+   */
+  readonly paramHints?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   /** Resolution hints for the offline model. A ranking signal, not a parser. */
   readonly keywords: readonly string[];
   readonly fields: readonly StateField[];
@@ -394,6 +406,14 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       'afternoon', 'sun', 'sunny', 'sunrise', 'sunset', 'dawn', 'dusk', 'twilight',
       'evening', 'night', 'nighttime', 'midnight', 'sky', 'time',
     ],
+    paramHints: {
+      night: { phase: 0 }, midnight: { phase: 0 }, dark: { phase: 0 },
+      dawn: { phase: 0.25 }, sunrise: { phase: 0.25 }, morning: { phase: 0.3 },
+      day: { phase: 0.5 }, noon: { phase: 0.5 }, midday: { phase: 0.5 },
+      afternoon: { phase: 0.62 },
+      dusk: { phase: 0.75 }, sunset: { phase: 0.75 }, evening: { phase: 0.78 },
+      twilight: { phase: 0.8 },
+    },
     fields: [
       { key: 'phase', role: 'constant', fromParam: 'phase' },
       { key: 'transition', role: 'constant', fromParam: 'transition' },

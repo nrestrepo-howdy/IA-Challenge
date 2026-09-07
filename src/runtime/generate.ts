@@ -15,6 +15,7 @@
  */
 import type { Candidate, CodeBrief, Intent } from '../contracts.js';
 import type { CandidateGenerator, GenerationRequest, RepairGuidance } from './agents.js';
+import { CATALOGUE } from '../intent/catalogue.js';
 
 export interface CandidateStrategy {
   readonly name: string;
@@ -127,11 +128,37 @@ export function applyGuidance(brief: CodeBrief, guidance: RepairGuidance | null)
       const current = params[adjustment.param];
       if (current === undefined) continue;   // a parameter the brief does not have is not a repair
       const next = reconcile(current, adjustment.value);
-      if (next !== undefined) params[adjustment.param] = next;
+      if (next !== undefined) params[adjustment.param] = clampToSchema(d.name, adjustment.param, next);
     }
     return { ...d, params };
   });
   return { ...brief, directives };
+}
+
+/**
+ * Clamps a repaired value to the range the catalogue declares for it.
+ *
+ * `REPAIR_BAND` bounds how far a repair may move a value *relative to itself*, which
+ * is not the same as keeping it legal: `rain-emitter.speed` defaults to 24 against a
+ * declared maximum of 80, so two doublings inside the band land at 96 — outside the
+ * schema that validated the original. That was a real hole, reported by the workstream
+ * that built the repair loop and not patched by it.
+ *
+ * The catalogue is read here rather than carried on `PrimitiveDirective`, which would
+ * have meant amending the frozen contract to transport data that already exists and is
+ * already the single source of truth. A repair may re-point a parameter; it may not
+ * take it somewhere the primitive never agreed to go.
+ */
+function clampToSchema(primitive: string, param: string, value: unknown): unknown {
+  const spec = CATALOGUE.find((c) => c.name === primitive);
+  const declared = (spec?.schema.properties as Record<string, { minimum?: number; maximum?: number }> | undefined)?.[param];
+  if (!declared) return value;
+  const lo = declared.minimum ?? -Infinity;
+  const hi = declared.maximum ?? Infinity;
+  const fit = (n: number): number => Math.min(hi, Math.max(lo, n));
+  if (typeof value === 'number') return fit(value);
+  if (Array.isArray(value)) return value.map((n) => (typeof n === 'number' ? fit(n) : n));
+  return value;
 }
 
 /** `undefined` for anything that would change a parameter's type or leave the band. */

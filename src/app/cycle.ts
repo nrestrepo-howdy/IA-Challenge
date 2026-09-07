@@ -185,8 +185,11 @@ async function reviewVisually(
  * contract over it non-deterministic -- so the previous occupant is retired before the
  * new one claims it. The module ABI returns its mounted instances precisely so a
  * caller can track them; this is that use.
+ *
+ * Exported because undo rebuilds the world from snapshots (`history.ts`), and every id
+ * in here refers to an instance that rebuild disposes.
  */
-const injected = new Map<string, string>();
+export const injectedInstances = new Map<string, string>();
 
 export async function runCycle(
   intent: Intent,
@@ -247,14 +250,14 @@ export async function runCycle(
         { candidate: candidate.strategy, attempt });
       const mod = await loader.load(candidate.source);
       for (const d of intent.brief.directives) {
-        const previous = injected.get(d.statePath);
+        const previous = injectedInstances.get(d.statePath);
         if (previous) {
           live.unregister(previous);   // disposes, and frees the path
-          injected.delete(d.statePath);
+          injectedInstances.delete(d.statePath);
         }
       }
       for (const m of mod.mount(live)) {
-        injected.set(m.statePath, (m.instance as { id: string }).id);
+        injectedInstances.set(m.statePath, (m.instance as { id: string }).id);
       }
       live.recordVerb({ intentId: intent.id, utterance: intent.utterance, source: candidate.source });
 

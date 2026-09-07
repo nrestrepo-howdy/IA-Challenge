@@ -16,6 +16,9 @@ import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, prober, type CycleStep } from './cycle.js';
 import { encodeWorld, decodeWorld } from './share.js';
 import { VerificationPanel } from './verification-panel.js';
+import { WorldHistory } from './history.js';
+import { Inventory } from './inventory.js';
+import { SuggestionRow, deriveSuggestions } from './suggestions.js';
 
 /** What one utterance produced. Shaped for the nightly evaluation, not for the UI. */
 export interface SayResult {
@@ -131,6 +134,44 @@ const input = document.getElementById('say') as HTMLInputElement;
 const log = document.getElementById('log') as HTMLElement;
 const panel = new VerificationPanel(document.getElementById('verify') as HTMLElement);
 
+/**
+ * The world's chrome: what is in it, and the way back out.
+ *
+ * All three of these are driven from `world.snapshot()` rather than from anything this
+ * file accumulates on the side. A second bookkeeping of what the world contains is a
+ * second thing that can be wrong about it.
+ */
+const worldHistory = new WorldHistory(world, loader, () => sync());
+const inventory = new Inventory(document.getElementById('inventory') as HTMLElement, {
+  undo: () => { void undo(); },
+  remove: (i) => { void dropVerb(i); },
+});
+const suggestions = new SuggestionRow(
+  document.getElementById('suggest') as HTMLElement,
+  (utterance) => { void say(utterance); },
+);
+
+/**
+ * Re-points everything that describes the world after the world changes shape.
+ *
+ * `World.restore()` installs a fresh state tree, so the published reference has to be
+ * re-pointed or the harness's snapshots would read a tree nothing writes to any more.
+ * The link is rewritten here too, so it always addresses what is on screen — including
+ * after an undo, where a link still naming the removed verb would be a link to a world
+ * the user deliberately discarded.
+ */
+function sync(): void {
+  Object.assign(globalThis, { __VERBO_STATE__: world.state });
+  const verbs = world.snapshot().verbs;
+  history.replaceState(null, '',
+    verbs.length ? `#${encodeWorld(verbs.map((v) => v.utterance))}` : location.pathname + location.search);
+  inventory.render(verbs, worldHistory.depth > 0);
+  // The openers occupy the same band as the log, and they earn it only while there is
+  // nothing else to read: once anything has been said, the transcript is the more
+  // useful thing to have in that space.
+  suggestions.setVisible(verbs.length === 0 && log.childElementCount === 0);
+}
+
 function line(text: string, kind: CycleStep['kind'] | 'you'): void {
   const el = document.createElement('div');
   el.className = `l ${kind}`;
@@ -156,7 +197,11 @@ async function say(utterance: string): Promise<SayResult> {
   input.disabled = true;
   line(utterance, 'you');
   panel.begin(utterance);
+  suggestions.setVisible(false);
   try {
+    // Taken before anything is injected, and kept only if something was: an undo step
+    // for an utterance that changed nothing would be a lie about what the world holds.
+    const before = world.snapshot();
     const compiled = await compiler.compile(utterance, world);
     if (isRejection(compiled)) {
       // AC-17: an impossible request is explained, never silently attempted.
@@ -180,8 +225,8 @@ async function say(utterance: string): Promise<SayResult> {
       // The link carries intent, never code. replaceState rather than push: the world
       // is cumulative, so each verb refines one address instead of stacking history
       // entries a back button would have to unwind.
-      const verbs = world.snapshot().verbs.map((v) => v.utterance);
-      history.replaceState(null, '', `#${encodeWorld(verbs)}`);
+      worldHistory.push(before);
+      sync();
     }
     // The full shape is returned, not just ok/ms, because the nightly evaluation
     // needs to know *which layer* rejected. An aggregate pass rate hides the thing
@@ -204,6 +249,47 @@ async function say(utterance: string): Promise<SayResult> {
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && input.value.trim()) void say(input.value.trim());
+});
+
+/**
+ * Undo, and removing one verb from the middle.
+ *
+ * Both are refused while a cycle is running: the injector is mid-flight over the same
+ * paths, and rebuilding the world underneath it would race a mount against a restore.
+ */
+async function undo(): Promise<boolean> {
+  if (busy || worldHistory.depth === 0) return false;
+  busy = true;
+  try {
+    const undone = await worldHistory.undo();
+    if (undone) line('undone', 'info');
+    return undone;
+  } finally {
+    busy = false;
+  }
+}
+
+async function dropVerb(index: number): Promise<boolean> {
+  if (busy) return false;
+  const verb = world.snapshot().verbs[index];
+  busy = true;
+  try {
+    const removed = await worldHistory.remove(index);
+    if (removed && verb) line(`removed “${verb.utterance}”`, 'info');
+    return removed;
+  } finally {
+    busy = false;
+  }
+}
+
+// The world is cumulative, so the one shortcut every user already knows is the one it
+// most needs. Captured on the window rather than the input: the affordance belongs to
+// the world, not to the text field that happens to have focus.
+addEventListener('keydown', (e: KeyboardEvent) => {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    void undo();
+  }
 });
 
 /**
@@ -232,7 +318,13 @@ status.addEventListener('click', () => {
 
 Object.assign(globalThis, {
   __VERBO_STATE__: world.state,
-  __VERBO__: { world, primitives, handle, capture, say, loader, replayFromLink, prober },
+  __VERBO__: {
+    world, primitives, handle, capture, say, loader, replayFromLink, prober,
+    undo, dropVerb, history: worldHistory, suggestions: deriveSuggestions(),
+  },
 });
 
+// After the replay, never before it: `sync()` rewrites the hash, and an empty world
+// rewrites it to nothing — which would erase the shared link before it was read.
 await replayFromLink();
+sync();

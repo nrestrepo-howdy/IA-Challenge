@@ -104,8 +104,12 @@ export const fogBinding: BindingFactory = (scene, statePath) => {
       // The catalogue field is `color`; reading `colour` silently pinned every fog to
       // the fallback, so the colour parameter was never visible.
       const colour = Array.isArray(slice['color']) ? (slice['color'] as number[]) : [0.05, 0.07, 0.1];
-      const near = 40;
-      const far = 40 + 1400 * (1 - Math.min(0.95, density));
+      // Both ends move with density. Pinning `near` at 40 put the fog plane almost at
+      // the camera even for a light haze, which reads as a washed lens rather than as
+      // weather: the near field is where the world's contrast lives.
+      const d = Math.min(0.95, density / 0.2);
+      const near = 260 - 200 * d;
+      const far = 1600 - 1200 * d;
       scene.fog = new Fog(new Color(colour[0] ?? 0, colour[1] ?? 0, colour[2] ?? 0), near, far);
     },
     dispose() { scene.fog = previous; },

@@ -166,7 +166,12 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       required: ['density', 'color'],
       additionalProperties: false,
     },
-    defaults: { density: 0.035, color: [0.62, 0.66, 0.72] },
+    // Was [0.62, 0.66, 0.72] — a light grey that washed the whole world pale. The
+    // value went unnoticed for two days because `fogBinding` read the wrong key and
+    // never applied it; fixing the dead binding is what surfaced the bad default.
+    // This sits near the scene's authored horizon, so fog thickens the night instead
+    // of replacing it.
+    defaults: { density: 0.035, color: [0.10, 0.12, 0.17] },
     keywords: ['fog', 'foggy', 'mist', 'misty', 'haze', 'hazy', 'murk', 'gloom'],
     fields: [
       { key: 'density', role: 'constant', fromParam: 'density' },
@@ -277,7 +282,12 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     // -- below its own visibility floor. The perceptual layer was right: a single
     // slender tower at the far end of a 260-building skyline is not something a person
     // would notice happened. A verb whose result nobody can see has not run.
-    defaults: { height: 420, girth: 46, count: 3, placement: 'center' },
+    // Two corrections, in opposite directions. L3 measured the original 260x28x1 at
+    // 0.194% of pixels changed — invisible. Raising it to 420x46x3 at `center` then put
+    // three slabs on the origin the camera orbits, so they filled the frame from the
+    // inside. The camera path is the constraint nobody wrote down: `ring` places them
+    // where they read as landmarks rather than as walls.
+    defaults: { height: 460, girth: 34, count: 3, placement: 'ring' },
     keywords: [
       'tower', 'towers', 'skyscraper', 'spire', 'monolith', 'obelisk', 'monument',
       'landmark', 'pillar', 'build', 'raise',

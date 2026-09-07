@@ -63,6 +63,52 @@
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .vp-lane[data-outcome="accepted"] .vp-note { color: #6fd3a8; }
+      #suggest {
+        position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%);
+        width: min(520px, calc(100vw - 48px));
+        display: none; flex-wrap: wrap; gap: 6px;
+      }
+      #suggest[data-open="true"] { display: flex; }
+      .sg {
+        padding: 5px 11px; border-radius: 999px;
+        border: 1px solid #212b38; background: rgba(12,16,23,.6);
+        font: 400 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        color: #6a7787; cursor: pointer;
+        transition: border-color .18s, color .18s;
+      }
+      .sg:hover { border-color: #3d5a74; color: #9aa7b6; }
+      #inventory {
+        position: fixed; left: 24px; top: 24px; width: min(220px, calc(100vw - 48px));
+        display: none; flex-direction: column; gap: 1px;
+        padding: 10px 12px; border-radius: 10px;
+        border: 1px solid #1e2733; background: rgba(10,14,20,.78);
+        backdrop-filter: blur(14px);
+        font: 400 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #inventory[data-open="true"] { display: flex; }
+      .inv-head {
+        display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        color: #8e9caa; padding-bottom: 8px; margin-bottom: 4px;
+        border-bottom: 1px solid #1c2531; letter-spacing: .01em;
+      }
+      .inv-undo {
+        padding: 0; border: 0; background: none; cursor: pointer;
+        font: inherit; color: #6a7787; letter-spacing: .04em;
+      }
+      .inv-undo:hover { color: #9aa7b6; }
+      .inv-row {
+        display: grid; grid-template-columns: 1fr 14px; align-items: center; gap: 6px;
+        padding: 4px 0;
+      }
+      .inv-verb {
+        color: #6f7c8c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .inv-drop {
+        padding: 0; border: 0; background: none; cursor: pointer;
+        font: inherit; line-height: 1; color: #3f4b59;
+      }
+      .inv-row:hover .inv-verb { color: #dde4ec; }
+      .inv-drop:hover { color: #d98878; }
       #status {
         position: fixed; left: 16px; bottom: 14px;
         font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
@@ -75,7 +121,9 @@
   <body>
     <canvas id="stage"></canvas>
     <div id="verify"></div>
+    <div id="inventory"></div>
     <div id="log"></div>
+    <div id="suggest" data-open="true"></div>
     <input id="say" autocomplete="off" spellcheck="false"
            placeholder="tell the world what to become — try &ldquo;make it rain&rdquo;" />
     <div id="status" title="copy a link to this world">starting</div>

@@ -166,12 +166,7 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       required: ['density', 'color'],
       additionalProperties: false,
     },
-    // Was [0.62, 0.66, 0.72] — a light grey that washed the whole world pale. The
-    // value went unnoticed for two days because `fogBinding` read the wrong key and
-    // never applied it; fixing the dead binding is what surfaced the bad default.
-    // This sits near the scene's authored horizon, so fog thickens the night instead
-    // of replacing it.
-    defaults: { density: 0.035, color: [0.10, 0.12, 0.17] },
+    defaults: { density: 0.035, color: [0.62, 0.66, 0.72] },
     keywords: ['fog', 'foggy', 'mist', 'misty', 'haze', 'hazy', 'murk', 'gloom'],
     fields: [
       { key: 'density', role: 'constant', fromParam: 'density' },
@@ -282,12 +277,7 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     // -- below its own visibility floor. The perceptual layer was right: a single
     // slender tower at the far end of a 260-building skyline is not something a person
     // would notice happened. A verb whose result nobody can see has not run.
-    // Two corrections, in opposite directions. L3 measured the original 260x28x1 at
-    // 0.194% of pixels changed — invisible. Raising it to 420x46x3 at `center` then put
-    // three slabs on the origin the camera orbits, so they filled the frame from the
-    // inside. The camera path is the constraint nobody wrote down: `ring` places them
-    // where they read as landmarks rather than as walls.
-    defaults: { height: 460, girth: 34, count: 3, placement: 'ring' },
+    defaults: { height: 420, girth: 46, count: 3, placement: 'center' },
     keywords: [
       'tower', 'towers', 'skyscraper', 'spire', 'monolith', 'obelisk', 'monument',
       'landmark', 'pillar', 'build', 'raise',
@@ -369,6 +359,83 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       { key: 'roughness', role: 'constant', fromParam: 'roughness' },
       { key: 'tintPhase', role: 'animated', witness: [0, 0.5] },
       { key: 'instance', role: 'resource', witness: 'ground-tint#0' },
+    ],
+  },
+
+  // ─── the two verbs a first-time user actually types ────────────────────────
+  // The world is authored at night with no water in it, so "make it day" and "add
+  // water" were the two most obvious requests in the product and neither resolved to
+  // anything. Both are declared exactly like every entry above — the role tags are
+  // what make their contracts derivable (§4.4), not a special case.
+  {
+    name: 'daylight',
+    summary: 'Sets the time of day: sky, sun or moon, stars, key light and fog.',
+    statePath: 'atmosphere.daylight',
+    schema: {
+      type: 'object',
+      properties: {
+        // One turn of the clock. 0 and 1 are the same midnight, which is what makes a
+        // sweep across the wrap point expressible rather than a special case.
+        phase: { type: 'number', minimum: 0, maximum: 1 },
+        transition: { type: 'number', minimum: 0.25, maximum: 60 },
+      },
+      required: ['phase', 'transition'],
+      additionalProperties: false,
+    },
+    // Noon, because the offline keyword resolver leaves every parameter at its default
+    // and "make it day" is the utterance this entry exists to answer. A default of
+    // midnight would resolve the single most common request to a no-op against a world
+    // that is already night. Dawn, dusk and night stay reachable — the hosted resolver
+    // reads the schema and moves `phase`; the keyword path cannot, and says so by
+    // giving the request that matters the answer it wants.
+    defaults: { phase: 0.5, transition: 5 },
+    keywords: [
+      'day', 'daytime', 'daylight', 'daybreak', 'morning', 'noon', 'midday',
+      'afternoon', 'sun', 'sunny', 'sunrise', 'sunset', 'dawn', 'dusk', 'twilight',
+      'evening', 'night', 'nighttime', 'midnight', 'sky', 'time',
+    ],
+    fields: [
+      { key: 'phase', role: 'constant', fromParam: 'phase' },
+      { key: 'transition', role: 'constant', fromParam: 'transition' },
+      // `phaseNow` and `mix` are the visible quantities and both are the wrong
+      // witness: they arrive at the requested time and then correctly stop moving, so
+      // a window taken after the sweep finished reads identical at both ends and
+      // rejects a sky sitting exactly where it was asked to sit. `dayClock` is the
+      // monotonic clock the sweep is a function of.
+      { key: 'dayClock', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'daylight#0' },
+    ],
+  },
+  {
+    name: 'water',
+    summary: 'A reflective, moving water surface at a settable level.',
+    statePath: 'surface.water',
+    schema: {
+      type: 'object',
+      properties: {
+        // Below zero the water hides under the authored ground; above the skyline's
+        // shorter buildings it drowns them. Both are legitimate answers to a request.
+        level: { type: 'number', minimum: -40, maximum: 260 },
+        choppiness: { type: 'number', minimum: 0.05, maximum: 5 },
+      },
+      required: ['level', 'choppiness'],
+      additionalProperties: false,
+    },
+    // Just above the authored ground plane, so the city stands in the water rather
+    // than beside it and the moon has something to sit on.
+    defaults: { level: 2.5, choppiness: 1 },
+    keywords: [
+      'water', 'ocean', 'sea', 'lake', 'river', 'flood', 'flooded', 'waves', 'wave',
+      'tide', 'harbour', 'harbor', 'bay', 'lagoon', 'canal', 'waterfront', 'submerge',
+      'reflection', 'reflections',
+    ],
+    fields: [
+      { key: 'level', role: 'constant', fromParam: 'level' },
+      { key: 'choppiness', role: 'constant', fromParam: 'choppiness' },
+      // Same trap, same answer: `levelNow` reaches the waterline and stops; the swell
+      // clock never does, and it advances for every choppiness the schema admits.
+      { key: 'wavePhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'water#0' },
     ],
   },
 ];

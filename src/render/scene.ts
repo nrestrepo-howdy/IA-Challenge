@@ -27,6 +27,8 @@ export interface BaseScene {
   readonly skyline: SkylineHandle;
   /** The authored ground material, for the binding of a primitive that restates it. */
   readonly ground: GroundHandle;
+  /** The authored sky, for the binding of the primitive that decides what time it is. */
+  readonly sky: SkyHandle;
   resize(w: number, h: number): void;
   update(elapsed: number): void;
 }
@@ -66,10 +68,70 @@ export interface GroundHandle {
   reset(): void;
 }
 
+/**
+ * Everything the time of day decides, in one value.
+ *
+ * `daylight` is the one verb that touches almost every authored thing at once - the
+ * gradient, the disc the light comes from, the stars, the key, the ambient fill, the
+ * fog and the lit windows. Handing the binding a dozen setters would let it leave the
+ * scene half-changed on a frame where one of them was forgotten, and a sky whose stars
+ * belong to midnight and whose light belongs to noon is worse than either. So the
+ * whole sky is set at once, from one struct, or not at all.
+ *
+ * Colours are read, never retained: `apply()` copies out of them, so a caller may reuse
+ * one scratch value per frame rather than allocating a dozen inside the loop.
+ */
+export interface SkyState {
+  readonly horizon: Color;
+  readonly zenith: Color;
+  /** Where the light comes from. The disc and the key light always agree on it. */
+  readonly discPosition: Vector3;
+  readonly discColor: Color;
+  /** In world units. The sun does not subtend the moon's angle. */
+  readonly discRadius: number;
+  readonly haloColor: Color;
+  readonly haloOpacity: number;
+  readonly starOpacity: number;
+  readonly keyColor: Color;
+  readonly keyIntensity: number;
+  readonly ambientColor: Color;
+  readonly ambientIntensity: number;
+  readonly fogColor: Color;
+  /**
+   * A daylight wash on the ground, written to the material's `emissive`.
+   *
+   * The authored ground is near-black, and no amount of light makes a near-zero albedo
+   * bright — at noon it would read as a hole under a blue sky. `emissive` is the lift,
+   * and keeping it to that one channel is what lets `daylight` and `ground-tint` both
+   * touch this material without either one undoing the other: `ground-tint` owns
+   * `color` and `roughness`, the time of day owns how much light there is.
+   */
+  readonly groundEmissive: Color;
+  /** Multiplies the lit-window glow. Windows that stay lit at noon read as a bug. */
+  readonly windowGlow: number;
+}
+
+/**
+ * The handle `daylight` needs.
+ *
+ * `authored` is captured at construction, before anything can have touched it, and it
+ * is what `reset()` restores. R-4 makes the module leak structural, so a binding's
+ * `dispose()` is the only thing that can put the world back (AC-12) - and a verb that
+ * turned a permanent night into a permanent day would be a one-way door, not a verb.
+ * It is also what the binding cross-fades *from*, so the fade converges on the
+ * requested time instead of chasing its own previous frame.
+ */
+export interface SkyHandle {
+  readonly authored: SkyState;
+  apply(next: SkyState): void;
+  reset(): void;
+}
+
 /** What a binding can reach through the `Scene` it is handed. */
 export interface SceneHandles {
   readonly skyline: SkylineHandle;
   readonly ground: GroundHandle;
+  readonly sky: SkyHandle;
 }
 
 /** Where the handles are parked on the scene graph. */
@@ -131,17 +193,23 @@ export function createBaseScene(): BaseScene {
   const skyPos = skyGeo.getAttribute('position');
   const skyCol = new Float32Array(skyPos.count * 3);
   const c = new Color();
+  // The per-vertex horizon->zenith blend, kept rather than recomputed. Repainting the
+  // dome for a new time of day is the same curve with two different ends; deriving it
+  // a second time would be a subtly different sky that only shows up at dawn.
+  const skyBlend = new Float32Array(skyPos.count);
   for (let i = 0; i < skyPos.count; i++) {
     const y = skyPos.getY(i) / 2400;
-    c.copy(HORIZON).lerp(ZENITH, Math.pow(Math.max(0, Math.min(1, y * 1.5 + 0.18)), 0.75));
+    skyBlend[i] = Math.pow(Math.max(0, Math.min(1, y * 1.5 + 0.18)), 0.75);
+    c.copy(HORIZON).lerp(ZENITH, skyBlend[i]!);
     skyCol[i * 3] = c.r; skyCol[i * 3 + 1] = c.g; skyCol[i * 3 + 2] = c.b;
   }
-  skyGeo.setAttribute('color', new BufferAttribute(skyCol, 3));
-  const sky = new Mesh(skyGeo, new MeshBasicMaterial({
+  const skyColorAttr = new BufferAttribute(skyCol, 3);
+  skyGeo.setAttribute('color', skyColorAttr);
+  const skyDome = new Mesh(skyGeo, new MeshBasicMaterial({
     side: BackSide, depthWrite: false, fog: false, vertexColors: true,
   }));
-  sky.frustumCulled = false;
-  scene.add(sky);
+  skyDome.frustumCulled = false;
+  scene.add(skyDome);
   scene.fog = new Fog(HORIZON, 260, 1600);
 
   // ── Stars ──────────────────────────────────────────────────────────────────
@@ -157,29 +225,30 @@ export function createBaseScene(): BaseScene {
   }
   const stars = new BufferGeometry();
   stars.setAttribute('position', new BufferAttribute(starPos, 3));
-  const starField = new Points(stars, new PointsMaterial({
+  const starMat = new PointsMaterial({
     size: 3.2, sizeAttenuation: false, color: new Color(0.75, 0.82, 1),
     transparent: true, opacity: 0.55, depthWrite: false, fog: false,
-  }));
+  });
+  const starField = new Points(stars, starMat);
   starField.frustumCulled = false;
   scene.add(starField);
 
   // ── Moon ───────────────────────────────────────────────────────────────────
   // In frame, and genuinely bright. Without a visible source, directional light reads
   // as an arbitrary global tint rather than as light coming from somewhere.
-  const moon = new Mesh(
-    new SphereGeometry(46, 24, 16),
-    new MeshBasicMaterial({ color: new Color(0.96, 0.97, 1), fog: false }),
-  );
+  // Authored at the moon's radius and scaled from it, because the sun does not subtend
+  // the moon's angle: a disc that changes colour but not size reads as the same object
+  // repainted rather than as a different body in the sky.
+  const DISC_RADIUS = 46;
+  const moonMat = new MeshBasicMaterial({ color: new Color(0.96, 0.97, 1), fog: false });
+  const moon = new Mesh(new SphereGeometry(DISC_RADIUS, 24, 16), moonMat);
   moon.position.set(-620, 430, -1350);
   scene.add(moon);
-  const halo = new Mesh(
-    new SphereGeometry(150, 20, 14),
-    new MeshBasicMaterial({
-      color: new Color(0.45, 0.56, 0.85), transparent: true, opacity: 0.16,
-      blending: AdditiveBlending, depthWrite: false, fog: false,
-    }),
-  );
+  const haloMat = new MeshBasicMaterial({
+    color: new Color(0.45, 0.56, 0.85), transparent: true, opacity: 0.16,
+    blending: AdditiveBlending, depthWrite: false, fog: false,
+  });
+  const halo = new Mesh(new SphereGeometry(150, 20, 14), haloMat);
   halo.position.copy(moon.position);
   scene.add(halo);
 
@@ -202,6 +271,8 @@ export function createBaseScene(): BaseScene {
     material: groundMaterial,
     baseColor: groundMaterial.color.clone(),
     baseRoughness: groundMaterial.roughness,
+    // Only the two channels this handle owns. `emissive` belongs to the time of day,
+    // and resetting it here would make un-tinting the ground also un-do the daylight.
     reset() {
       groundMaterial.color.copy(this.baseColor);
       groundMaterial.roughness = this.baseRoughness;
@@ -323,19 +394,83 @@ export function createBaseScene(): BaseScene {
   const key = new DirectionalLight(new Color(0.68, 0.78, 1), 1.15);
   key.position.copy(moon.position);
   scene.add(key);
-  scene.add(new AmbientLight(new Color(0.16, 0.22, 0.38), 0.5));
+  const ambient = new AmbientLight(new Color(0.16, 0.22, 0.38), 0.5);
+  scene.add(ambient);
+
+  // The authored sky, captured from the objects themselves at the one moment nothing
+  // has had a chance to change them. A binding that read "the current sky" would
+  // cross-fade from whatever the previous verb left behind and never find its way
+  // home on dispose() (AC-12) - the same argument `ground` above makes.
+  const skyFog = scene.fog as Fog;
+  let windowGlow = 1;
+  const authoredSky: SkyState = {
+    horizon: HORIZON.clone(),
+    zenith: ZENITH.clone(),
+    discPosition: moon.position.clone(),
+    discColor: moonMat.color.clone(),
+    discRadius: DISC_RADIUS,
+    haloColor: haloMat.color.clone(),
+    haloOpacity: haloMat.opacity,
+    starOpacity: starMat.opacity,
+    keyColor: key.color.clone(),
+    keyIntensity: key.intensity,
+    ambientColor: ambient.color.clone(),
+    ambientIntensity: ambient.intensity,
+    fogColor: skyFog.color.clone(),
+    groundEmissive: groundMaterial.emissive.clone(),
+    windowGlow: 1,
+  };
+
+  function applySky(next: SkyState): void {
+    for (let i = 0; i < skyBlend.length; i++) {
+      c.copy(next.horizon).lerp(next.zenith, skyBlend[i]!);
+      skyCol[i * 3] = c.r; skyCol[i * 3 + 1] = c.g; skyCol[i * 3 + 2] = c.b;
+    }
+    skyColorAttr.needsUpdate = true;
+
+    moon.position.copy(next.discPosition);
+    halo.position.copy(next.discPosition);
+    const s = next.discRadius / DISC_RADIUS;
+    moon.scale.setScalar(s);
+    halo.scale.setScalar(s);
+    moonMat.color.copy(next.discColor);
+    haloMat.color.copy(next.haloColor);
+    haloMat.opacity = next.haloOpacity;
+    starMat.opacity = next.starOpacity;
+    // Switched off rather than merely transparent: an additive point at opacity 0.001
+    // still costs a draw call for 900 vertices nobody can see (R-9).
+    starField.visible = next.starOpacity > 0.005;
+    // The light and the disc move together, always. A key that outlives the thing it
+    // is supposed to be coming from is the arbitrary global tint this scene was built
+    // to avoid.
+    key.position.copy(next.discPosition);
+    key.color.copy(next.keyColor);
+    key.intensity = next.keyIntensity;
+    ambient.color.copy(next.ambientColor);
+    ambient.intensity = next.ambientIntensity;
+    skyFog.color.copy(next.fogColor);
+    groundMaterial.emissive.copy(next.groundEmissive);
+    windowGlow = next.windowGlow;
+  }
+
+  const sky: SkyHandle = {
+    authored: authoredSky,
+    apply: applySky,
+    reset: () => applySky(authoredSky),
+  };
 
   const camera = new PerspectiveCamera(48, 1, 0.5, 4000);
   let dolly = 165;
   let framing = 0;
 
-  (scene.userData as Record<string, unknown>)[HANDLES_KEY] = { skyline, ground } satisfies SceneHandles;
+  (scene.userData as Record<string, unknown>)[HANDLES_KEY] = { skyline, ground, sky } satisfies SceneHandles;
 
   return {
     scene,
     camera,
     skyline,
     ground,
+    sky,
     /**
      * How much taller the world has become than it was authored, 0..1. The app feeds
      * this from world state; the scene stays renderer-only and knows nothing about
@@ -359,7 +494,7 @@ export function createBaseScene(): BaseScene {
       dolly += (want - dolly) * 0.02;
       camera.position.set(Math.sin(a) * dolly, 26 + dolly * 0.16 + Math.sin(elapsed * 0.09) * 4, Math.cos(a) * dolly);
       camera.lookAt(0, 50 + framing * 70, 0);
-      winMat.opacity = 0.72 + Math.sin(elapsed * 1.7) * 0.06;
+      winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;
     },
   };
 }

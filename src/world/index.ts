@@ -12,6 +12,7 @@ import type { Intent, Primitive, PrimitiveDirective, PrimitiveInstance, WorldHan
 import { CATALOGUE } from '../intent/catalogue.js';
 import type { Params, PrimitiveOptions } from './base.js';
 import { createAmbientLight } from './ambient-light.js';
+import { createDaylight } from './daylight.js';
 import { createFogVolume } from './fog-volume.js';
 import { createGroundTint } from './ground-tint.js';
 import { createLightning } from './lightning.js';
@@ -20,6 +21,7 @@ import { createRainEmitter } from './rain-emitter.js';
 import { createSkylineShift } from './skyline-shift.js';
 import { createSnowEmitter } from './snow-emitter.js';
 import { createTower } from './tower.js';
+import { createWater } from './water.js';
 import { createWindField } from './wind-field.js';
 
 export {
@@ -42,6 +44,8 @@ export { createWindField, windField, sampleWind, WIND_STATE_PATH } from './wind-
 export { createTower, tower, TOWER_STATE_PATH } from './tower.js';
 export { createSkylineShift, skylineShift, SKYLINE_STATE_PATH } from './skyline-shift.js';
 export { createGroundTint, groundTint, GROUND_STATE_PATH } from './ground-tint.js';
+export { createDaylight, daylight, DAYLIGHT_STATE_PATH, AUTHORED_PHASE } from './daylight.js';
+export { createWater, water, WATER_STATE_PATH } from './water.js';
 export type { WindSample } from './wind-field.js';
 
 /** A `name -> Primitive` registry. Closed: it holds the catalogue and nothing else (D-2). */
@@ -68,6 +72,8 @@ export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegis
     createTower(options),
     createSkylineShift(options),
     createGroundTint(options),
+    createDaylight(options),
+    createWater(options),
   ];
 
   const registry = new Map<string, Primitive<Params>>(all.map((p) => [p.name, p]));

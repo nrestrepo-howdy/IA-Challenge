@@ -21,7 +21,7 @@ import { evaluateContract, readPath, toVerdict } from '../harness/l2-contract.js
 import { isInjectable, AUTHORITATIVE_LAYERS } from '../harness/cascade.js';
 import { evaluateL3, L3_LAYER, type Frame, type VisualCritic } from '../harness/l3-perceptual.js';
 import { encodePng } from '../harness/png.js';
-import { rulesRepairAgent, type RepairGuidance } from '../runtime/agents.js';
+import { rulesRepairAgent, type FailureReport, type RepairAgent, type RepairGuidance } from '../runtime/agents.js';
 import { generateCandidates } from '../runtime/generate.js';
 import type { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { BrowserProber } from '../runtime/browser-prober.js';
@@ -180,14 +180,36 @@ async function reviewVisually(
 }
 
 /**
+ * The repair agent for whatever is running this.
+ *
+ * The key is checked *before* the import, not after. A browser holds no key and must
+ * not, so the model-backed agent can never run here — and a static import would still
+ * pull the Anthropic SDK into the shipped bundle for a path that cannot execute in it.
+ * That is why `main.ts` does not import `ClaudeResolver` either.
+ *
+ * The consequence is the reason `rulesRepairAgent` had to grow real parameter
+ * adjustments: in the live demo, the deterministic floor *is* the repair agent.
+ */
+async function defaultRepairAgent(): Promise<RepairAgent> {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  if (!env?.['ANTHROPIC_API_KEY']) return rulesRepairAgent;
+  const { resolveRepairAgent } = await import('../runtime/claude-repair.js');
+  return resolveRepairAgent();
+}
+
+/**
  * What each state path currently holds, so re-uttering a verb supersedes rather than
  * collides. The world owns paths exclusively -- a shared path would make every
  * contract over it non-deterministic -- so the previous occupant is retired before the
  * new one claims it. The module ABI returns its mounted instances precisely so a
  * caller can track them; this is that use.
- *
- * Exported because undo rebuilds the world from snapshots (`history.ts`), and every id
- * in here refers to an instance that rebuild disposes.
+ */
+/**
+ * Exported because undo needs it: restoring a snapshot invalidates every instance id
+ * in this map, and a stale id would make the next injection try to retire something
+ * that no longer exists. It was briefly made private again by a parallel workstream
+ * that branched before undo existed — `src/app/cycle.ts` is the one file two
+ * workstreams share, and unlike `src/contracts.ts` nothing was guarding it.
  */
 export const injectedInstances = new Map<string, string>();
 
@@ -197,8 +219,10 @@ export async function runCycle(
   live: World,
   onStep?: (s: CycleStep) => void,
   visual: VisualReview = {},
+  repair: RepairAgent | null = null,
 ): Promise<CycleOutcome> {
   const t0 = performance.now();
+  const repairAgent = repair ?? await defaultRepairAgent();
   const steps: CycleStep[] = [];
   const verdicts: Verdict[] = [];
   const say = (text: string, kind: CycleStep['kind'] = 'info', extra: Partial<CycleStep> = {}): void => {
@@ -207,15 +231,39 @@ export async function runCycle(
     onStep?.(s);
   };
 
+  /**
+   * What the previous attempt's failures bought. Null on the first attempt, because
+   * there is nothing to have learned yet.
+   *
+   * This is the difference between a retry loop and a repair loop. `generateCandidates`
+   * used to be handed only the attempt number, which changed candidate ids and nothing
+   * else, so attempts 2 and 3 were byte-identical re-verifications of attempt 1 — nine
+   * candidates' worth of latency spent on three distinct programs.
+   */
+  let repairGuidance: RepairGuidance | null = null;
+
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const candidates = generateCandidates(intent, attempt);
-    say(`attempt ${attempt + 1}: ${candidates.length} candidates`, 'info', { attempt });
+    const candidates = generateCandidates(intent, attempt, repairGuidance);
+    say(`attempt ${attempt + 1}: ${candidates.length} candidates${repairGuidance ? ', repaired' : ''}`,
+      'info', { attempt });
     for (const c of candidates) say(`${c.strategy}: generated`, 'info', { candidate: c.strategy, attempt });
+
+    /** This attempt's diagnoses, all of them — repair reads three failures, not one. */
+    const failures: FailureReport[] = [];
+    const failed = (candidate: Candidate, v: Omit<Verdict, 'candidateId'>): void => {
+      failures.push({
+        candidateId: candidate.id,
+        strategy: candidate.strategy,
+        failedAt: v.failedAt,
+        diagnosis: v.diagnosis ?? `rejected at ${v.failedAt ?? 'no layer'} with no diagnosis, which is itself a defect`,
+      });
+    };
 
     for (const candidate of candidates) {
       const l0 = evaluateL0(candidate, intent);
       if (!l0.passed) {
         verdicts.push({ ...l0, candidateId: candidate.id });
+        failed(candidate, l0);
         say(`${candidate.strategy}: L0 — ${l0.diagnosis?.split('\n')[0]}`, 'reject',
           { candidate: candidate.strategy, layer: 'L0', attempt });
         continue;
@@ -224,6 +272,7 @@ export async function runCycle(
       const { verdict: l1, stateBefore, stateAfter } = await probe(candidate, intent);
       if (!l1.passed) {
         verdicts.push({ ...l1, candidateId: candidate.id });
+        failed(candidate, l1);
         say(`${candidate.strategy}: L1 — ${l1.diagnosis}`, 'reject',
           { candidate: candidate.strategy, layer: 'L1', attempt });
         continue;
@@ -233,6 +282,7 @@ export async function runCycle(
       const l2 = { ...toVerdict(outcome), candidateId: candidate.id, frame: null };
       verdicts.push(l2);
       if (!isInjectable(l2)) {
+        failed(candidate, l2);
         say(`${candidate.strategy}: L2 — ${l2.diagnosis?.split('\n')[0]}`, 'reject',
           { candidate: candidate.strategy, layer: 'L2', attempt });
         continue;
@@ -290,6 +340,17 @@ export async function runCycle(
       }
 
       return { ok: true, ms: performance.now() - t0, steps, verdicts, reason: null, ...(advisory ? { advisory } : {}) };
+    }
+
+    // Every candidate failed. The last attempt does not ask: guidance nobody will
+    // generate from is latency spent against the 40 s budget for nothing (R-8).
+    if (attempt + 1 < MAX_ATTEMPTS) {
+      repairGuidance = await repairAgent.repair({ intent, attempt: attempt + 1, failures });
+      say(`repair — ${repairGuidance.summary}`, 'info', { attempt });
+      for (const p of repairGuidance.params) {
+        say(`repair — ${p.primitive}.${p.param} → ${JSON.stringify(p.value)}: ${p.reason}`,
+          'info', { attempt });
+      }
     }
   }
 

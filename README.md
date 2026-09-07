@@ -1,8 +1,13 @@
 # Verbo
 
-**A 3D world you extend by speaking to it.** Ask for something — *"make it rain"* — and
-a system of agents writes the code, verifies it in isolation, and hot-injects it into
-the world you are already using. No reload. No black frame. No lost state.
+**A 3D world you extend by speaking to it.** Ask for something — *"make it rain"*,
+*"make it day"*, *"raise a tower"* — and a system of agents writes the code, verifies it
+in isolation, and hot-injects it into the world you are already using. No reload. No
+black frame. No lost state.
+
+Twelve verbs today: weather, light and time of day, water, and structural changes to the
+city itself. Undo with ⌘Z, share a world as a link, and watch the verification race in
+the panel while it happens.
 
 The interesting part is not the generation. It is the **verification**: what it takes to
 make it safe to inject machine-written code into a running system.
@@ -40,6 +45,16 @@ verdict that failed L0, L1 or L2, whatever L3 concluded.
 Contracts are themselves verified. Each ships with deliberate sibling defects; a
 contract that fails to catch its own mutants is discarded and regenerated.
 
+### The retry loop is a repair loop
+
+Three candidates race per attempt, and up to three attempts run. Attempt N+1 is
+informed by *why* N failed: the repair agent reads every rejected candidate's diagnosis
+and returns two levers — adjusted parameters, and a different strategy order. It never
+returns code. D-2 holds even here; there is no field in the repair schema for source.
+
+Without a key the deterministic floor still adjusts parameters between attempts, so a
+retry is never literally identical to the attempt it follows.
+
 ### Why it runs offline
 
 A closed catalogue of typed primitives (D-2) means the agent **composes rather than
@@ -65,8 +80,8 @@ not pixel-identical.
 
 ```bash
 npm run dev            # the world
-npm test               # 181 unit tests — no browser, no key
-npm run test:browser   # 14 acceptance tests in a real browser
+npm test               # 280 unit tests — no browser, no key
+npm run test:browser   # 23 acceptance tests in a real browser
 npm run gate           # acceptance-criteria coverage against docs/SPEC.md
 npm run verify         # all of the above; the definition of done
 npm run eval           # one pass of the nightly evaluation corpus
@@ -92,7 +107,7 @@ needed to read the code, run the world, or run any test.
 
 | Variable | Required for |
 |----------|--------------|
-| `ANTHROPIC_API_KEY` | Model-backed utterance resolution only |
+| `ANTHROPIC_API_KEY` | Model-backed utterance resolution, the L3 visual critic, and model-backed repair. Each has a deterministic fallback; none is required |
 
 ---
 

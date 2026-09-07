@@ -9,12 +9,25 @@
     "light snow with wind",
     "dim the light",
     "make the light move",
-    "rain and fog together"
+    "rain and fog together",
+    "thunder and lightning",
+    "make it day",
+    "make it night",
+    "sunset",
+    "dawn",
+    "add water",
+    "a flooded city",
+    "raise a tower",
+    "make the buildings taller",
+    "make it a desert",
+    "a sunny flooded city",
+    "a stormy night with towers"
   ],
   "expectDisclosure": [
     "make it rain money",
     "make it rain frogs",
-    "add pink neon fog"
+    "add pink neon fog",
+    "raise a tower made of glass"
   ],
   "expectRejection": [
     "summon a sentient octopus",

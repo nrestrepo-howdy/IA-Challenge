@@ -25,7 +25,7 @@
 import type { WorldSnapshot } from '../contracts.js';
 import type { World } from '../core/world.js';
 import type { LoadedModule, ModuleLoader } from '../runtime/browser-loader.js';
-import { injectedInstances } from './cycle.js';
+import { claim, forgetAll } from './injected-registry.js';
 
 export class WorldHistory {
   readonly #past: WorldSnapshot[] = [];
@@ -83,11 +83,11 @@ export class WorldHistory {
     // The live registry is the cycle's record of who owns which path; a rebuild
     // invalidates every id in it, and a stale id would make the next injection try to
     // retire an instance that no longer exists.
-    injectedInstances.clear();
+    forgetAll();
     for (const verb of snapshot.verbs) {
       const mod = await this.#module(verb.source);
       for (const m of mod.mount(this.world)) {
-        injectedInstances.set(m.statePath, (m.instance as { id: string }).id);
+        claim(m.statePath, (m.instance as { id: string }).id);
       }
     }
     this.onChange();

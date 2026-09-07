@@ -25,6 +25,7 @@ import { rulesRepairAgent, type FailureReport, type RepairAgent, type RepairGuid
 import { generateCandidates } from '../runtime/generate.js';
 import type { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { BrowserProber } from '../runtime/browser-prober.js';
+import { claim, occupantOf, release } from './injected-registry.js';
 
 export interface CycleStep {
   readonly at: number;
@@ -204,14 +205,6 @@ async function defaultRepairAgent(): Promise<RepairAgent> {
  * new one claims it. The module ABI returns its mounted instances precisely so a
  * caller can track them; this is that use.
  */
-/**
- * Exported because undo needs it: restoring a snapshot invalidates every instance id
- * in this map, and a stale id would make the next injection try to retire something
- * that no longer exists. It was briefly made private again by a parallel workstream
- * that branched before undo existed — `src/app/cycle.ts` is the one file two
- * workstreams share, and unlike `src/contracts.ts` nothing was guarding it.
- */
-export const injectedInstances = new Map<string, string>();
 
 export async function runCycle(
   intent: Intent,
@@ -300,14 +293,14 @@ export async function runCycle(
         { candidate: candidate.strategy, attempt });
       const mod = await loader.load(candidate.source);
       for (const d of intent.brief.directives) {
-        const previous = injectedInstances.get(d.statePath);
+        const previous = occupantOf(d.statePath);
         if (previous) {
           live.unregister(previous);   // disposes, and frees the path
-          injectedInstances.delete(d.statePath);
+          release(d.statePath);
         }
       }
       for (const m of mod.mount(live)) {
-        injectedInstances.set(m.statePath, (m.instance as { id: string }).id);
+        claim(m.statePath, (m.instance as { id: string }).id);
       }
       live.recordVerb({ intentId: intent.id, utterance: intent.utterance, source: candidate.source });
 

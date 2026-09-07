@@ -15,6 +15,11 @@ work is verified against, and it is protected by a hook.
    description. `npm run gate` maps SPEC to tests and reports what nothing verifies.
 4. **Stay inside your workstream.** Touch only your own directory under `src/`, plus
    `tests/` for what you wrote.
+5. **Shared mutable state lives in its own module, never as an export from one
+   workstream's file.** `src/app/injected-registry.ts` is the current example. If two
+   workstreams need to agree on something, give it a name and a file — an export that
+   one team created and another depends on looks like an accident to whoever reads it
+   next, and will be removed by someone who cannot see why it exists.
 
 ## Verification
 

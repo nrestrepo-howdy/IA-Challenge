@@ -18,7 +18,8 @@
     "preview": "vite preview",
     "test:browser": "playwright test",
     "verify:fast": "npm run typecheck && npm test && npm run gate",
-    "eval": "node tools/eval/nightly.mjs"
+    "eval": "node tools/eval/nightly.mjs",
+    "audit": "node tools/evidence/mutate-suite.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

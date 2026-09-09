@@ -561,6 +561,48 @@ someone going looking with an attack in hand.
 
 ---
 
+## 9 Sep — Auditing the suite by breaking the code, and getting the audit wrong twice
+
+The harness had now been wrong about itself three times — the mutation engine that
+mutated nothing, the injection budget that guarded nothing, the capability check that
+checked names. Every one was caught by a person going looking, never by the suite. A
+test written from the same understanding as the code inherits its blind spot, and no
+amount of adding tests fixes that, because the new ones are written from the same
+understanding.
+
+So: break seven load-bearing lines on purpose and ask which tests notice. A mutation
+that **survives** names a line nothing is holding.
+
+**First run: 5 of 7 caught.** Both survivors turned out to be mine.
+
+**The first was a bad mutation.** I wrote noise around the layer sort and left the real
+`sort()` in place after it, so the mutation changed nothing and "survived" for the wrong
+reason. An audit that does not actually mutate reports the suite as weak when it is the
+audit that is weak — the same failure as the mutation engine in June, committed again by
+the person who fixed it.
+
+**The second was verification theatre, and my replacement for it was too.**
+`hardenContract` requires the *nominated* assertion to fire, not merely that something
+failed. There was a test for that rule, and it passed identically under the correct and
+the weakened code. My first fix also passed under both — because `hardenContract`
+applies a mutant to the *nominated* assertion's path, and I had put the two assertions
+on different fields, so the mutant never touched what the other assertion watched.
+
+The version that works puts both assertions on the same field. Rewinding it leaves
+`exists` — the nominated one — silent, and makes `changesOverTime` speak. Correct code
+rejects the contract; the weakened version accepts it. Two answers, for two different
+reasons, which is the whole requirement of a test that holds a line.
+
+**7 of 7.** `npm run audit` is now a command, so the next line that stops being held
+says so out loud.
+
+The lesson is narrower than "write better tests". It is that **a test is only evidence
+if some change to the code would break it**, and the cheapest way to find out is to make
+that change. Twice in one afternoon I wrote something that looked like a test and was
+not, and both times the audit told me.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

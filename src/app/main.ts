@@ -99,13 +99,49 @@ function drain(): void {
   for (const resolve of pending.splice(0)) resolve(data);
 }
 
+/**
+ * Frames survived since a primitive last threw, and whether we have already said so.
+ *
+ * `World.tick()` re-throws the first error once the frame is complete so an injector
+ * can roll back (AC-13) — but this app has no injector in the loop, and three's
+ * WebGL2 animation driver re-arms `requestAnimationFrame` *after* calling back
+ * (`WebGLAnimation.onAnimationFrame`), so one throw from one injected primitive ended
+ * the render loop permanently: a frozen world, no recovery, R-9 violated by a single
+ * bad update. The WebGPU driver re-arms first and would have survived, which is why
+ * this never showed up — the failure only exists on the fallback path AC-03 covers.
+ *
+ * So the throw is caught and the frame carries on. The offender keeps its slice and
+ * keeps throwing, so after a few frames the last verb is undone, which disposes it.
+ */
+let tickFailures = 0;
+let recovering = false;
+
+function tick(dt: number): void {
+  try {
+    world.tick(dt);
+    tickFailures = 0;
+  } catch (err) {
+    // Three strikes rather than one: a primitive that throws on the frame it mounts
+    // and then settles is not worth tearing the world down for.
+    if (tickFailures === 0) line(`a primitive threw during the frame: ${String(err)}`, 'reject');
+    if (++tickFailures >= 3 && !recovering && worldHistory.depth > 0) {
+      recovering = true;
+      line('undoing the last verb: it throws every frame', 'reject');
+      // `World.tick` re-throws the first error but not the identity of whoever raised
+      // it, so the last verb is the best available guess at the offender. Naming the
+      // faulting instance would be a `contracts.ts` change, and is reported, not made.
+      void undo().finally(() => { recovering = false; tickFailures = 0; });
+    }
+  }
+}
+
 let last = performance.now();
 handle.renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
-  world.tick(dt);
+  tick(dt);
   reconcile();
   for (const [path, b] of bindings) {
     const slice = readPath(world.state, path);
@@ -162,7 +198,11 @@ const suggestions = new SuggestionRow(
  */
 function sync(): void {
   Object.assign(globalThis, { __VERBO_STATE__: world.state });
-  const verbs = world.snapshot().verbs;
+  // The effective list, not the raw log: `World.recordVerb` appends, so saying "make
+  // it rain" twice leaves two entries of which only the second owns anything. Listing
+  // the dead one in the inventory offers a remove button for a verb that is not in the
+  // world, and putting it in the link makes a visitor spend a cycle rebuilding it.
+  const verbs = worldHistory.verbs;
   history.replaceState(null, '',
     verbs.length ? `#${encodeWorld(verbs.map((v) => v.utterance))}` : location.pathname + location.search);
   inventory.render(verbs, worldHistory.depth > 0);
@@ -271,7 +311,7 @@ async function undo(): Promise<boolean> {
 
 async function dropVerb(index: number): Promise<boolean> {
   if (busy) return false;
-  const verb = world.snapshot().verbs[index];
+  const verb = worldHistory.verbs[index];
   busy = true;
   try {
     const removed = await worldHistory.remove(index);

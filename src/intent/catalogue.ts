@@ -458,6 +458,138 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       { key: 'instance', role: 'resource', witness: 'water#0' },
     ],
   },
+
+  // ─── the world stops being still ──────────────────────────────────────────
+  // Twelve entries covered weather, light, time of day, water and city structure, and
+  // between them they could not make the world do anything *alive or spectacular*: a
+  // user who had tried rain, day and towers had run out of things to be surprised by.
+  // These three are the answer, and they are declared exactly like every entry above —
+  // the role tags are what make their contracts derivable (§4.4), and each one's
+  // animated witness is a monotonic clock rather than the value its binding draws.
+  {
+    name: 'aurora',
+    summary: 'Ribbons of light drifting across the upper sky.',
+    statePath: 'atmosphere.aurora',
+    schema: {
+      type: 'object',
+      properties: {
+        intensity: { type: 'number', minimum: 0.1, maximum: 4 },
+        bands: { type: 'integer', minimum: 1, maximum: 6 },
+        // One turn of the colour wheel: 0.42 is the green of a real aurora, and the
+        // rest of the wheel is what makes "a violet aurora" expressible rather than a
+        // request the catalogue has to refuse.
+        hue: { type: 'number', minimum: 0, maximum: 1 },
+      },
+      required: ['intensity', 'bands', 'hue'],
+      additionalProperties: false,
+    },
+    // Bright and multi-banded, because the offline keyword resolver leaves every
+    // parameter at its default and a timid default would answer the request with
+    // something the user has to be told is there.
+    defaults: { intensity: 1.9, bands: 4, hue: 0.42 },
+    keywords: [
+      'aurora', 'auroras', 'borealis', 'australis', 'northern', 'polar', 'ribbons',
+      'curtains', 'shimmer', 'skyglow',
+    ],
+    paramHints: {
+      faint: { intensity: 0.6 }, subtle: { intensity: 0.6 }, dim: { intensity: 0.6 },
+      blazing: { intensity: 3.6 }, vivid: { intensity: 3.6 }, intense: { intensity: 3.6 },
+      green: { hue: 0.42 }, emerald: { hue: 0.42 }, teal: { hue: 0.5 },
+      blue: { hue: 0.58 }, violet: { hue: 0.76 }, purple: { hue: 0.76 },
+      magenta: { hue: 0.88 }, pink: { hue: 0.9 }, crimson: { hue: 0.99 }, red: { hue: 0.99 },
+      single: { bands: 1 }, lone: { bands: 1 }, many: { bands: 6 },
+    },
+    fields: [
+      { key: 'intensity', role: 'constant', fromParam: 'intensity' },
+      { key: 'bands', role: 'constant', fromParam: 'bands' },
+      { key: 'hue', role: 'constant', fromParam: 'hue' },
+      // `glow` is the visible quantity and it is the wrong witness for the reason
+      // `daylight` and `tower` both give: it fades in, arrives, and then correctly
+      // stops — and it is additionally zero all day, so a contract over it would fail
+      // an aurora that is behaving exactly as asked. `curtainPhase` is the monotonic
+      // drift clock the ribbons are a function of.
+      { key: 'curtainPhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'aurora#0' },
+    ],
+  },
+  {
+    name: 'flock',
+    summary: 'A flock of birds crossing the city, continuously in motion.',
+    statePath: 'life.flock',
+    schema: {
+      type: 'object',
+      properties: {
+        count: { type: 'integer', minimum: 6, maximum: 400 },
+        // The minimum is 1, not 0: a flock that can be asked to stand still is a
+        // primitive whose `animated` field is provably inert for a legal parameter.
+        speed: { type: 'number', minimum: 1, maximum: 60 },
+        altitude: { type: 'number', minimum: 10, maximum: 400 },
+      },
+      required: ['count', 'speed', 'altitude'],
+      additionalProperties: false,
+    },
+    defaults: { count: 140, speed: 22, altitude: 120 },
+    keywords: [
+      'flock', 'flocks', 'birds', 'bird', 'swarm', 'starlings', 'murmuration',
+      'gulls', 'seagulls', 'bats', 'fireflies', 'drones', 'wildlife', 'migration',
+    ],
+    paramHints: {
+      murmuration: { count: 380, speed: 30 }, swarm: { count: 380 },
+      fireflies: { count: 380, speed: 4, altitude: 22 },
+      drones: { count: 40, speed: 16, altitude: 170 },
+      bats: { count: 260, speed: 26, altitude: 60 },
+      few: { count: 14 }, single: { count: 6 }, lone: { count: 6 },
+      fast: { speed: 46 }, slow: { speed: 6 },
+      high: { altitude: 340 }, low: { altitude: 30 },
+    },
+    fields: [
+      { key: 'birds', role: 'constant', fromParam: 'count' },
+      { key: 'speed', role: 'constant', fromParam: 'speed' },
+      { key: 'altitude', role: 'constant', fromParam: 'altitude' },
+      // Distance flown. Nothing here saturates, but the witness is still the clock
+      // rather than the position: `centroid` comes back around the circuit, and a
+      // wrapping value asserted with `changesOverTime` is a stopwatch (`lightning.ts`).
+      { key: 'flightPhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'flock#0' },
+    ],
+  },
+  {
+    name: 'searchlights',
+    summary: 'Beams sweeping up out of the city into the sky.',
+    statePath: 'lighting.searchlights',
+    schema: {
+      type: 'object',
+      properties: {
+        beams: { type: 'integer', minimum: 1, maximum: 8 },
+        // Minimum 0.05 rather than 0, for the same reason `flock` has no zero speed.
+        speed: { type: 'number', minimum: 0.05, maximum: 4 },
+        // Beam half-angle, in degrees.
+        spread: { type: 'number', minimum: 1, maximum: 20 },
+      },
+      required: ['beams', 'speed', 'spread'],
+      additionalProperties: false,
+    },
+    defaults: { beams: 5, speed: 0.55, spread: 4.5 },
+    keywords: [
+      'searchlights', 'searchlight', 'spotlight', 'spotlights', 'floodlights',
+      'beams', 'beam', 'klieg', 'premiere', 'sweeping',
+    ],
+    paramHints: {
+      premiere: { beams: 8, speed: 0.9 }, klieg: { beams: 8 },
+      single: { beams: 1 }, lone: { beams: 1 },
+      frantic: { speed: 2.8 }, fast: { speed: 2.8 }, slow: { speed: 0.15 },
+      wide: { spread: 13 }, narrow: { spread: 1.6 },
+    },
+    fields: [
+      { key: 'beams', role: 'constant', fromParam: 'beams' },
+      { key: 'speed', role: 'constant', fromParam: 'speed' },
+      { key: 'spread', role: 'constant', fromParam: 'spread' },
+      // The wrapped angles the cones are pointed along live in `aim`; the witness is
+      // the clock they are derived from, which never comes back around.
+      { key: 'sweepPhase', role: 'animated', witness: [0, 0.5] },
+      { key: 'instance', role: 'resource', witness: 'searchlights#0' },
+    ],
+  },
 ];
 
 export function findPrimitive(

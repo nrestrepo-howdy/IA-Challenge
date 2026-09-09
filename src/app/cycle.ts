@@ -23,7 +23,7 @@ import { evaluateL3, L3_LAYER, type Frame, type VisualCritic } from '../harness/
 import { encodePng } from '../harness/png.js';
 import { rulesRepairAgent, type FailureReport, type RepairAgent, type RepairGuidance } from '../runtime/agents.js';
 import { generateCandidates } from '../runtime/generate.js';
-import type { BrowserModuleLoader } from '../runtime/browser-loader.js';
+import { InjectionBudgetError, type BrowserModuleLoader, type LoadedModule } from '../runtime/browser-loader.js';
 import { BrowserProber } from '../runtime/browser-prober.js';
 import { claim, occupantOf, release } from './injected-registry.js';
 
@@ -224,6 +224,18 @@ export async function runCycle(
     onStep?.(s);
   };
 
+  // Checked before a single candidate is generated. Past the budget the answer cannot
+  // change no matter how the code turns out, and verifying three programs in order to
+  // refuse them is nine probes of latency spent on a foregone conclusion (R-8). The
+  // refusal is the whole reason D-6 is a number rather than a hope: it is explained
+  // here, and the loader enforces it again at the blob, so neither is load-bearing
+  // alone.
+  if (loader.remainingBudget <= 0) {
+    const reason = new InjectionBudgetError(loader.injectionBudget).message;
+    say(reason, 'reject');
+    return { ok: false, ms: performance.now() - t0, steps, verdicts, reason };
+  }
+
   /**
    * What the previous attempt's failures bought. Null on the first attempt, because
    * there is nothing to have learned yet.
@@ -291,7 +303,20 @@ export async function runCycle(
       // Cleared every authoritative layer. L3 is advisory and cannot veto (AC-11).
       say(`${candidate.strategy}: cleared ${AUTHORITATIVE_LAYERS.join(', ')} — injecting`, 'accept',
         { candidate: candidate.strategy, attempt });
-      const mod = await loader.load(candidate.source);
+      // Load first, retire second. A load that fails — a budget refusal, a blob the
+      // browser will not import — must not have already disposed the emitter the user
+      // is currently watching in order to make room for a module that never arrived.
+      let mod: LoadedModule;
+      try {
+        mod = await loader.load(candidate.source);
+      } catch (err) {
+        const reason = err instanceof InjectionBudgetError
+          ? err.message
+          : `module failed to load: ${describe(err)}`;
+        say(reason, 'reject', { candidate: candidate.strategy, attempt });
+        return { ok: false, ms: performance.now() - t0, steps, verdicts, reason };
+      }
+
       for (const d of intent.brief.directives) {
         const previous = occupantOf(d.statePath);
         if (previous) {
@@ -299,8 +324,29 @@ export async function runCycle(
           release(d.statePath);
         }
       }
-      for (const m of mod.mount(live)) {
-        claim(m.statePath, (m.instance as { id: string }).id);
+
+      // The mount is the one place in this file that runs machine-written code against
+      // the live world, and it was the one place with nothing around it: a throw here
+      // escaped `runCycle`, then `say()`, and surfaced as an unhandled rejection with
+      // the world left holding whichever half of the module had registered. L0/L1/L2
+      // all passed on this source, so a throw here is rare — which is exactly why it
+      // would have been discovered in front of an audience.
+      const mountedBefore = new Set(live.instanceIds);
+      try {
+        for (const m of mod.mount(live)) {
+          claim(m.statePath, (m.instance as { id: string }).id);
+        }
+      } catch (err) {
+        for (const id of live.instanceIds) {
+          if (!mountedBefore.has(id)) live.unregister(id);   // disposes the half that landed
+        }
+        for (const d of intent.brief.directives) release(d.statePath);
+        const reason =
+          `injection threw while mounting into the live world: ${describe(err)}. What it had ` +
+          'registered was unregistered and disposed; the verbs it superseded are gone with it ' +
+          'and can be re-uttered.';
+        say(reason, 'reject', { candidate: candidate.strategy, attempt });
+        return { ok: false, ms: performance.now() - t0, steps, verdicts, reason };
       }
       live.recordVerb({ intentId: intent.id, utterance: intent.utterance, source: candidate.source });
 
@@ -350,4 +396,9 @@ export async function runCycle(
   const reason = `all candidates failed across ${MAX_ATTEMPTS} attempts`;
   say(reason, 'reject');
   return { ok: false, ms: performance.now() - t0, steps, verdicts, reason };
+}
+
+/** Mirrors the injector's own error rendering: a name and a message, never `[object Object]`. */
+function describe(err: unknown): string {
+  return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 }

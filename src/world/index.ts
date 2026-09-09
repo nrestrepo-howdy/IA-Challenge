@@ -12,12 +12,15 @@ import type { Intent, Primitive, PrimitiveDirective, PrimitiveInstance, WorldHan
 import { CATALOGUE } from '../intent/catalogue.js';
 import type { Params, PrimitiveOptions } from './base.js';
 import { createAmbientLight } from './ambient-light.js';
+import { createAurora } from './aurora.js';
 import { createDaylight } from './daylight.js';
+import { createFlock } from './flock.js';
 import { createFogVolume } from './fog-volume.js';
 import { createGroundTint } from './ground-tint.js';
 import { createLightning } from './lightning.js';
 import { createOrbitModulator } from './orbit-modulator.js';
 import { createRainEmitter } from './rain-emitter.js';
+import { createSearchlights } from './searchlights.js';
 import { createSkylineShift } from './skyline-shift.js';
 import { createSnowEmitter } from './snow-emitter.js';
 import { createTower } from './tower.js';
@@ -46,6 +49,9 @@ export { createSkylineShift, skylineShift, SKYLINE_STATE_PATH } from './skyline-
 export { createGroundTint, groundTint, GROUND_STATE_PATH } from './ground-tint.js';
 export { createDaylight, daylight, DAYLIGHT_STATE_PATH, AUTHORED_PHASE } from './daylight.js';
 export { createWater, water, WATER_STATE_PATH } from './water.js';
+export { createAurora, aurora, AURORA_STATE_PATH } from './aurora.js';
+export { createFlock, flock, FLOCK_STATE_PATH } from './flock.js';
+export { createSearchlights, searchlights, SEARCHLIGHT_STATE_PATH } from './searchlights.js';
 export type { WindSample } from './wind-field.js';
 
 /** A `name -> Primitive` registry. Closed: it holds the catalogue and nothing else (D-2). */
@@ -74,6 +80,9 @@ export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegis
     createGroundTint(options),
     createDaylight(options),
     createWater(options),
+    createAurora(options),
+    createFlock(options),
+    createSearchlights(options),
   ];
 
   const registry = new Map<string, Primitive<Params>>(all.map((p) => [p.name, p]));

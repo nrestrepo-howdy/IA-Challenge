@@ -12,9 +12,10 @@
  * look right while its contract passed for the wrong reason.
  */
 import {
-  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, Fog,
-  InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial,
-  PlaneGeometry, Points, PointsMaterial, Quaternion, Scene, Vector3,
+  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color,
+  CylinderGeometry, DoubleSide, Fog, InstancedMesh, LineBasicMaterial, LineSegments,
+  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Points,
+  PointsMaterial, Quaternion, Scene, Vector3,
 } from 'three/webgpu';
 import { sceneHandles, type SkyState } from './scene.js';
 
@@ -531,6 +532,302 @@ export const waterBinding: BindingFactory = (scene, statePath) => {
   };
 };
 
+// ─── the world stops being still ─────────────────────────────────────────────
+// Three bindings for the three verbs that made the world alive rather than merely
+// weathered. All three draw from a clock the primitive publishes rather than from one
+// of their own: a binding with a private `elapsed` would keep animating a primitive
+// that had stopped, which is precisely the "looks right, does nothing" failure L2 is
+// blind to (D-1) and this layer must not manufacture.
+
+/**
+ * Aurora curtains: ribbons of light in the upper sky.
+ *
+ * Drawn as vertex-coloured strips with additive blending, never as a shader. Raw GLSL
+ * is not dependable under `WebGPURenderer` and a sky effect that silently falls back to
+ * a flat fill is the hardest failure to notice — the base scene's own gradient is built
+ * the same way, for the same reason.
+ *
+ * The colour is carried entirely by the vertex attribute, so the fade to nothing at the
+ * top of a curtain costs no alpha channel: additively blending black is invisible.
+ * That is also what lets the whole verb be one draw call for up to six bands.
+ *
+ * Brightness comes from `glow`, which is already `intensity` times the fade-in times
+ * the daylight visibility the primitive computed — so an aurora at noon draws black
+ * geometry rather than this module having to know what time it is.
+ */
+export const auroraBinding: BindingFactory = (scene, statePath) => {
+  // The schema's maximum. Allocated once: a geometry cannot grow, and rebuilding one
+  // mid-verb is how an injection drops a frame (AC-14).
+  const MAX_BANDS = 6;
+  /** Columns per ribbon. Enough for the serpentine to read as a curve, not a fold. */
+  const COLS = 44;
+  const PER_BAND = (COLS + 1) * 2;
+
+  const geometry = new BufferGeometry();
+  const positions = new Float32Array(MAX_BANDS * PER_BAND * 3);
+  const colors = new Float32Array(MAX_BANDS * PER_BAND * 3);
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new BufferAttribute(colors, 3));
+
+  // Indices band by band, so the visible band count is a prefix of the index buffer
+  // and `bands` costs a draw-range change rather than a rebuild.
+  const indices: number[] = [];
+  for (let b = 0; b < MAX_BANDS; b++) {
+    const base = b * PER_BAND;
+    for (let i = 0; i < COLS; i++) {
+      const a = base + i * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  geometry.setIndex(indices);
+
+  const material = new MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.85,
+    blending: AdditiveBlending, depthWrite: false, fog: false, side: DoubleSide,
+  });
+  const curtains = new Mesh(geometry, material);
+  curtains.frustumCulled = false;
+  scene.add(curtains);
+
+  const posAttr = geometry.getAttribute('position') as BufferAttribute;
+  const colAttr = geometry.getAttribute('color') as BufferAttribute;
+  const low = new Color(), high = new Color();
+
+  return {
+    statePath,
+    update(slice) {
+      const bands = Math.max(0, Math.min(MAX_BANDS, Math.round(num(slice['bands'], 0))));
+      const phase = num(slice['curtainPhase'], 0);
+      const hue = num(slice['hue'], 0.42);
+      // Clamped rather than trusted: the schema tops out at 4, and an additive pass at
+      // four times white is a white rectangle where an aurora was asked for.
+      const glow = Math.max(0, Math.min(1.35, num(slice['glow'], 0) * 0.55));
+
+      // Green low, magenta high — the vertical colour split is what a real aurora does
+      // and it is most of what makes the shape read as depth rather than as a decal.
+      low.setHSL(hue, 0.85, 0.5 * glow);
+      high.setHSL((hue + 0.16) % 1, 0.8, 0.3 * glow);
+
+      // Fewer bands, wider each: one lone ribbon spanning 30 degrees of a sky the
+      // camera takes four minutes to orbit is a verb the user would have to wait for.
+      const arc = Math.max(1.6, Math.min(4.4, (Math.PI * 2 * 1.4) / Math.max(1, bands)));
+
+      for (let b = 0; b < bands; b++) {
+        const centre = (b / Math.max(1, bands)) * Math.PI * 2;
+        for (let i = 0; i <= COLS; i++) {
+          const u = i / COLS;
+          const azimuth = centre + (u - 0.5) * arc;
+          const radius = 1400 + 170 * Math.sin(u * 4.1 + phase * 7 + b);
+          const foot = 235 + 95 * Math.sin(u * 2.7 + phase * 5 + b * 1.7);
+          const height = 300 + 150 * Math.sin(u * 3.3 + phase * 4 + b * 2.3);
+          const cx = Math.cos(azimuth) * radius;
+          const cz = Math.sin(azimuth) * radius;
+
+          const o = (b * PER_BAND + i * 2) * 3;
+          positions[o] = cx; positions[o + 1] = foot; positions[o + 2] = cz;
+          positions[o + 3] = cx; positions[o + 4] = foot + height; positions[o + 5] = cz;
+
+          // The vertical rays, drifting along the ribbon. Without them a curtain is a
+          // painted band; with them it is something moving through the sky. The ends
+          // taper to nothing so a ribbon has no cut edge hanging in the air.
+          const rays = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(u * 27 + phase * 21 + b * 3));
+          const taper = Math.sin(Math.PI * u);
+          const k = rays * taper * taper;
+          colors[o] = low.r * k; colors[o + 1] = low.g * k; colors[o + 2] = low.b * k;
+          colors[o + 3] = high.r * k; colors[o + 4] = high.g * k; colors[o + 5] = high.b * k;
+        }
+      }
+
+      geometry.setDrawRange(0, bands * COLS * 6);
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(curtains);
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+};
+
+/**
+ * Birds, scattered around the centroid the primitive is flying.
+ *
+ * Two segments each, hinged at the body: a bird drawn as a dot is indistinguishable
+ * from the star field it flies across, and the flap is what separates a flock from
+ * confetti. Every offset is a pure function of the bird's index, so the same flock
+ * comes back on every run and a screenshot is a fact — `Math.random()` here would put
+ * the picture outside the seed the rest of the system is reproducible from.
+ *
+ * The whole flock is one `LineSegments`: 400 birds at the schema's maximum is 1600
+ * vertices in a single draw call, against a scene already carrying 260 instanced
+ * buildings and up to 14000 rain segments (R-9).
+ */
+export const flockBinding: BindingFactory = (scene, statePath) => {
+  const MAX = 400;
+  const geometry = new BufferGeometry();
+  const positions = new Float32Array(MAX * 4 * 3);
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  const material = new LineBasicMaterial({
+    // Pale rather than silhouette: the sky behind them is the darkest thing in the
+    // authored frame, so a dark bird is a bird nobody can find.
+    color: new Color(0.86, 0.89, 0.98), transparent: true, opacity: 0.92,
+    depthWrite: false,
+  });
+  const birds = new LineSegments(geometry, material);
+  birds.frustumCulled = false;
+  scene.add(birds);
+
+  const attr = geometry.getAttribute('position') as BufferAttribute;
+
+  return {
+    statePath,
+    update(slice) {
+      const count = Math.max(0, Math.min(MAX, Math.round(num(slice['birds'], 0))));
+      const centre = Array.isArray(slice['centroid']) ? (slice['centroid'] as number[]) : null;
+      if (!centre) return;
+      const heading = num(slice['heading'], 0);
+      const wing = num(slice['wingPhase'], 0);
+      const spread = num(slice['spread'], 40);
+
+      const cx = num(centre[0], 0), cy = num(centre[1], 0), cz = num(centre[2], 0);
+      // The flock's own frame: forward along the heading, `side` across it. The birds
+      // bank with the flock rather than each pointing wherever it was born.
+      const fx = Math.cos(heading), fz = Math.sin(heading);
+      const sx = -fz, sz = fx;
+      const span = 3.4;
+
+      for (let i = 0; i < count; i++) {
+        // Three decorrelated hashes per bird: where it sits in the flock, and how far
+        // out of step its wings are with its neighbours'.
+        const a = wobble(i * 3 + 1), b = wobble(i * 3 + 2), c = wobble(i * 3 + 3);
+        // Loose ellipsoid, longer along the heading: a flock is a stream, not a ball.
+        const along = (a - 0.5) * spread * 2.4;
+        const across = (b - 0.5) * spread * 1.5;
+        // Individual drift, so the formation churns instead of holding rigid — a flock
+        // whose members never change places is a constellation being towed.
+        const churn = Math.sin(wing * 0.37 + c * 6.283) * spread * 0.22;
+        const rise = (c - 0.5) * spread * 0.75 + Math.sin(wing * 0.29 + a * 6.283) * spread * 0.2;
+
+        const px = cx + fx * along + sx * (across + churn);
+        const py = cy + rise;
+        const pz = cz + fz * along + sz * (across + churn);
+
+        // Wings: down-swept at the top of the beat, level at the bottom. Each bird is
+        // offset in the cycle, because a flock beating in unison is a machine.
+        const flap = Math.sin(wing * 6.283 + c * 6.283);
+        const lift = flap * span * 0.85;
+        const o = i * 12;
+        positions[o] = px + sx * span; positions[o + 1] = py + lift; positions[o + 2] = pz + sz * span;
+        positions[o + 3] = px; positions[o + 4] = py; positions[o + 5] = pz;
+        positions[o + 6] = px; positions[o + 7] = py; positions[o + 8] = pz;
+        positions[o + 9] = px - sx * span; positions[o + 10] = py + lift; positions[o + 11] = pz - sz * span;
+      }
+
+      geometry.setDrawRange(0, count * 4);
+      attr.needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(birds);
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+};
+
+/**
+ * Searchlight beams: an open cone per lamp, pointed where the primitive is aiming it.
+ *
+ * The cone is authored once as a unit and every beam is the same geometry scaled and
+ * rotated, so `spread` costs a scale rather than a rebuild. Vertex colours fade the
+ * beam out along its length: additively blending black is invisible, so the beam ends
+ * in air rather than in a lid.
+ *
+ * No `SpotLight`. A real spot would light the buildings it crosses, which is the wrong
+ * picture — what makes a beam visible at night is the haze *inside* it, not what it
+ * lands on — and it would cost a shadow-capable light on a scene tuned to hold 16 ms
+ * with 260 instanced buildings already in it (R-9).
+ */
+export const searchlightBinding: BindingFactory = (scene, statePath) => {
+  const MAX = 8;
+  /** Beam length, in world units: past the authored skyline's inner ring, into the sky. */
+  const LENGTH = 1000;
+
+  // Unit cone: apex-ish at the lamp, mouth at y = 1. Narrow at the base rather than a
+  // true point, so the lamp itself has a visible source rather than vanishing.
+  const geometry = new CylinderGeometry(1, 0.02, 1, 22, 1, true);
+  geometry.translate(0, 0.5, 0);
+  const position = geometry.getAttribute('position') as BufferAttribute;
+  const tint = new Float32Array(position.count * 3);
+  for (let i = 0; i < position.count; i++) {
+    // Bright at the lamp, gone at the mouth. Squared, because a linear falloff along a
+    // thousand units reads as a solid wedge.
+    const t = 1 - position.getY(i);
+    const k = t * t;
+    tint[i * 3] = 0.55 * k; tint[i * 3 + 1] = 0.72 * k; tint[i * 3 + 2] = k;
+  }
+  geometry.setAttribute('color', new BufferAttribute(tint, 3));
+
+  const material = new MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0,
+    blending: AdditiveBlending, depthWrite: false, fog: false, side: DoubleSide,
+  });
+
+  const beams: Mesh[] = [];
+  for (let i = 0; i < MAX; i++) {
+    const beam = new Mesh(geometry, material);
+    beam.visible = false;
+    beam.frustumCulled = false;
+    scene.add(beam);
+    beams.push(beam);
+  }
+
+  const up = new Vector3(0, 1, 0);
+  const dir = new Vector3();
+
+  return {
+    statePath,
+    update(slice) {
+      const lamps = Array.isArray(slice['lamps']) ? (slice['lamps'] as unknown[]) : [];
+      const aim = Array.isArray(slice['aim']) ? (slice['aim'] as unknown[]) : [];
+      const count = Math.min(MAX, lamps.length, aim.length);
+      const spread = num(slice['spread'], 4);
+      const glow = Math.max(0, Math.min(1, num(slice['glow'], 0)));
+      material.opacity = 0.32 * glow;
+
+      const radius = Math.tan((spread * Math.PI) / 180) * LENGTH;
+      for (let i = 0; i < MAX; i++) {
+        const beam = beams[i]!;
+        beam.visible = i < count;
+        if (i >= count) continue;
+        const lamp = lamps[i] as number[] | undefined;
+        const at = aim[i] as number[] | undefined;
+        if (!lamp || !at) { beam.visible = false; continue; }
+
+        const azimuth = num(at[0], 0);
+        const tilt = num(at[1], 0);
+        beam.position.set(num(lamp[0], 0), 2, num(lamp[1], 0));
+        // The cone's own axis is +y, so the beam is rotated onto its direction rather
+        // than composed out of Euler angles whose order would have to be remembered.
+        dir.set(Math.sin(tilt) * Math.cos(azimuth), Math.cos(tilt), Math.sin(tilt) * Math.sin(azimuth));
+        beam.quaternion.setFromUnitVectors(up, dir);
+        beam.scale.set(radius, LENGTH, radius);
+      }
+    },
+    dispose() {
+      for (const beam of beams) scene.remove(beam);
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+};
+
+/** A stable pseudo-random in [0, 1) from an integer. Same index, same bird, forever. */
+function wobble(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 /** Primitive name -> how it is drawn. A name with no binding is state without a picture. */
 export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'rain-emitter': rainBinding,
@@ -542,4 +839,7 @@ export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'ground-tint': groundBinding,
   'daylight': daylightBinding,
   'water': waterBinding,
+  'aurora': auroraBinding,
+  'flock': flockBinding,
+  'searchlights': searchlightBinding,
 };

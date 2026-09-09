@@ -230,3 +230,37 @@ test.describe('AC-08 · a spinning candidate is killed, not caught', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+test.describe('the capability boundary is enforced by removal, not by inspection', () => {
+  test('a candidate cannot reach the network from inside the worker', async ({ page }) => {
+    await boot(page);
+
+    // Spelled at runtime, so no AST walk could have seen it. L0 keys on identifier
+    // names and this names nothing; the worker deletes the capability instead, and a
+    // capability that is not present cannot be reached by any spelling.
+    const result = await page.evaluate(async () => {
+      const a = (globalThis as never as Record<string, {
+        prober: { probe(r: unknown, ms: number): Promise<{ ok: boolean; failure: string | null }> };
+      }>)['__VERBO__']!;
+      return a.prober.probe({
+        source: `export function mount() {
+          const g = globalThis['fe' + 'tch'];
+          if (typeof g === 'function') throw new Error('REACHED_NETWORK');
+          throw new Error('fetch is absent');
+        }`,
+        frames: 10, actions: [],
+      }, 3000);
+    });
+
+    expect(result.ok).toBe(false);
+    // The distinction is the whole point: it failed because the capability was gone,
+    // not because it was caught asking.
+    expect(result.failure).toContain('fetch is absent');
+    expect(result.failure).not.toContain('REACHED_NETWORK');
+  });
+
+  test('the page keeps its own fetch — the revocation is worker-scoped', async ({ page }) => {
+    await boot(page);
+    expect(await page.evaluate(() => typeof fetch)).toBe('function');
+  });
+});

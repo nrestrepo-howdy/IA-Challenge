@@ -34,7 +34,41 @@ export interface ProbeReport {
 const FRAME_DT = 1 / 60;
 const SPECIFIER = /(['"])verbo:([a-z0-9-]+)\1/gi;
 
+/**
+ * The capability boundary, enforced by removal rather than by inspection.
+ *
+ * L0 reads the source and objects to names it recognises. That is a lint, and an
+ * adversarial author defeats it in one line: `globalThis['fe'+'tch']` is a computed
+ * member expression and no AST walk keyed on identifiers will see it. Twelve escapes
+ * were written by hand and twelve passed L0.
+ *
+ * So the boundary lives here instead. A capability deleted from the worker's own
+ * global cannot be reached by any spelling of its name, computed or otherwise — the
+ * check is not "did you ask for this" but "is this here at all".
+ *
+ * Deliberately runs before the candidate is imported, and only inside the worker: the
+ * page keeps its own `fetch`, and killing the worker (AC-08) is still what handles a
+ * candidate that will not stop.
+ */
+function revokeCapabilities(): void {
+  const g = globalThis as unknown as Record<string, unknown>;
+  for (const name of [
+    'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts',
+    'Notification', 'indexedDB', 'caches', 'BroadcastChannel', 'SharedWorker', 'Worker',
+  ]) {
+    try {
+      Object.defineProperty(g, name, {
+        value: undefined, writable: false, configurable: false, enumerable: false,
+      });
+    } catch {
+      // A non-configurable host binding cannot be replaced. Nothing useful to do
+      // about it here, and pretending otherwise would be worse than the gap.
+    }
+  }
+}
+
 self.onmessage = async (event: MessageEvent<ProbeRequest>) => {
+  revokeCapabilities();
   const { source, frames } = event.data;
   const world = new World();
   const primitives = createPrimitives();

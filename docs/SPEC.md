@@ -63,7 +63,7 @@ DOM access, killable by timeout — and passes through four short-circuiting ora
 
 | Layer | What it checks | Budget | Nature |
 |-------|----------------|--------|--------|
-| **L0 static** | Compiles (TSL→WGSL), writes only inside its declared scope, uses no forbidden APIs | ~5 ms | Deterministic |
+| **L0 static** | Compiles, writes only inside its declared scope, names no forbidden capability | ~5 ms | Deterministic **lint** — see §4.5 |
 | **L1 runtime** | `init()` resolved, no exception across 120 frames, frame time ≤ 16 ms, draw-call and memory budgets held | ~200 ms | Deterministic |
 | **L2 state contract** | Assertions over `window.__VERBO_STATE__` with before/after snapshots around scripted actions | ~1 s | **Primary oracle** |
 | **L3 perceptual** | Pixel diff (did anything change at all) plus a multimodal visual critic | ~5 s | **Judge of taste, not of truth** |
@@ -86,6 +86,27 @@ A state contract is not accepted on faith. Deliberate defects are injected into 
 candidate — drop a state update, corrupt a constant, swap an event target, null out a
 disposer — and **if the contract fails to catch them, the contract is worthless and is
 regenerated.** A verifier that cannot detect known-bad input is not a verifier.
+
+### 4.5 What L0 is, and is not
+
+L0 is a lint against a model that wandered. It is **not** a sandbox, and the
+specification previously implied otherwise.
+
+Twelve escapes were written by hand and run through it; twelve passed. `globalThis['fe'
++ 'tch']` is a computed member expression, and no AST walk keyed on identifier names
+will ever see it. Eight of those twelve are now caught, and the remaining four are kept
+as tests of what L0 does not claim — fixing them in the AST is whack-a-mole, because
+the next spelling is always one character away.
+
+**The enforced boundary is `revokeCapabilities()` in the probe worker**, which deletes
+`fetch`, `XMLHttpRequest`, `WebSocket`, `importScripts` and the rest from the worker's
+own global before the candidate is imported. The check is not *"did you ask for this"*
+but *"is this here at all"*, and a capability that is not present cannot be reached by
+any spelling of its name.
+
+L0 keeps its checks because catching drift in five milliseconds with an actionable
+diagnosis is worth having. Calling it a security boundary would be the kind of claim
+this project exists to refuse.
 
 ### 4.4 Primitive library
 

@@ -520,6 +520,47 @@ city still does not have to know a camera exists.
 
 ---
 
+## 9 Sep — Twelve attacks, twelve escapes, and a boundary in the wrong place
+
+I wrote twelve hostile candidates and ran them through the real L0. **All twelve
+passed.** Computed global access, `import()`, aliasing the state root, destructuring a
+global, a computed `register()` path, the `Function` constructor via
+`(()=>{}).constructor` — every one of them.
+
+The cause is structural, not a missing case. L0 checks identifier *names*, and
+`globalThis['fe' + 'tch']` names nothing. No AST walk keyed on identifiers can ever see
+it, so the list of forbidden globals was never a boundary — it was a spell-checker.
+
+**And the spec claimed more than the code did.** AC-05 says L0 rejects a module that
+writes outside its declared scope, and §4.1 called it a capability check. Both were
+true only of code that was not trying.
+
+**The fix is not a better parser.** It is putting the boundary where it can be
+enforced: `revokeCapabilities()` now deletes `fetch`, `XMLHttpRequest`, `WebSocket`,
+`importScripts` and the rest from the probe worker's own global before the candidate is
+imported. The question stops being *"did you ask for this"* and becomes *"is this here
+at all"* — and a capability that is absent cannot be reached by any spelling.
+
+Eight of the twelve escapes are now caught at L0 anyway, because catching drift in five
+milliseconds with an actionable diagnosis is worth having. The other four are kept **as
+tests of what L0 does not claim**, with a comment saying why they were not fixed: the
+next spelling is always one character away, and a check that loses that race quietly is
+worse than one that never claimed to run it.
+
+The browser test proves the distinction rather than the outcome. The candidate spells
+`fetch` at runtime and reports which failure it got: it fails with *"fetch is absent"*,
+not with *"REACHED_NETWORK"*. It was stopped by removal, not by detection — and a test
+that only asserted "it failed" would have passed under either.
+
+**What I take from it.** This is the second time the harness has been wrong about
+itself, and both times the same way: a layer that reported success on a weaker
+statement than the one written down. The mutation engine mutated nothing; the injection
+budget guarded nothing. Neither was caught by its own tests, because a test written
+from the same understanding as the code inherits its blind spot. Both were caught by
+someone going looking with an attack in hand.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

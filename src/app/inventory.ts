@@ -22,6 +22,14 @@ export interface InventoryActions {
 export class Inventory {
   readonly #root: HTMLElement;
   readonly #actions: InventoryActions;
+  /**
+   * What was on screen last time, so only genuinely new rows animate in.
+   *
+   * `render()` rebuilds the whole list on every change, so animating every row would
+   * make dropping one verb look like the world had been rebuilt from nothing — which
+   * is what happens underneath, and precisely what the chrome should not restate.
+   */
+  #shown: readonly string[] = [];
 
   constructor(host: HTMLElement, actions: InventoryActions) {
     this.#root = host;
@@ -32,12 +40,15 @@ export class Inventory {
   render(verbs: readonly Verb[], canUndo: boolean): void {
     this.#root.textContent = '';
     this.#root.dataset['open'] = verbs.length > 0 ? 'true' : 'false';
-    if (verbs.length === 0) return;
+    if (verbs.length === 0) {
+      this.#shown = [];
+      return;
+    }
 
     const head = document.createElement('div');
     head.className = 'inv-head';
     const label = document.createElement('span');
-    label.textContent = `world · ${verbs.length} verb${verbs.length === 1 ? '' : 's'}`;
+    label.textContent = `in the world · ${verbs.length} verb${verbs.length === 1 ? '' : 's'}`;
     head.append(label);
     if (canUndo) {
       const undo = document.createElement('button');
@@ -50,9 +61,11 @@ export class Inventory {
     }
     this.#root.append(head);
 
+    const before = this.#shown;
     verbs.forEach((verb, i) => {
       const row = document.createElement('div');
       row.className = 'inv-row';
+      if (before[i] !== verb.utterance) row.dataset['new'] = 'true';
 
       const text = document.createElement('span');
       text.className = 'inv-verb';
@@ -70,5 +83,6 @@ export class Inventory {
       row.append(text, drop);
       this.#root.append(row);
     });
+    this.#shown = verbs.map((v) => v.utterance);
   }
 }

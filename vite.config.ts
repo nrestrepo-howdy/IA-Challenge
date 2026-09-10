@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
+// @ts-expect-error - plain ESM plugin, no types
+import { modelProxy } from './tools/serve/model-proxy.mjs';
 
 export default defineConfig({
+  plugins: [modelProxy()],
   // GitHub Pages serves from /<repo>/, local dev from /. Reading it from the
   // environment keeps one build config for both instead of a committed value that is
   // wrong in whichever place it was not written for.

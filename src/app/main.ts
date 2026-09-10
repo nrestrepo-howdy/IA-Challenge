@@ -212,6 +212,16 @@ function sync(): void {
   suggestions.setVisible(verbs.length === 0 && log.childElementCount === 0);
 }
 
+/**
+ * How long a line stays before it fades.
+ *
+ * The transcript reports what is happening, not what happened: a log that accumulates
+ * over a world is a debug console, and after five verbs it is a wall of text sitting
+ * on the only thing worth looking at. Lines leave on their own, and when the last one
+ * goes on an empty world the openers come back.
+ */
+const LINE_DWELL_MS = 14_000;
+
 function line(text: string, kind: CycleStep['kind'] | 'you'): void {
   const el = document.createElement('div');
   el.className = `l ${kind}`;
@@ -221,7 +231,18 @@ function line(text: string, kind: CycleStep['kind'] | 'you'): void {
   el.textContent = text.length > 96 ? text.slice(0, 95).trimEnd() + '…' : text;
   el.title = text;
   log.prepend(el);
-  while (log.childElementCount > 6) log.lastElementChild?.remove();
+  while (log.childElementCount > 5) log.lastElementChild?.remove();
+  setTimeout(() => {
+    el.classList.add('gone');
+    // Removed on the transition rather than on a second timer: with reduced motion
+    // the transition is instant, and a fixed delay would leave a hole in the column.
+    const drop = (): void => {
+      el.remove();
+      if (log.childElementCount === 0) sync();
+    };
+    el.addEventListener('transitionend', drop, { once: true });
+    setTimeout(drop, 900);
+  }, LINE_DWELL_MS);
 }
 
 let busy = false;
@@ -245,7 +266,11 @@ async function say(utterance: string): Promise<SayResult> {
     const compiled = await compiler.compile(utterance, world);
     if (isRejection(compiled)) {
       // AC-17: an impossible request is explained, never silently attempted.
-      line(compiled.suggestion ? `${compiled.reason} — ${compiled.suggestion}` : compiled.reason, 'reject');
+      const explanation = compiled.suggestion ? `${compiled.reason} — ${compiled.suggestion}` : compiled.reason;
+      line(explanation, 'reject');
+      // The panel was opened before the compile; saying nothing in it would leave a
+      // started thing unfinished on screen.
+      panel.dismiss(explanation);
       return { ok: false, ms: 0, rejectedAt: 'intent', steps: [], reason: compiled.reason };
     }
     if (compiled.unaddressed.length) {

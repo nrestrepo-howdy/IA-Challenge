@@ -49,15 +49,32 @@ export class SuggestionRow {
 
   constructor(host: HTMLElement, onPick: (utterance: string) => void) {
     this.#root = host;
+
+    // The invitation, not just the buttons. A first arrival sees a world it has no
+    // reason to believe responds to anything; two lines say what this is and what
+    // happens to what you type, and the chips say what it already knows how to do.
+    const lead = document.createElement('p');
+    lead.className = 'sg-lead';
+    lead.append('Say something. The world becomes it.');
+    const sub = document.createElement('b');
+    sub.textContent = 'Every verb is written, verified and only then injected.';
+    lead.append(sub);
+    this.#root.append(lead);
+
+    const row = document.createElement('div');
+    row.className = 'sg-row';
     for (const s of deriveSuggestions()) {
       const chip = document.createElement('button');
       chip.className = 'sg';
       chip.type = 'button';
+      // Exactly the utterance and nothing else: the chip is a thing you could have
+      // typed, so anything appended to it would be a promise the prompt cannot keep.
       chip.textContent = s.utterance;
       chip.title = s.summary;
       chip.addEventListener('click', () => onPick(s.utterance));
-      this.#root.append(chip);
+      row.append(chip);
     }
+    this.#root.append(row);
   }
 
   setVisible(visible: boolean): void {

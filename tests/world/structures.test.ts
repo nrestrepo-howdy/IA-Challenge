@@ -30,7 +30,10 @@ const FRAME = 1 / 60;
 const STRUCTURAL = [
   { name: 'tower', utterance: 'raise a tower', path: TOWER_STATE_PATH, animated: 'risePhase' },
   { name: 'skyline-shift', utterance: 'a taller denser city', path: SKYLINE_STATE_PATH, animated: 'shiftPhase' },
-  { name: 'ground-tint', utterance: 'make it a desert', path: GROUND_STATE_PATH, animated: 'tintPhase' },
+  // 'tint the ground' rather than 'make it a desert': the latter now names a *mood*,
+  // which composes ground-tint with daylight and fog. That is better product behaviour
+  // and the wrong utterance for a test that isolates one primitive.
+  { name: 'ground-tint', utterance: 'tint the ground', path: GROUND_STATE_PATH, animated: 'tintPhase' },
 ] as const;
 
 async function compile(utterance: string, world: World): Promise<Intent> {
@@ -115,10 +118,10 @@ describe('structural primitives · the generated contract, against the real prim
 
   it('composes a structural verb with an atmospheric one, over disjoint slices', async () => {
     const world = new World();
-    // Two workstreams' worth of world in one utterance: `desert` resolves ground-tint,
+    // Two workstreams' worth of world in one utterance: the tint resolves ground-tint,
     // `windy` resolves wind-field. One contract spans both, and neither writes into
     // the other's slice (AC-05).
-    const intent = await compile('a windy desert', world);
+    const intent = await compile('windy, and tint the ground', world);
     expect(intent.scope).toEqual(expect.arrayContaining([GROUND_STATE_PATH, 'forces.wind']));
 
     mountIntent(world, createPrimitives({ seed: 35 }), intent);

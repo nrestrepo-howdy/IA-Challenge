@@ -13,6 +13,7 @@
  * tests need the internet is not reproducible for a third party (R-10).
  */
 import type { PrimitiveSpec } from './catalogue.js';
+import { matchMood } from './moods.js';
 
 export interface ModelRequest {
   readonly utterance: string;
@@ -136,6 +137,26 @@ export function buildPrompt(request: ModelRequest): string {
  */
 export const keywordModel: LanguageModel = {
   propose(request: ModelRequest): Promise<string> {
+    // A mood before a keyword. "make it cozy" names a feeling and no primitive is
+    // called cozy, so the matcher refused it — while the catalogue could in fact have
+    // built something reasonable. Moods are compositions of primitives that exist,
+    // with parameters inside their declared ranges, and they go through the same
+    // compiler, contracts and oracles as anything else.
+    const mood = matchMood(request.utterance);
+    if (mood) {
+      const available = new Set(request.catalogue.map((c) => c.name));
+      const primitives = mood.primitives.filter((p) => available.has(p.name));
+      if (primitives.length > 0) {
+        return Promise.resolve(JSON.stringify({
+          primitives,
+          rationale: mood.rationale,
+          // A mood is an interpretation, and saying so is the honest half: the user
+          // asked for a feeling and got one reading of it, not the only one.
+          unaddressed: [],
+        }));
+      }
+    }
+
     const words = tokenize(request.utterance);
     const hits = request.catalogue
       .map((spec) => ({

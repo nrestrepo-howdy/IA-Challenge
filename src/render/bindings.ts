@@ -12,10 +12,12 @@
  * look right while its contract passed for the wrong reason.
  */
 import {
-  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color,
-  CylinderGeometry, DoubleSide, Fog, InstancedMesh, LineBasicMaterial, LineSegments,
-  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Points,
-  PointsMaterial, Quaternion, Scene, Vector3,
+  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry,
+  CanvasTexture, Color, CylinderGeometry, DoubleSide,
+  Fog, InstancedMesh, LineBasicMaterial, LineSegments,
+  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  PlaneGeometry, Points, PointsMaterial, Quaternion,
+  Scene, Vector3,
 } from 'three/webgpu';
 import { sceneHandles, type SkyState } from './scene.js';
 
@@ -96,6 +98,104 @@ export const rainBinding: BindingFactory = (scene, statePath) => {
       scene.remove(rain);
       geometry.dispose();
       material.dispose();
+    },
+  };
+};
+
+
+/**
+ * Snow. Not rain with different numbers.
+ *
+ * `'snow-emitter'` was mapped to `rainBinding`, so asking for snow drew vertical
+ * streaks — the verb resolved, the contract passed, and the picture was of the wrong
+ * weather. A binding that draws the wrong thing is worse than one that draws nothing,
+ * because nothing is visibly missing and wrong is not.
+ *
+ * What separates them is not speed, it is *shape*: rain is a streak because a drop
+ * moves far within one frame, and snow is a disc because a flake does not. Flakes also
+ * drift laterally, wander on their own phase, and vary in size with distance, which is
+ * what makes a field of them read as depth rather than as static.
+ */
+export const snowBinding: BindingFactory = (scene, statePath) => {
+  const MAX = 9000;
+  const geometry = new BufferGeometry();
+  const positions = new Float32Array(MAX * 3);
+  const seeds = new Float32Array(MAX);
+  const sway = new Float32Array(MAX);
+  for (let i = 0; i < MAX; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 1100;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 1100;
+    seeds[i] = Math.random();
+    sway[i] = 0.4 + Math.random() * 1.6;
+  }
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+
+  // A soft radial disc, drawn once into a canvas. A square point reads as a pixel;
+  // a disc with a falloff reads as a flake, and it costs one 32x32 texture.
+  const flake = document.createElement('canvas');
+  flake.width = flake.height = 32;
+  const fx = flake.getContext('2d')!;
+  const grad = fx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  fx.fillStyle = grad;
+  fx.fillRect(0, 0, 32, 32);
+  const sprite = new CanvasTexture(flake);
+
+  const material = new PointsMaterial({
+    size: 9, map: sprite, transparent: true, opacity: 0.95,
+    depthWrite: false, sizeAttenuation: true,
+    color: new Color(0.94, 0.96, 1),
+  });
+  const snow = new Points(geometry, material);
+  snow.frustumCulled = false;
+  scene.add(snow);
+
+  let elapsed = 0;
+  let fallen = 0;
+  return {
+    statePath,
+    update(slice, dt) {
+      elapsed += dt;
+      // The field names are the primitive's, read from its own header comment — not
+      // guessed. The first version of this binding read `count`, `headY` and `spread`,
+      // none of which `snow-emitter` publishes, so it drew nothing while the contract
+      // passed. That is the fourth binding in this project to read a key nobody wrote,
+      // and every one of them was invisible to the tests because contracts assert over
+      // state and bindings reach into it by string.
+      const count = Math.min(MAX, Math.max(0, Math.floor(num(slice['particles'], 0))));
+      const lateral = num(slice['lateral'], 0);
+      const fall = num(slice['fallSpeed'], 26);
+      // The binding owns the fall, because the primitive does not publish one.
+      // `rain-emitter` publishes `headY` and the rain binding reads it, which is the
+      // better arrangement: one authoritative value drives both the contract and the
+      // picture. Snow publishes phase and wander only, so the column position is the
+      // renderer's own — and that is written down rather than left to be discovered by
+      // whoever next wonders why the two emitters differ.
+      const spread = 460;
+      fallen = (fallen + fall * dt) % spread;
+      const headY = spread - fallen;
+      geometry.setDrawRange(0, count);
+      const attr = geometry.getAttribute('position') as BufferAttribute;
+      const arr = attr.array as Float32Array;
+      for (let i = 0; i < count; i++) {
+        const s = seeds[i]!;
+        arr[i * 3 + 1] = ((headY - s * spread) % spread + spread) % spread;
+        // Each flake carries its own phase, so the field never pulses in unison —
+        // synchronised sway is the tell that turns snow back into a particle system.
+        // Lateral comes from the primitive's own published wander, so the picture and
+        // the contract move together instead of agreeing by coincidence.
+        arr[i * 3] = (arr[i * 3] ?? 0) + Math.sin(elapsed * sway[i]! + s * 6.28) * dt * 9 + lateral * dt * 0.6;
+      }
+      attr.needsUpdate = true;
+      material.opacity = 0.62 + 0.33 * Math.min(1, count / 5000);
+    },
+    dispose() {
+      scene.remove(snow);
+      geometry.dispose();
+      material.dispose();
+      sprite.dispose();
     },
   };
 };
@@ -858,7 +958,7 @@ function wobble(n: number): number {
 /** Primitive name -> how it is drawn. A name with no binding is state without a picture. */
 export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'rain-emitter': rainBinding,
-  'snow-emitter': rainBinding,
+  'snow-emitter': snowBinding,
   'fog-volume': fogBinding,
   'wind-field': windBinding,
   'tower': towerBinding,

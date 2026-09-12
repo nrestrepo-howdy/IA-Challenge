@@ -12,12 +12,15 @@
  * bright, and silhouettes dark enough to read against all of it.
  */
 import {
-  AdditiveBlending, AmbientLight, BackSide, BoxGeometry, BufferAttribute, BufferGeometry,
-  Color, DirectionalLight, Fog, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, MeshStandardNodeMaterial, PerspectiveCamera, PlaneGeometry,
-  Points, PointsMaterial, Quaternion, Scene, SphereGeometry, Vector3,
+  AdditiveBlending, AmbientLight, BackSide, BoxGeometry,
+  BufferAttribute, BufferGeometry, CanvasTexture, Color,
+  DirectionalLight, Fog, InstancedMesh, Matrix4,
+  Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshStandardNodeMaterial,
+  PerspectiveCamera, PlaneGeometry, Points, PointsMaterial,
+  Quaternion, RepeatWrapping, SRGBColorSpace, Scene,
+  SphereGeometry, Vector3,
 } from 'three/webgpu';
-import { normalView, positionViewDirection, uniform } from 'three/tsl';
+import { normalView, positionViewDirection, texture, uniform, uv, vec2 } from 'three/tsl';
 
 export interface BaseScene {
   readonly scene: Scene;
@@ -387,9 +390,54 @@ export function createBaseScene(): BaseScene {
   // frame where it is least wanted (noon) and most wanted (midnight).
   // The exponent is what keeps it a contour: at 1 the whole face lifts and the city
   // turns grey.
+  /**
+   * A facade, drawn once into a canvas and worn by every building.
+   *
+   * The research on why realtime web 3D reads as cheap is blunt about this: the secret
+   * is not in the geometry, it is in the textures. A box with a rim light is still a
+   * box; a box with a grid of windows is a building, and the difference costs one
+   * 256x512 canvas and no extra draw calls.
+   *
+   * Deliberately irregular. A perfect grid of identical lit squares reads as wallpaper,
+   * because real buildings have floors where nobody is home. Roughly a third are lit,
+   * a few are warmer than the rest, and the columns are not perfectly aligned.
+   */
+  const facade = document.createElement('canvas');
+  facade.width = 256;
+  facade.height = 512;
+  const fx = facade.getContext('2d')!;
+  fx.fillStyle = '#000';
+  fx.fillRect(0, 0, 256, 512);
+  const cols = 8, rows = 26;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (rand() > 0.34) continue;
+      // Warm, cool, or dim — three temperatures, because a night city lit at one
+      // colour temperature is the tell that it was generated rather than observed.
+      const warm = rand();
+      fx.fillStyle = warm > 0.72 ? 'rgba(255,214,150,0.95)'
+        : warm > 0.3 ? 'rgba(238,228,205,0.8)'
+        : 'rgba(176,198,226,0.55)';
+      const x = c * 32 + 8 + rand() * 3;
+      const y = r * 19.7 + 5 + rand() * 2;
+      fx.fillRect(x, y, 14 + rand() * 4, 9 + rand() * 3);
+    }
+  }
+  const facadeMap = new CanvasTexture(facade);
+  facadeMap.wrapS = facadeMap.wrapT = RepeatWrapping;
+  facadeMap.colorSpace = SRGBColorSpace;
+  // Combined, not assigned. `emissiveNode` *replaces* the emissive chain, so setting
+  // the rim light there silently discarded `emissiveMap` — the facade was uploaded,
+  // bound, and never sampled. The windows were there the whole time and nothing drew
+  // them, which is the same class of bug as a binding reading a key nobody writes.
+  const facadeGlow = texture(facadeMap, uv().mul(vec2(1.6, 2.4)))
+    .rgb
+    .mul(0.85);
   blockMaterial.emissiveNode = rimTint
     .mul(rimStrength)
-    .mul(normalView.dot(positionViewDirection).clamp().oneMinus().pow(4.5));
+    .mul(normalView.dot(positionViewDirection).clamp().oneMinus().pow(4.5))
+    .add(facadeGlow);
+
   const blocks = new InstancedMesh(new BoxGeometry(1, 1, 1), blockMaterial, CAPACITY);
   scene.add(blocks);
 

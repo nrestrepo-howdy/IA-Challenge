@@ -120,7 +120,9 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       required: ['count', 'drift'],
       additionalProperties: false,
     },
-    defaults: { count: 2500, drift: 1.5 },
+    // 2500 flakes over a 1100-unit field is a flurry nobody notices. Snow reads by
+    // density, not by flake size — the count is what makes it weather.
+    defaults: { count: 8000, drift: 2.2 },
     keywords: ['snow', 'snowing', 'snowy', 'blizzard', 'flurries', 'flakes', 'winter'],
     fields: [
       { key: 'particles', role: 'constant', fromParam: 'count' },

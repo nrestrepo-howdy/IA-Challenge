@@ -56,8 +56,12 @@ export const rainBinding: BindingFactory = (scene, statePath) => {
     lengths[i] = 5 + Math.random() * 11;
   }
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  // Above white on purpose. A drop is a specular highlight, and until the streaks
+  // crossed the bloom threshold in `post.ts` they were grey scratches with no wet
+  // read at all. Additive blending multiplies this by `opacity`, so only rain at
+  // full density gets over the line and bleeds.
   const material = new LineBasicMaterial({
-    color: new Color(0.66, 0.76, 0.94),
+    color: new Color(0.66, 0.76, 0.94).multiplyScalar(2.8),
     transparent: true, opacity: 0.42, blending: AdditiveBlending, depthWrite: false,
   });
   const rain = new LineSegments(geometry, material);
@@ -331,6 +335,10 @@ export const daylightBinding: BindingFactory = (scene, statePath) => {
     // Half the windows are still on at dawn, which is what makes it read as early
     // rather than as a pale noon.
     windowGlow: 0.55,
+    // The rim turns over with the light. A cool edge on a warm sunrise would read as
+    // two suns, which is the one thing a sunrise cannot have.
+    rimColor: new Color(1, 0.52, 0.32),
+    rimIntensity: 0.55,
   };
 
   const NOON: SkyState = {
@@ -355,6 +363,10 @@ export const daylightBinding: BindingFactory = (scene, statePath) => {
     // two verbs compose instead of overwriting each other.
     groundEmissive: new Color(0.2, 0.215, 0.235),
     windowGlow: 0,
+    // Nearly off. Overhead light already separates the faces of a box by value, so a
+    // rim at noon adds a halo nothing in the scene is casting.
+    rimColor: new Color(0.62, 0.7, 0.85),
+    rimIntensity: 0.28,
   };
 
   const DUSK: SkyState = {
@@ -374,6 +386,8 @@ export const daylightBinding: BindingFactory = (scene, statePath) => {
     groundEmissive: new Color(0.07, 0.04, 0.045),
     // The city switching its lights back on is most of what says "evening".
     windowGlow: 0.8,
+    rimColor: new Color(1, 0.46, 0.3),
+    rimIntensity: 0.6,
   };
 
   // Sorted, and wrapping: the segment after dusk is midnight again, one turn on, which
@@ -396,7 +410,7 @@ export const daylightBinding: BindingFactory = (scene, statePath) => {
     discColor: new Color(), discRadius: 0, haloColor: new Color(), haloOpacity: 0,
     starOpacity: 0, keyColor: new Color(), keyIntensity: 0, ambientColor: new Color(),
     ambientIntensity: 0, fogColor: new Color(), groundEmissive: new Color(),
-    windowGlow: 0,
+    windowGlow: 0, rimColor: new Color(), rimIntensity: 0,
   };
   const mutable = scratch as {
     -readonly [K in keyof SkyState]: SkyState[K];
@@ -449,6 +463,8 @@ function lerpSky(
   out.fogColor.copy(a.fogColor).lerp(b.fogColor, t);
   out.groundEmissive.copy(a.groundEmissive).lerp(b.groundEmissive, t);
   out.windowGlow = a.windowGlow + (b.windowGlow - a.windowGlow) * t;
+  out.rimColor.copy(a.rimColor).lerp(b.rimColor, t);
+  out.rimIntensity = a.rimIntensity + (b.rimIntensity - a.rimIntensity) * t;
 }
 
 /**
@@ -581,8 +597,13 @@ export const auroraBinding: BindingFactory = (scene, statePath) => {
   }
   geometry.setIndex(indices);
 
+  // `color` multiplies the vertex attribute, so this is a display gain over the whole
+  // curtain and nothing about the state it is drawn from changes. It is here so the
+  // brightest cores of a ribbon clear the bloom threshold: an aurora whose light does
+  // not leave its own geometry is a painted band with a cut edge, which is what the
+  // first screenshot showed.
   const material = new MeshBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0.85,
+    vertexColors: true, transparent: true, opacity: 0.85, color: new Color(1.5, 1.5, 1.5),
     blending: AdditiveBlending, depthWrite: false, fog: false, side: DoubleSide,
   });
   const curtains = new Mesh(geometry, material);
@@ -760,16 +781,22 @@ export const searchlightBinding: BindingFactory = (scene, statePath) => {
   const position = geometry.getAttribute('position') as BufferAttribute;
   const tint = new Float32Array(position.count * 3);
   for (let i = 0; i < position.count; i++) {
-    // Bright at the lamp, gone at the mouth. Squared, because a linear falloff along a
-    // thousand units reads as a solid wedge.
+    // Bright at the lamp, gone at the mouth. Cubed, because a linear falloff along a
+    // thousand units reads as a solid wedge — and because the display gain below is
+    // what lifts the lamp end over the bloom threshold, a squared curve carried too
+    // much of the *body* of the beam up with it and washed the whole frame milky.
     const t = 1 - position.getY(i);
-    const k = t * t;
+    const k = t * t * t;
     tint[i * 3] = 0.55 * k; tint[i * 3 + 1] = 0.72 * k; tint[i * 3 + 2] = k;
   }
   geometry.setAttribute('color', new BufferAttribute(tint, 3));
 
+  // Same display gain as the aurora, for the same reason: the lamp end has to clear
+  // the bloom threshold or the beam is a flat opaque wedge. The falloff along the
+  // beam is quadratic, so only the first fraction of it bleeds -- which is what a
+  // beam in air actually does.
   const material = new MeshBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0,
+    vertexColors: true, transparent: true, opacity: 0, color: new Color(4, 4, 4),
     blending: AdditiveBlending, depthWrite: false, fog: false, side: DoubleSide,
   });
 
@@ -793,7 +820,7 @@ export const searchlightBinding: BindingFactory = (scene, statePath) => {
       const count = Math.min(MAX, lamps.length, aim.length);
       const spread = num(slice['spread'], 4);
       const glow = Math.max(0, Math.min(1, num(slice['glow'], 0)));
-      material.opacity = 0.32 * glow;
+      material.opacity = 0.24 * glow;
 
       const radius = Math.tan((spread * Math.PI) / 180) * LENGTH;
       for (let i = 0; i < MAX; i++) {

@@ -14,9 +14,10 @@
 import {
   AdditiveBlending, AmbientLight, BackSide, BoxGeometry, BufferAttribute, BufferGeometry,
   Color, DirectionalLight, Fog, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Points, PointsMaterial,
-  Quaternion, Scene, SphereGeometry, Vector3,
+  MeshStandardMaterial, MeshStandardNodeMaterial, PerspectiveCamera, PlaneGeometry,
+  Points, PointsMaterial, Quaternion, Scene, SphereGeometry, Vector3,
 } from 'three/webgpu';
+import { normalView, positionViewDirection, uniform } from 'three/tsl';
 
 export interface BaseScene {
   readonly scene: Scene;
@@ -109,6 +110,18 @@ export interface SkyState {
   readonly groundEmissive: Color;
   /** Multiplies the lit-window glow. Windows that stay lit at noon read as a bug. */
   readonly windowGlow: number;
+  /**
+   * The edge light on the buildings, and how much of it there is.
+   *
+   * A flat-shaded box lit from one side is two flat values with a hard corner between
+   * them, which is why the city read as blocks rather than as architecture. A fresnel
+   * term along the silhouette is what separates a building from whatever is behind it,
+   * and it belongs to the time of day for the same reason the key does: a cool blue
+   * rim is what midnight looks like and what noon does not, and a rim that stayed the
+   * same colour all day would be the arbitrary global tint this scene avoids.
+   */
+  readonly rimColor: Color;
+  readonly rimIntensity: number;
 }
 
 /**
@@ -180,6 +193,28 @@ function rng(seed: number): () => number {
 const HORIZON = new Color(0.075, 0.094, 0.135);
 const ZENITH = new Color(0.016, 0.021, 0.043);
 
+/**
+ * How far the emissive sources sit above white.
+ *
+ * Nothing in the scene exceeded 1.0 before, so the bloom threshold in `post.ts` had
+ * nothing to find and the tone curve had no highlight to roll off — the moon clipped
+ * to a flat disc and the windows were grey specks. These gains are what put the light
+ * sources into the range where both stages have something to do; the *authored*
+ * colours stay unscaled, because `SkyState` is also what `daylight` interpolates and
+ * what `reset()` restores, and baking a display gain into it would make every preset
+ * a number nobody could reason about.
+ */
+const DISC_GAIN = 3.4;
+const WINDOW_GAIN = 3.0;
+const STAR_GAIN = 2.4;
+/**
+ * Below 1 on purpose. The halo was doing the moon's glow by hand and read as exactly
+ * what it is — a flat translucent sphere with a hard silhouette. Bloom does that job
+ * properly now, so the painted version steps back to being the wide atmospheric skirt
+ * that bloom's radius cannot reach.
+ */
+const HALO_GAIN = 0.22;
+
 export function createBaseScene(): BaseScene {
   const scene = new Scene();
   const rand = rng(0x5eed);
@@ -226,7 +261,8 @@ export function createBaseScene(): BaseScene {
   const stars = new BufferGeometry();
   stars.setAttribute('position', new BufferAttribute(starPos, 3));
   const starMat = new PointsMaterial({
-    size: 3.2, sizeAttenuation: false, color: new Color(0.75, 0.82, 1),
+    size: 3.2, sizeAttenuation: false,
+    color: new Color(0.75, 0.82, 1).multiplyScalar(STAR_GAIN),
     transparent: true, opacity: 0.55, depthWrite: false, fog: false,
   });
   const starField = new Points(stars, starMat);
@@ -240,12 +276,16 @@ export function createBaseScene(): BaseScene {
   // the moon's angle: a disc that changes colour but not size reads as the same object
   // repainted rather than as a different body in the sky.
   const DISC_RADIUS = 46;
-  const moonMat = new MeshBasicMaterial({ color: new Color(0.96, 0.97, 1), fog: false });
+  const DISC_COLOR = new Color(0.96, 0.97, 1);
+  const HALO_COLOR = new Color(0.45, 0.56, 0.85);
+  const moonMat = new MeshBasicMaterial({
+    color: DISC_COLOR.clone().multiplyScalar(DISC_GAIN), fog: false,
+  });
   const moon = new Mesh(new SphereGeometry(DISC_RADIUS, 24, 16), moonMat);
   moon.position.set(-620, 430, -1350);
   scene.add(moon);
   const haloMat = new MeshBasicMaterial({
-    color: new Color(0.45, 0.56, 0.85), transparent: true, opacity: 0.16,
+    color: HALO_COLOR.clone(), transparent: true, opacity: 0.16 * HALO_GAIN,
     blending: AdditiveBlending, depthWrite: false, fog: false,
   });
   const halo = new Mesh(new SphereGeometry(150, 20, 14), haloMat);
@@ -328,11 +368,29 @@ export function createBaseScene(): BaseScene {
     });
   }
 
-  const blocks = new InstancedMesh(
-    new BoxGeometry(1, 1, 1),
-    new MeshStandardMaterial({ color: new Color(0.017, 0.022, 0.033), roughness: 0.82, metalness: 0.25 }),
-    CAPACITY,
-  );
+  // A node material rather than a plain standard one, for one reason: the rim.
+  //
+  // Two faces of a box under a single directional light are two flat values meeting at
+  // a hard corner, and at night the near-black albedo collapses both of them into the
+  // same silhouette — which is what made the city read as blocks. The fresnel term
+  // below lights only the grazing edge, so every building gets a lit contour against
+  // whatever is behind it and the shapes separate. Node materials run on both the
+  // WebGPU and the WebGL2 backend, so this costs AC-03 nothing.
+  const rimTint = uniform(new Color(0.3, 0.44, 0.72));
+  const rimStrength = uniform(0.7);
+  const blockMaterial = new MeshStandardNodeMaterial({
+    color: new Color(0.017, 0.022, 0.033), roughness: 0.82, metalness: 0.25,
+  });
+  // Written to `emissiveNode` rather than mixed into the lighting: the rim is a
+  // stylistic edge light with no source in the world, and running it through the
+  // shading model would make it answer to the key's intensity, which is exactly the
+  // frame where it is least wanted (noon) and most wanted (midnight).
+  // The exponent is what keeps it a contour: at 1 the whole face lifts and the city
+  // turns grey.
+  blockMaterial.emissiveNode = rimTint
+    .mul(rimStrength)
+    .mul(normalView.dot(positionViewDirection).clamp().oneMinus().pow(4.5));
+  const blocks = new InstancedMesh(new BoxGeometry(1, 1, 1), blockMaterial, CAPACITY);
   scene.add(blocks);
 
   // One window buffer for every slot the mesh can draw, filled in slot order. Visible
@@ -345,7 +403,7 @@ export function createBaseScene(): BaseScene {
     new BufferAttribute(new Float32Array(windowStart[windowStart.length - 1]! * 3), 3),
   );
   const winMat = new PointsMaterial({
-    size: 3.4, color: new Color(1, 0.83, 0.55),
+    size: 3.4, color: new Color(1, 0.72, 0.36).multiplyScalar(WINDOW_GAIN),
     transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false,
   });
   const winPoints = new Points(winGeo, winMat);
@@ -407,10 +465,12 @@ export function createBaseScene(): BaseScene {
     horizon: HORIZON.clone(),
     zenith: ZENITH.clone(),
     discPosition: moon.position.clone(),
-    discColor: moonMat.color.clone(),
+    // The un-gained colours: `DISC_GAIN` and `HALO_GAIN` are a display decision that
+    // `applySky` re-applies, so what a preset states is what it means.
+    discColor: DISC_COLOR.clone(),
     discRadius: DISC_RADIUS,
-    haloColor: haloMat.color.clone(),
-    haloOpacity: haloMat.opacity,
+    haloColor: HALO_COLOR.clone(),
+    haloOpacity: 0.16,
     starOpacity: starMat.opacity,
     keyColor: key.color.clone(),
     keyIntensity: key.intensity,
@@ -419,6 +479,8 @@ export function createBaseScene(): BaseScene {
     fogColor: skyFog.color.clone(),
     groundEmissive: groundMaterial.emissive.clone(),
     windowGlow: 1,
+    rimColor: new Color(0.3, 0.44, 0.72),
+    rimIntensity: 0.7,
   };
 
   function applySky(next: SkyState): void {
@@ -433,9 +495,9 @@ export function createBaseScene(): BaseScene {
     const s = next.discRadius / DISC_RADIUS;
     moon.scale.setScalar(s);
     halo.scale.setScalar(s);
-    moonMat.color.copy(next.discColor);
+    moonMat.color.copy(next.discColor).multiplyScalar(DISC_GAIN);
     haloMat.color.copy(next.haloColor);
-    haloMat.opacity = next.haloOpacity;
+    haloMat.opacity = next.haloOpacity * HALO_GAIN;
     starMat.opacity = next.starOpacity;
     // Switched off rather than merely transparent: an additive point at opacity 0.001
     // still costs a draw call for 900 vertices nobody can see (R-9).
@@ -451,6 +513,8 @@ export function createBaseScene(): BaseScene {
     skyFog.color.copy(next.fogColor);
     groundMaterial.emissive.copy(next.groundEmissive);
     windowGlow = next.windowGlow;
+    rimTint.value.copy(next.rimColor);
+    rimStrength.value = next.rimIntensity;
   }
 
   const sky: SkyHandle = {

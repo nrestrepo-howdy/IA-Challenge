@@ -49,7 +49,15 @@ const VERBS = [
     utterance: 'a taller denser city',
     note: 'the authored skyline is rescaled',
     slice: 'structures',
-    check: (control: Metrics, after: Metrics) => expect(after.dark).toBeGreaterThan(control.dark * 1.8),
+    // Was 1.8x. The cinematic pass added rim lighting and bloom, which raise the value
+    // of every building edge — so the same extra geometry now produces fewer pixels
+    // below the silhouette threshold. The metric still measures the right thing; the
+    // multiplier was calibrated against flat shading.
+    //
+    // 1.25x is still a real assertion: a skyline-shift that did nothing lands at 1.0x,
+    // and the measured value with the new renderer is 1.33x. Loosening it further would
+    // turn a measurement into a formality.
+    check: (control: Metrics, after: Metrics) => expect(after.dark).toBeGreaterThan(control.dark * 1.25),
   },
   {
     utterance: 'make it a desert',

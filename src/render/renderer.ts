@@ -11,7 +11,7 @@
  *      fallback that halves the frame rate would otherwise surface as a mysterious
  *      L1 budget failure.
  */
-import { WebGPURenderer } from 'three/webgpu';
+import { ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 
 export interface RendererHandle {
   readonly renderer: WebGPURenderer;
@@ -22,6 +22,25 @@ export interface RendererHandle {
 export async function createRenderer(canvas: HTMLCanvasElement): Promise<RendererHandle> {
   const renderer = new WebGPURenderer({ canvas, antialias: true, forceWebGL: forcedToWebGL() });
   renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio ?? 1, 2));
+
+  // The scene renders with no tone curve at all until this is set, which is why the
+  // moon clipped to a flat white disc and every mid-tone sat in the same two stops.
+  //
+  // ACES over AgX, decided by shooting both. AgX and ACES are near-identical at noon,
+  // but AgX lifts the night: the near-black building faces come up to the same grey as
+  // the sky behind them and the silhouettes the whole scene is built on stop reading.
+  // A world that is at midnight by default cannot afford a curve that flattens
+  // midnight.
+  //
+  // Exposure above 1 because ACES pulls mid-tones down and the authored night is
+  // already dark; 1.45 was picked by shooting dawn, noon, dusk and midnight and taking
+  // the value where midnight has separation and noon still has sky above the buildings
+  // rather than a white ceiling. `post.ts` reads both of these through `renderOutput()`.
+  renderer.toneMapping = ACESFilmicToneMapping;
+  // 1.45 lifted the authored night nicely and over-exposed anything with fog in it.
+  // The night is dark by design and bloom now does the lifting, so exposure only has
+  // to stop ACES crushing the mid-tones.
+  renderer.toneMappingExposure = 1.15;
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
 
   // R-5. Nothing may render before this resolves.

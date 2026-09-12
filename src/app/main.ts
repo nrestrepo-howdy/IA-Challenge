@@ -8,6 +8,7 @@
 import { World } from '../core/world.js';
 import { createPrimitives } from '../world/index.js';
 import { createRenderer } from '../render/renderer.js';
+import { createFramePass } from '../render/post.js';
 import { createBaseScene } from '../render/scene.js';
 import { BINDINGS, type Binding } from '../render/bindings.js';
 import { readPath } from '../harness/l2-contract.js';
@@ -42,6 +43,14 @@ const bindings = new Map<string, Binding>();
 const handle = await createRenderer(canvas);
 status.textContent = `${handle.backend} · ready`;
 document.body.dataset['backend'] = handle.backend;
+
+/**
+ * The frame goes through a post chain rather than straight to the canvas: tone mapping,
+ * bloom, vignette and grain are what separate this world from a screenshot of a
+ * Three.js tutorial. The pass owns the render call so this file does not have to know
+ * whether the chain compiled on this backend (AC-03) — it degrades to a direct render.
+ */
+const frame = createFramePass(handle.renderer, base.scene, base.camera);
 
 function fit(): void {
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -156,7 +165,7 @@ handle.renderer.setAnimationLoop(() => {
     typeof tower === 'number' ? tower / 900 : 0,
   ));
   base.update(world.clock.elapsed);
-  handle.renderer.render(base.scene, base.camera);
+  frame.render();
   drain();
 });
 

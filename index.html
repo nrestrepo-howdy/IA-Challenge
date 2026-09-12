@@ -410,6 +410,36 @@
 
       /* ─── status ────────────────────────────────────────────────────────── */
 
+      /* Bring-your-own-key. Deliberately the quietest thing on screen: it is an
+         invitation on the hosted build and irrelevant on a local one. */
+      #key {
+        position: fixed; right: 24px; bottom: 22px;
+        display: flex; align-items: center; gap: 8px;
+        font: 400 11px/1 var(--mono); color: var(--fg-dim);
+      }
+      #key button {
+        background: none; border: 0; padding: 4px 2px;
+        font: inherit; color: inherit; cursor: pointer;
+        letter-spacing: .1em; text-transform: uppercase;
+        transition: color var(--quick) var(--ease);
+      }
+      #key button:hover { color: var(--fg); }
+      #key input {
+        width: 0; opacity: 0; padding: 0; border: 0;
+        transition: width var(--calm) var(--ease), opacity var(--quick) var(--ease),
+                    padding var(--calm) var(--ease);
+      }
+      #key[data-open="true"] input {
+        width: 264px; opacity: 1; padding: 7px 11px;
+        border: 1px solid var(--hair); border-radius: 7px;
+        background: rgba(10,14,20,.72); backdrop-filter: blur(16px);
+        font: 400 11px/1 var(--mono); color: var(--fg);
+        outline: none;
+      }
+      #key[data-live="true"] button { color: var(--moon); }
+      @media (prefers-reduced-motion: reduce) {
+        #key input { transition: none; }
+      }
       #status {
         position: fixed; left: var(--gap); bottom: 22px; z-index: 4;
         display: inline-flex; align-items: center; gap: 7px;
@@ -497,6 +527,11 @@
       <span class="say-key">⏎</span>
     </div>
     <div id="status" title="copy a link to this world">starting</div>
+    <div id="key">
+      <input id="key-input" type="password" autocomplete="off" spellcheck="false"
+             placeholder="sk-ant-… stays in this tab" />
+      <button id="key-toggle" type="button">use your own key</button>
+    </div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

@@ -55,7 +55,25 @@ returns code. D-2 holds even here; there is no field in the repair schema for so
 Without a key the deterministic floor still adjusts parameters between attempts, so a
 retry is never literally identical to the attempt it follows.
 
-### Why it runs offline
+### Three ways it resolves what you say
+
+| | How | When |
+|---|---|---|
+| **Server proxy** | `npm run dev` with `ANTHROPIC_API_KEY` set. The key stays in the Node process; the browser calls same-origin endpoints | Local development — the right shape |
+| **Your own key** | Paste it into the field bottom-right of the hosted site. It lives in `sessionStorage` for that tab and goes straight from your browser to Anthropic | The published URL, which is static and has no server |
+| **Phrasebook** | Nothing to configure | Always available, and what runs with neither of the above |
+
+The browser path is a real trade and the UI says so rather than burying it: a key in a
+browser is readable by anything else running in that browser. It exists because the
+published site is static, and a public link that could only ever demonstrate keyword
+matching would be demonstrating the wrong thing. The credential is yours, never ours,
+and closing the tab ends the arrangement.
+
+All three feed the **same** resolver, contracts and oracles. A hosted visitor and a
+local developer run identical verification; only the quality of the language
+understanding differs.
+
+### Why it runs offline at all
 
 A closed catalogue of typed primitives (D-2) means the agent **composes rather than
 invents**. Once a brief names primitives that exist and parameters that validated,

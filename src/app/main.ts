@@ -13,6 +13,9 @@ import { createBaseScene } from '../render/scene.js';
 import { BINDINGS, type Binding } from '../render/bindings.js';
 import { readPath } from '../harness/l2-contract.js';
 import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
+import { keywordModel, type LanguageModel } from '../intent/model.js';
+import { ProxiedModel, withFallback } from './proxied-model.js';
+import { browserModel, forgetKey, looksLikeKey, storeKey, storedKey } from './byok.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, prober, type CycleStep } from './cycle.js';
 import { encodeWorld, decodeWorld } from './share.js';
@@ -173,7 +176,46 @@ handle.renderer.setAnimationLoop(() => {
 // state snapshots. The name matches what StateContracts address.
 // The shim modules a candidate imports read the registry from here: a blob module
 // cannot capture a reference from the page that created it.
-const compiler = new CatalogueIntentCompiler();
+/**
+ * Resolution order: the server proxy, then a key the visitor supplied, then keywords.
+ *
+ * This line is the one that was missing for a week. `new CatalogueIntentCompiler()`
+ * with no argument resolves with a keyword table — which is why the product understood
+ * "make it rain" and rejected "make it cozy", and why nothing in the running app ever
+ * called a model at all.
+ *
+ * The proxy is first because a key that never leaves a server is the better
+ * arrangement, and it is what a local checkout gets. The browser key exists because
+ * the published site is static and would otherwise demonstrate a phrasebook. Keywords
+ * are the floor, and the product genuinely works on it — which is why falling back is
+ * announced rather than silent.
+ */
+let announcedFallback = false;
+const proxied = new ProxiedModel();
+
+function resolver(): LanguageModel {
+  const key = storedKey();
+  const upstream: LanguageModel = key
+    ? {
+        async propose(request) {
+          try {
+            return await proxied.propose(request);
+          } catch {
+            return browserModel(key).propose(request);
+          }
+        },
+      }
+    : proxied;
+
+  return withFallback(upstream, keywordModel, (reason) => {
+    // Once per session. Someone who typed something a model would have understood
+    // deserves to know the resolver is offline rather than concluding the world
+    // cannot do it — but not on every verb.
+    if (announcedFallback) return;
+    announcedFallback = true;
+    line(`resolver offline (${reason}) — using the built-in phrasebook`, 'reject');
+  });
+}
 const loader = new BrowserModuleLoader(primitives as never);  // publishes __VERBO_PRIMITIVES__
 const input = document.getElementById('say') as HTMLInputElement;
 const log = document.getElementById('log') as HTMLElement;
@@ -272,7 +314,9 @@ async function say(utterance: string): Promise<SayResult> {
     // Taken before anything is injected, and kept only if something was: an undo step
     // for an utterance that changed nothing would be a lie about what the world holds.
     const before = world.snapshot();
-    const compiled = await compiler.compile(utterance, world);
+    // Built per utterance so a key pasted mid-session takes effect on the next verb
+    // rather than on the next reload.
+    const compiled = await new CatalogueIntentCompiler({ model: resolver() }).compile(utterance, world);
     if (isRejection(compiled)) {
       // AC-17: an impossible request is explained, never silently attempted.
       const explanation = compiled.suggestion ? `${compiled.reason} — ${compiled.suggestion}` : compiled.reason;
@@ -320,6 +364,57 @@ async function say(utterance: string): Promise<SayResult> {
     input.focus();
   }
 }
+
+/**
+ * The key affordance.
+ *
+ * Stated rather than hidden: a key in a browser is readable by anything else running
+ * in that browser, and the local `npm run dev` path — where it stays on a server —
+ * exists for anyone who would rather not. This is here so the published, static site
+ * can demonstrate the system it describes instead of a phrasebook.
+ */
+const keyRow = document.getElementById('key') as HTMLElement;
+const keyInput = document.getElementById('key-input') as HTMLInputElement;
+const keyToggle = document.getElementById('key-toggle') as HTMLButtonElement;
+
+function paintKeyState(): void {
+  const live = storedKey() !== null;
+  keyRow.dataset['live'] = String(live);
+  keyToggle.textContent = live ? 'key active · forget' : 'use your own key';
+}
+
+keyToggle.addEventListener('click', () => {
+  if (storedKey()) {
+    forgetKey();
+    keyRow.dataset['open'] = 'false';
+    keyInput.value = '';
+    paintKeyState();
+    line('key forgotten — back to the built-in phrasebook', 'info');
+    return;
+  }
+  const open = keyRow.dataset['open'] !== 'true';
+  keyRow.dataset['open'] = String(open);
+  if (open) keyInput.focus();
+});
+
+keyInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const value = keyInput.value.trim();
+  if (!looksLikeKey(value)) {
+    // Shape only. Whether it works is answered by the first call, not by a regex —
+    // so this rejects an obvious paste error and never claims the key is good.
+    line('that does not look like an Anthropic key (sk-ant-…)', 'reject');
+    return;
+  }
+  storeKey(value);
+  keyInput.value = '';
+  keyRow.dataset['open'] = 'false';
+  announcedFallback = false;   // a new key deserves a fresh chance to be announced
+  paintKeyState();
+  line('key stored for this tab — the resolver will use it on the next verb', 'accept');
+});
+
+paintKeyState();
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && input.value.trim()) void say(input.value.trim());

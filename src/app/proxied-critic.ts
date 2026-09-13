@@ -15,23 +15,35 @@
  * that pretends otherwise (D-1, AC-11).
  */
 import type { Frame, VisualCritic } from '../harness/l3-perceptual.js';
-import { encodePng, toBase64 } from '../harness/png.js';
+import { toBase64 } from '../harness/png.js';
 
 export class ProxiedVisualCritic implements VisualCritic {
   async judge(frame: Frame, request: string): Promise<{ satisfied: boolean; note: string }> {
-    const png = encodePng(frame);
+    // The frame crosses as pixels, not as a PNG of pixels.
+    //
+    // It used to cross encoded, and the receiving end read those bytes back into
+    // `frame.data` as though they were RGBA and encoded them again. The model was
+    // shown a picture of a compressed byte stream and reported, accurately, "nothing
+    // but horizontal noise bands on a white background" — of a night city that had
+    // rendered correctly. Nothing threw, because a 160x90 frame is 57,600 bytes and
+    // its PNG was 57,758: close enough to fill the array and never look wrong.
+    //
+    // `Frame` is already the shape both sides agree on, so sending it is both simpler
+    // and the reason it cannot happen again — there is now exactly one encoder, on
+    // the side that talks to the model.
     const res = await fetch('/api/critique', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        width: frame.width, height: frame.height, request,
-        pixels: toBase64(png),
+        width: frame.width,
+        height: frame.height,
+        request,
+        // A view, not a copy: `Frame.data` is clamped and `toBase64` takes plain bytes.
+        pixels: toBase64(new Uint8Array(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength)),
       }),
     });
     if (!res.ok) {
       const detail = (await res.json().catch(() => ({}))) as { error?: string };
-      // Thrown, not swallowed into a pass. The cycle catches this and says appearance
-      // went unjudged, which is a different statement from "it looked fine".
       throw new Error(detail.error ?? `critic unavailable (${res.status})`);
     }
     return (await res.json()) as { satisfied: boolean; note: string };

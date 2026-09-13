@@ -104,7 +104,11 @@ function capture(): Promise<ImageData> {
 function drain(): void {
   if (pending.length === 0) return;
   scratch ??= document.createElement('canvas');
-  const w = 160, h = 90;
+  // 512x288, not 160x90. The small frame was sized for the L1 before/after difference,
+  // which only needs enough pixels to tell "something changed" from "nothing did". L3
+  // is asked whether a frame reads as a storm at night, and a thumbnail two fingers
+  // wide cannot answer that — rain becomes noise and a skyline becomes a smudge.
+  const w = 512, h = 288;
   scratch.width = w; scratch.height = h;
   const ctx = scratch.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(canvas, 0, 0, w, h);

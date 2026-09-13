@@ -285,7 +285,7 @@ export function createBaseScene(): BaseScene {
     color: DISC_COLOR.clone().multiplyScalar(DISC_GAIN), fog: false,
   });
   const moon = new Mesh(new SphereGeometry(DISC_RADIUS, 24, 16), moonMat);
-  moon.position.set(-620, 430, -1350);
+  moon.position.set(-430, 330, -900);
   scene.add(moon);
   const haloMat = new MeshBasicMaterial({
     color: HALO_COLOR.clone(), transparent: true, opacity: 0.16 * HALO_GAIN,
@@ -571,7 +571,20 @@ export function createBaseScene(): BaseScene {
     reset: () => applySky(authoredSky),
   };
 
-  const camera = new PerspectiveCamera(48, 1, 0.5, 4000);
+  /**
+   * Composition, which is what was actually wrong.
+   *
+   * The camera sat at eye level in the middle of a uniform ring of buildings, orbiting
+   * slowly and looking at nothing in particular. Research on why amateur scenes read
+   * as amateur is blunt about both halves: competing focal points split attention so
+   * every frame needs one primary subject, and everything shot at eye level with
+   * centred framing produces flat visual storytelling.
+   *
+   * So: a low camera looking *up* — the angle that makes architecture feel tall — and
+   * a look-at target biased off-centre so the moon lands near a thirds intersection
+   * rather than dead middle. No new geometry, no new shader.
+   */
+  const camera = new PerspectiveCamera(54, 1, 0.5, 4000);
   let dolly = 165;
   let framing = 0;
 
@@ -597,15 +610,20 @@ export function createBaseScene(): BaseScene {
       // A slow orbit, low to the ground so the skyline crosses the moon. Motion in the
       // base scene is what makes an injected change read as an addition to a living
       // world rather than a page that swapped itself out.
-      const a = elapsed * 0.028;
+      const a = elapsed * 0.021;
       // The frame reframes itself. When the world grows the camera pulls back and up,
       // because a world that can be reshaped needs a viewpoint that survives being
       // reshaped -- otherwise the first structural verb puts the camera inside a wall.
       // Eased, so the move reads as the world settling rather than a cut.
       const want = 150 + framing * 130;
       dolly += (want - dolly) * 0.02;
-      camera.position.set(Math.sin(a) * dolly, 26 + dolly * 0.16 + Math.sin(elapsed * 0.09) * 4, Math.cos(a) * dolly);
-      camera.lookAt(0, 50 + framing * 70, 0);
+      // Low, and looking up. 12 units is street level against 300-unit towers, which
+      // is the whole point: at 26 the camera was level with nothing and taller than
+      // the low-rises, so the skyline read as a model on a table.
+      camera.position.set(Math.sin(a) * dolly, 20 + dolly * 0.09 + Math.sin(elapsed * 0.09) * 2.5, Math.cos(a) * dolly);
+      // Biased off-centre and high, so the subject sits near a thirds intersection and
+      // the frame has somewhere for the eye to travel.
+      camera.lookAt(Math.sin(a + 0.42) * 70, 78 + framing * 70, Math.cos(a + 0.42) * 70);
       winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;
     },
   };

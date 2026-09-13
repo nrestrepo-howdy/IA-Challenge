@@ -81,9 +81,14 @@
         top: 0; height: 230px;
         background: linear-gradient(to bottom, rgba(5, 7, 11, 0.5), rgba(5, 7, 11, 0.22) 46%, transparent);
       }
+      /* Deeper and taller than it was. The camera now looks *up* from street level,
+         so the lower third of the frame is lit towers rather than dark ground — the
+         scrim was tuned against a world that no longer exists, and the prose was
+         sitting on windows. Raised rather than brightening the type, which is the
+         same call made when this scrim was first introduced. */
       .scrim.bottom {
-        bottom: 0; height: 340px;
-        background: linear-gradient(to top, rgba(5, 7, 11, 0.84), rgba(5, 7, 11, 0.56) 32%, rgba(5, 7, 11, 0.18) 66%, transparent);
+        bottom: 0; height: 460px;
+        background: linear-gradient(to top, rgba(4, 6, 10, 0.94), rgba(4, 6, 10, 0.78) 26%, rgba(4, 6, 10, 0.42) 58%, rgba(4, 6, 10, 0.12) 82%, transparent);
       }
 
       .panel {

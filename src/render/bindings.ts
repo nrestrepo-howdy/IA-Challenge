@@ -876,7 +876,11 @@ export const searchlightBinding: BindingFactory = (scene, statePath) => {
 
   // Unit cone: apex-ish at the lamp, mouth at y = 1. Narrow at the base rather than a
   // true point, so the lamp itself has a visible source rather than vanishing.
-  const geometry = new CylinderGeometry(1, 0.02, 1, 22, 1, true);
+  // Wider at the source and far softer along its length. A cone at uniform brightness
+  // reads as a white polygon, not as light: a real beam is bright where it leaves the
+  // lamp and dissolves into the haze, and that falloff is the whole illusion. More
+  // radial segments because the silhouette of the cone is what gives it away.
+  const geometry = new CylinderGeometry(1, 0.015, 1, 40, 1, true);
   geometry.translate(0, 0.5, 0);
   const position = geometry.getAttribute('position') as BufferAttribute;
   const tint = new Float32Array(position.count * 3);
@@ -896,8 +900,11 @@ export const searchlightBinding: BindingFactory = (scene, statePath) => {
   // beam is quadratic, so only the first fraction of it bleeds -- which is what a
   // beam in air actually does.
   const material = new MeshBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0, color: new Color(4, 4, 4),
-    blending: AdditiveBlending, depthWrite: false, fog: false, side: DoubleSide,
+    // Dimmer than it was, and depth-tested so towers occlude it. At full brightness
+    // with additive blending the cone saturated to white wherever two beams crossed,
+    // which is the single most artificial thing that was in frame.
+    vertexColors: true, transparent: true, opacity: 0, color: new Color(1.5, 1.6, 1.9),
+    blending: AdditiveBlending, depthWrite: false, fog: true, side: DoubleSide,
   });
 
   const beams: Mesh[] = [];

@@ -30,10 +30,14 @@ A claim about how the work was done is only worth what its evidence is worth.
 ## Then check for secrets
 
 ```
-git ls-files | xargs grep -lE "sk-ant-[A-Za-z0-9_-]{20}|gh[pousr]_[A-Za-z0-9]{20}|AKIA[A-Z0-9]{16}"
+git ls-files | xargs grep -ohE "sk-ant-[A-Za-z0-9_-]{20}|gh[pousr]_[A-Za-z0-9]{20}|AKIA[A-Z0-9]{16}" \
+  | grep -vE "0000|xxxx|abcdefg" | sort -u
 ```
 
-Must print nothing. `.verbo/events.jsonl` is committed on purpose — evidence that lives
+Must print nothing. The second filter drops obvious placeholders — `tests/app/byok.test.ts`
+carries `sk-ant-0000…` and `sk-ant-xxxx…` on purpose, because the paste-your-own-key path
+has to be tested with something. A check that cries wolf every run is a check people stop
+reading, which is worse than not having one. `.verbo/events.jsonl` is committed on purpose — evidence that lives
 only on one machine is a claim with a script attached — and it records every command,
 which is exactly where a key ends up. Fifty-eight lines held one before
 `.claude/hooks/log-event.sh` started stripping them at write time.

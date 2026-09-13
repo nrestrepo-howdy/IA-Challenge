@@ -73,10 +73,19 @@ for (const r of results) appendFileSync(file, JSON.stringify(r) + '\n');
 // A disclosure case must be accepted *and* say what it could not do. Counting it as
 // a plain success would let the system regress back to silent partial fulfilment --
 // the exact failure this category was created to catch.
+//
+// And the mirror of it: a success case must be accepted *silently*. Disclosure is a
+// claim of failure, so a request the catalogue fully expresses that comes back saying
+// it could not is wrong in the direction nobody checks. The 13 September run answered
+// "a storm" with night, rain, wind and lightning -- and reported "a storm" as
+// unaddressed, because no primitive happens to be named after it. Under the old rule
+// that scored as a clean pass; there is no reading of it that is one.
 const agreed = results.filter((r) =>
   r.group === 'expectDisclosure'
     ? r.ok && r.unaddressed.length > 0
-    : r.ok === r.expected);
+    : r.expected
+      ? r.ok && r.unaddressed.length === 0
+      : r.ok === r.expected);
 const times = results.filter((r) => r.ok).map((r) => r.ms).sort((a, b) => a - b);
 const p = (q) => times.length ? times[Math.min(times.length - 1, Math.floor(times.length * q))] : 0;
 
@@ -96,7 +105,7 @@ if (wrong.length) {
   console.log(`\n  disagreements (${wrong.length}):`);
   for (const r of wrong) {
     const want = r.group === 'expectDisclosure' ? 'expected acceptance with a disclosure'
-      : r.expected ? 'expected success' : 'expected rejection';
+      : r.expected ? 'expected success with nothing disclosed' : 'expected rejection';
     const got = r.ok
       ? `accepted${r.unaddressed.length ? ` disclosing ${JSON.stringify(r.unaddressed)}` : ' silently'}`
       : `rejected at ${r.rejectedAt}`;

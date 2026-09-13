@@ -99,7 +99,7 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       additionalProperties: false,
     },
     defaults: { count: 4000, speed: 24, spread: 120 },
-    keywords: ['rain', 'raining', 'rainy', 'downpour', 'drizzle', 'shower', 'storm', 'precipitation'],
+    keywords: ['rain', 'raining', 'rainy', 'downpour', 'drizzle', 'shower', 'storm', 'stormy', 'precipitation'],
     fields: [
       { key: 'particles', role: 'constant', fromParam: 'count' },
       { key: 'fallSpeed', role: 'constant', fromParam: 'speed' },
@@ -149,7 +149,7 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       additionalProperties: false,
     },
     defaults: { direction: [0.7, 0, 0.7], strength: 6 },
-    keywords: ['wind', 'windy', 'breeze', 'gust', 'gale', 'blow', 'blowing', 'storm'],
+    keywords: ['wind', 'windy', 'breeze', 'gust', 'gale', 'blow', 'blowing', 'storm', 'stormy'],
     fields: [
       {
         key: 'direction',
@@ -229,7 +229,12 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       additionalProperties: false,
     },
     defaults: { intensity: 6, decay: 3.5, frequency: 0.35 },
-    keywords: ['lightning', 'thunder', 'thunderstorm', 'thunderbolt', 'bolt', 'flash', 'flashes', 'flashing', 'strike', 'strikes'],
+    // 'storm' and 'stormy' belong here as much as on rain and wind. A storm the
+      // keyword path answered with rain and wind but no lightning was a storm missing
+      // the half that makes it one — and because 'stormy' matched nothing at all, the
+      // resolver then disclosed the word, reporting failure for the request it had
+      // just half-answered.
+      keywords: ['lightning', 'thunder', 'thunderstorm', 'thunderbolt', 'bolt', 'flash', 'flashes', 'flashing', 'strike', 'strikes', 'storm', 'stormy'],
     fields: [
       { key: 'peak', role: 'constant', fromParam: 'intensity' },
       { key: 'decay', role: 'constant', fromParam: 'decay' },

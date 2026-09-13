@@ -13,6 +13,14 @@
  * both.
  */
 const LEXICON: Readonly<Record<string, string>> = {
+  // Function words, mapped rather than listed as filler. FILLER is English and already
+  // holds `the`, `of`, `with`; translating into it means one list rather than two, and
+  // the one that exists is the one already being maintained.
+  el: 'the', la: 'the', los: 'the', las: 'the', un: 'a', una: 'a', unos: 'a', unas: 'a',
+  de: 'of', del: 'of', en: 'in', con: 'with', y: 'and', o: 'or',
+  sobre: 'over', para: 'for', por: 'for', muy: 'very', más: 'more', mas: 'more',
+  quiero: 'make', quiere: 'make', hazlo: 'make', haz: 'make', pon: 'put', ponle: 'put',
+  ver: 'see', mira: 'see', dame: 'give',
   // weather
   lluvia: 'rain', llueva: 'rain', llover: 'rain', lloviendo: 'rain', llueve: 'rain',
   nieve: 'snow', nieva: 'snow', nevando: 'snow', nevada: 'snow',
@@ -24,8 +32,8 @@ const LEXICON: Readonly<Record<string, string>> = {
   // time and light
   día: 'day', dia: 'day', diurno: 'day',
   noche: 'night', nocturno: 'night', oscuro: 'night', oscuridad: 'night',
-  amanecer: 'dawn', alba: 'dawn', madrugada: 'dawn',
-  atardecer: 'sunset', ocaso: 'sunset', anochecer: 'dusk', crepúsculo: 'dusk', crepusculo: 'dusk',
+  amanecer: 'dawn', amanece: 'dawn', amaneciendo: 'dawn', alba: 'dawn', madrugada: 'dawn',
+  atardecer: 'sunset', ocaso: 'sunset', anochecer: 'dusk', anochece: 'dusk', crepúsculo: 'dusk', crepusculo: 'dusk',
   mediodía: 'noon', mediodia: 'noon', tarde: 'afternoon', mañana: 'morning', manana: 'morning',
   luz: 'light', luces: 'light', iluminación: 'light', iluminacion: 'light',
   sol: 'day', luna: 'night', estrellas: 'night',
@@ -69,12 +77,31 @@ const LEXICON: Readonly<Record<string, string>> = {
  * untouched. Additive by design: an English utterance passes through unchanged, and a
  * mixed one ("make it acogedor") resolves too.
  */
-export function toCatalogueVocabulary(utterance: string): string {
-  const mapped = utterance
+/**
+ * The translated form alone, for deciding what went unaddressed.
+ *
+ * `toCatalogueVocabulary` deliberately keeps both the original and the translation so
+ * matching sees each, and that is right for matching and wrong for disclosure: every
+ * Spanish word the lexicon *did* translate was still present in its original spelling,
+ * matched nothing, and was reported as something the catalogue could not express.
+ * "una noche de tormenta" rendered night, rain, wind and lightning and then told the
+ * user it could not do `noche` or `tormenta`. The owner of this project types Spanish,
+ * so this was the failure mode on the path most likely to be used.
+ *
+ * Every word here is either translated — and can therefore match — or left alone, and
+ * a word left alone genuinely is unknown. That makes this the honest basis for the
+ * claim, where the doubled text is the useful basis for the search.
+ */
+export function toTranslatedVocabulary(utterance: string): string {
+  return utterance
     .toLowerCase()
     .split(/([^\p{L}\p{N}]+)/u)
     .map((part) => LEXICON[part] ?? part)
     .join('');
+}
+
+export function toCatalogueVocabulary(utterance: string): string {
+  const mapped = toTranslatedVocabulary(utterance);
   // Both are kept: the original may contain an English keyword the lexicon would
   // never have touched, and dropping it to make room for a translation would trade one
   // rejection for another.

@@ -14,7 +14,7 @@
  */
 import type { PrimitiveSpec } from './catalogue.js';
 import { matchMood } from './moods.js';
-import { toCatalogueVocabulary } from './es.js';
+import { toCatalogueVocabulary, toTranslatedVocabulary } from './es.js';
 
 export interface ModelRequest {
   readonly utterance: string;
@@ -178,7 +178,10 @@ export const keywordModel: LanguageModel = {
     // offline path is what a judge runs. So the keyword resolver computes it too --
     // less precisely than a model would, and honestly.
     const matched = new Set(hits.flatMap((h) => h.spec.keywords));
-    const unaddressed = [...words].filter(
+    // Over the translated text, not the doubled one the search used: see
+    // `toTranslatedVocabulary`. Disclosing a word *because* it was translated is a
+    // claim of failure made about the part that worked.
+    const unaddressed = [...tokenize(toTranslatedVocabulary(request.utterance))].filter(
       (w) => !matched.has(w) && !FILLER.has(w) && w.length > 2,
     );
 
@@ -203,7 +206,7 @@ const FILLER = new Set([
   'the', 'and', 'with', 'for', 'let', 'make', 'add', 'put', 'set', 'give', 'this',
   'that', 'some', 'more', 'less', 'very', 'please', 'can', 'you', 'now', 'here',
   'world', 'scene', 'it', 'its', 'a', 'an', 'to', 'of', 'in', 'on', 'up', 'down',
-  'together', 'also', 'then', 'again',
+  'together', 'also', 'then', 'again', 'see', 'show', 'want', 'like', 'or', 'over', 'from', 'into',
 ]);
 
 /**

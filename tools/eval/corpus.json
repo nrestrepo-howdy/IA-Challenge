@@ -10,7 +10,6 @@
     "dim the light",
     "make the light move",
     "rain and fog together",
-    "thunder and lightning",
     "make it day",
     "make it night",
     "sunset",
@@ -27,7 +26,8 @@
     "make it rain money",
     "make it rain frogs",
     "add pink neon fog",
-    "raise a tower made of glass"
+    "raise a tower made of glass",
+    "thunder and lightning"
   ],
   "expectRejection": [
     "summon a sentient octopus",

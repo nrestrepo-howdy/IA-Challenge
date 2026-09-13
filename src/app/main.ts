@@ -16,6 +16,7 @@ import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { keywordModel, type LanguageModel } from '../intent/model.js';
 import { ProxiedModel, withFallback } from './proxied-model.js';
 import { browserModel, forgetKey, looksLikeKey, storeKey, storedKey } from './byok.js';
+import { ProxiedVisualCritic } from './proxied-critic.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, prober, type CycleStep } from './cycle.js';
 import { encodeWorld, decodeWorld } from './share.js';
@@ -193,6 +194,20 @@ handle.renderer.setAnimationLoop(() => {
 let announcedFallback = false;
 const proxied = new ProxiedModel();
 
+/**
+ * L3's critic, and the reason it is constructed once rather than per verb.
+ *
+ * The layer has existed since day nine and had never judged a frame: the class was
+ * written, tested against a stub, and never reachable from here. Every verb logged
+ * "no visual critic configured, so appearance was not judged" — honest, and an
+ * admission that a quarter of the harness was decorative.
+ *
+ * Still advisory. `isInjectable()` decides; this runs after the winner is mounted and
+ * cannot veto (D-1, AC-11). A critic that throws or is unreachable produces a step
+ * naming what went unjudged, never a pass.
+ */
+const critic = new ProxiedVisualCritic();
+
 function resolver(): LanguageModel {
   const key = storedKey();
   const upstream: LanguageModel = key
@@ -344,7 +359,7 @@ async function say(utterance: string): Promise<SayResult> {
       panel.step(s);
       // Generation notices belong in the panel's lanes, not duplicated in the log.
       if (!(s.candidate && s.kind === 'info')) line(s.text, s.kind);
-    });
+    }, { critic });
     panel.end();
     line(outcome.ok ? `done in ${(outcome.ms / 1000).toFixed(1)}s` : (outcome.reason ?? 'failed'),
       outcome.ok ? 'accept' : 'reject');

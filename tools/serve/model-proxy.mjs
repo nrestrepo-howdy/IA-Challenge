@@ -51,6 +51,17 @@ export function modelProxy() {
             return;
           }
 
+          if (req.url.startsWith('/api/figure')) {
+            const { ClaudeFigureAuthor } = await import('../../src/intent/figure-model.ts');
+            const figure = await new ClaudeFigureAuthor({ client }).author(String(body.utterance ?? ''));
+            res.writeHead(200, JSON_HEADERS);
+            // `null` is a real answer — the request was not a thing that can be built
+            // out of shapes — and it has to survive the wire as one rather than as a
+            // failure the browser has to guess about.
+            res.end(JSON.stringify({ figure }));
+            return;
+          }
+
           if (req.url.startsWith('/api/critique')) {
             const { ClaudeVisualCritic } = await import('../../src/harness/claude-critic.ts');
             const frame = {

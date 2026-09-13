@@ -17,6 +17,7 @@ import { keywordModel, type LanguageModel } from '../intent/model.js';
 import { lastResolver, ProxiedModel, withFallback } from './proxied-model.js';
 import { browserModel, forgetKey, looksLikeKey, storeKey, storedKey } from './byok.js';
 import { ProxiedVisualCritic } from './proxied-critic.js';
+import { ProxiedFigureAuthor } from './proxied-figure.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, prober, type CycleStep } from './cycle.js';
 import { encodeWorld, decodeWorld } from './share.js';
@@ -214,6 +215,9 @@ const proxied = new ProxiedModel();
  */
 const critic = new ProxiedVisualCritic();
 
+/** Writes a rig when the catalogue cannot. Unreachable without a server key, by design. */
+const figureAuthor = new ProxiedFigureAuthor();
+
 function resolver(): LanguageModel {
   const key = storedKey();
   const upstream: LanguageModel = key
@@ -346,7 +350,14 @@ async function say(utterance: string): Promise<SayResult> {
     const before = world.snapshot();
     // Built per utterance so a key pasted mid-session takes effect on the next verb
     // rather than on the next reload.
-    const compiled = await new CatalogueIntentCompiler({ model: resolver() }).compile(utterance, world);
+    const compiled = await new CatalogueIntentCompiler({
+      model: resolver(),
+      // Always supplied; it is the endpoint that decides whether there is a key, and it
+      // answers 503 with a reason when there is not. The compiler catches that and falls
+      // back to the written rigs, so the freeform path degrades the same way everything
+      // else here does — to something smaller that still works.
+      figureAuthor: figureAuthor,
+    }).compile(utterance, world);
     if (isRejection(compiled)) {
       // AC-17: an impossible request is explained, never silently attempted.
       const explanation = compiled.suggestion ? `${compiled.reason} — ${compiled.suggestion}` : compiled.reason;

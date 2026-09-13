@@ -370,9 +370,28 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     // already on screen makes the verb read as a no-op even when it worked.
     defaults: { color: [0.46, 0.36, 0.24], roughness: 0.92 },
     keywords: [
-      'ground', 'floor', 'terrain', 'desert', 'sand', 'sandy', 'dunes', 'obsidian',
+      // 'tint' is here because the Spanish lexicon maps `rojo` to `ground-tint` and the
+      // tokenizer splits on the hyphen: the second half matched nothing, so a request
+      // for a red ground disclosed "tint" — a word the user never said and the system
+      // had in fact addressed.
+      'ground', 'floor', 'terrain', 'tint', 'desert', 'sand', 'sandy', 'dunes', 'obsidian',
       'asphalt', 'concrete', 'grass', 'soil', 'dirt', 'rock',
     ],
+    // Without these, "make the ground red" tinted the ground to a default that was not
+    // red and reported nothing missing — the silent partial fulfilment the disclosure
+    // field exists to prevent, in the one primitive whose entire job is a colour.
+    paramHints: {
+      red: { color: [0.42, 0.07, 0.05] }, crimson: { color: [0.36, 0.05, 0.08] },
+      blue: { color: [0.06, 0.11, 0.3] }, green: { color: [0.08, 0.24, 0.1] },
+      gold: { color: [0.42, 0.3, 0.08] }, golden: { color: [0.42, 0.3, 0.08] },
+      amber: { color: [0.45, 0.24, 0.05] }, white: { color: [0.62, 0.64, 0.68] },
+      black: { color: [0.015, 0.018, 0.022] }, grey: { color: [0.2, 0.21, 0.23] },
+      gray: { color: [0.2, 0.21, 0.23] },
+      desert: { color: [0.46, 0.36, 0.22], roughness: 0.92 },
+      sand: { color: [0.46, 0.36, 0.22], roughness: 0.92 },
+      obsidian: { color: [0.02, 0.02, 0.03], roughness: 0.18 },
+      grass: { color: [0.08, 0.2, 0.09], roughness: 0.85 },
+    },
     fields: [
       { key: 'color', role: 'vector', fromParam: 'color', bounds: UNIT_RGB },
       { key: 'roughness', role: 'constant', fromParam: 'roughness' },

@@ -177,7 +177,16 @@ export const keywordModel: LanguageModel = {
     // on the paid path is a property the offline test suite cannot defend, and the
     // offline path is what a judge runs. So the keyword resolver computes it too --
     // less precisely than a model would, and honestly.
-    const matched = new Set(hits.flatMap((h) => h.spec.keywords));
+    // Keywords, *and* the hint words that actually set a parameter.
+    //
+    // A word can address a request without being a keyword: `red` is not what selects
+    // `ground-tint` — `ground` is — but it is what decides the colour, and a resolver
+    // that consumed it and then reported it as unaddressed is claiming failure for the
+    // half that worked. The two sets are different jobs and both count.
+    const matched = new Set(hits.flatMap((h) => [
+      ...h.spec.keywords,
+      ...Object.keys(h.spec.paramHints ?? {}).filter((w) => words.has(w)),
+    ]));
     // Over the translated text, not the doubled one the search used: see
     // `toTranslatedVocabulary`. Disclosing a word *because* it was translated is a
     // claim of failure made about the part that worked.

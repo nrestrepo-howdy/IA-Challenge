@@ -66,8 +66,15 @@ const LEXICON: Readonly<Record<string, string>> = {
   // not. "hazlo rojo" is a ground tint; "cambia el cielo" is a time of day. Rejecting
   // these taught the user the world was broken when it simply had a different name for
   // what they wanted.
-  rojo: 'ground-tint', roja: 'ground-tint', azul: 'ground-tint', verde: 'ground-tint',
-  dorado: 'ground-tint', color: 'ground-tint', colores: 'ground-tint',
+  // Mapped to "<colour> ground" rather than to 'ground-tint'. The old mapping named the
+  // primitive and lost the request: `hazlo rojo` became "make ground-tint", which
+  // matched the primitive, carried no colour into it, and disclosed nothing — the ground
+  // changed to a default that was not red, silently. Naming the colour keeps the word
+  // that decides the parameter alive for `paramHints` to read.
+  rojo: 'red ground', roja: 'red ground', azul: 'blue ground', verde: 'green ground',
+  dorado: 'gold ground', dorada: 'gold ground', blanco: 'white ground',
+  negro: 'black ground', gris: 'grey ground', ambar: 'amber ground',
+  color: 'ground', colores: 'ground',
   cielo: 'day', celeste: 'day',
   algo: 'surprise me', cualquier: 'surprise me', lo: '', que: '',
 };

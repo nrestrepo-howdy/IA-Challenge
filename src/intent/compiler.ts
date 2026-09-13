@@ -27,6 +27,7 @@ import { CATALOGUE, findPrimitive, type PrimitiveSpec } from './catalogue.js';
 import { buildContract, buildWitness, type Selection } from './contract.js';
 import { toTranslatedVocabulary } from './es.js';
 import { matchFigure, type FigureSpec } from './figures.js';
+import type { FigureAuthor } from './figure-model.js';
 import { keywordModel, parseProposal, type LanguageModel, type ModelRequest } from './model.js';
 import { validateParams } from './schema.js';
 
@@ -69,6 +70,15 @@ export function isRejection(r: CompiledIntent | IntentRejection): r is IntentRej
 
 export interface CompilerOptions {
   readonly model?: LanguageModel;
+  /**
+   * Writes a rig for a request the catalogue cannot express.
+   *
+   * Optional, and absent by default, which is what keeps the whole pipeline provable
+   * with no key and no network: without one the freeform path falls back to the three
+   * rigs in `figures.ts` and then to an honest refusal. With one, the same path answers
+   * anything that can be built out of shapes.
+   */
+  readonly figureAuthor?: FigureAuthor;
   /** Injectable so a test can prove an unsound catalogue entry is refused, not shipped. */
   readonly catalogue?: readonly PrimitiveSpec[];
 }
@@ -77,9 +87,12 @@ export class CatalogueIntentCompiler implements IntentCompiler {
   private readonly model: LanguageModel;
   private readonly catalogue: readonly PrimitiveSpec[];
 
+  private readonly figureAuthor: FigureAuthor | null;
+
   constructor(options: CompilerOptions = {}) {
     this.model = options.model ?? keywordModel;
     this.catalogue = options.catalogue ?? CATALOGUE;
+    this.figureAuthor = options.figureAuthor ?? null;
   }
 
   async compile(utterance: string, world: WorldHandle): Promise<CompiledIntent | IntentRejection> {
@@ -114,7 +127,23 @@ export class CatalogueIntentCompiler implements IntentCompiler {
     // rig of typed shapes and a pose function, verified by the same four layers as
     // everything else. It is added *alongside* whatever the catalogue matched, so "a
     // dog in the rain" is one world and not a choice between two.
-    const figure = matchFigure(toTranslatedVocabulary(goal));
+    let figure = matchFigure(toTranslatedVocabulary(goal));
+
+    // The written rigs answer first because they are free and deterministic; the author
+    // is asked only when they do not, and only when the resolver has already said the
+    // catalogue fell short — either it matched nothing at all, or it matched something
+    // and left part of the request on the floor. "a red car in the rain" is the case
+    // that makes the second condition necessary: rain resolves, the car does not, and
+    // asking only on a total miss would answer half of it and call that success.
+    if (!figure && this.figureAuthor && (parsed.proposal.primitives.length === 0 || (parsed.proposal.unaddressed ?? []).length > 0)) {
+      try {
+        figure = await this.figureAuthor.author(goal);
+      } catch {
+        // A failed author is not a failed request: the catalogue's answer, and the
+        // disclosure of what it could not reach, are still the right output.
+        figure = null;
+      }
+    }
 
     if (parsed.proposal.primitives.length === 0 && !figure) {
       return reject(

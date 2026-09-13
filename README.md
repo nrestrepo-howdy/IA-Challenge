@@ -88,6 +88,13 @@ runs it in a worker with its capabilities revoked, L2 asserts the rig actually *
 like what was asked for. Every value a pose returns is clamped on the way into state, so
 the worst a bad one can do is stand still in the wrong place.
 
+Three rigs ship written by hand, so the path works with no key at all. With one, the
+model writes the rig: `/api/figure` asks it for a part list and a `pose` body for
+anything the catalogue left on the floor — which is why the author is consulted when a
+request is *partly* met, not only when it misses entirely. "un coche rojo cruzando la
+plaza" resolves the red ground from the catalogue and the car from the author, and if
+the author is unreachable the request still returns the ground and discloses the car.
+
 The catalogue stays closed underneath it: "make it rain" still resolves to rain and
 nothing else, a rig cannot be reached by asking for weather, and a request neither a
 primitive nor a rig can meet is still refused.
@@ -198,7 +205,7 @@ needed to read the code, run the world, or run any test.
 
 | Variable | Required for |
 |----------|--------------|
-| `ANTHROPIC_API_KEY` | Model-backed utterance resolution, the L3 visual critic, and model-backed repair. Each has a deterministic fallback; none is required |
+| `ANTHROPIC_API_KEY` | Model-backed utterance resolution, the rig author, the L3 visual critic, and model-backed repair. Each has a deterministic fallback; none is required |
 
 ---
 

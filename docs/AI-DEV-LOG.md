@@ -1071,6 +1071,57 @@ more honest claim than the one I would have made this morning.
 
 ---
 
+## 13 Sep — I checked my own citation and it did not say what I said it said
+
+The most load-bearing sentence in this project is R-2. Every argument for the
+architecture runs through it: L2 decides correctness, L3 is advisory, `inject()` will not
+compile with a verdict that failed the authoritative layers — all of it because external
+visual scoring was supposed to have been *measured* as insufficient.
+
+R-2 claimed three numbers from WorldCoder-Bench: a Kendall τb of −0.02 over 1,434 pairs,
+an agentic visual evaluator costing ~400× more, and that evaluator passing 45.6% of
+severely defective outputs.
+
+I fetched the paper. **None of the three is in it.** Not in the abstract, not in the full
+text. The benchmark is real (arXiv 2606.01869), and R-1's figures check out exactly —
+27.8% verification coverage on WorldCoder-Core, 19.9% on WorldCoder-Robust. R-2's did
+not exist.
+
+This is the worst class of defect a submission can carry. A reviewer who checks one
+citation and finds it unsupported does not check the second; they discount everything.
+And it would have been reasonable of them: a sourced constraint is a promise that
+somebody looked, and I had put a citation next to a number I had not verified.
+
+**The correction makes the argument better, which is the part worth sitting with.** What
+the paper does say is:
+
+> failures dominated by state-schema drift and broken interaction chains rather than
+> missing scene elements
+
+That is a stronger reason to demote the visual critic than the one I invented. The
+fabricated version argued *the judge is unreliable*. The real finding argues something
+sharper: **the failures are not where a picture can show them.** Missing scene elements
+are exactly what looking is good at, and the measurement says that is not the common
+failure. The common failure is state that has drifted out of agreement with what the
+controls believe, and it is invisible to a critic by construction — a world can look
+perfectly like rain while its hidden state says nothing is falling.
+
+And the paper's own protocol, StateProbe, verifies hidden runtime state with
+*mutation-hardened contracts*. That is the same design this project arrived at for L2 and
+`hardenContract`, which I had been presenting as an inference from the numbers rather
+than as convergence with the benchmark's own method. The honest version is the better
+story and I had papered over it with a statistic.
+
+R-2 is rewritten in the SPEC, and with it D-1's rationale, the README, SYSTEM.md and the
+four source files whose docstrings repeated the numbers. Nothing in the code changed:
+the architecture was right for a reason I had stated wrongly.
+
+The lesson is narrow and expensive: **a number with a citation next to it is not a
+sourced number.** The harness in this project exists because generated work asserts
+things confidently; it never occurred to me to point it at my own prose.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

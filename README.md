@@ -37,9 +37,10 @@ near your world:
 | **L3** perceptual | pixel delta plus a visual critic, on a settled frame | ~5 s | **no — advisory only** |
 
 **L2 decides correctness. L3 does not.** WorldCoder-Bench measured that external visual
-scoring is uncorrelated with hidden-state correctness (Kendall τb = −0.02), and that an
-agentic visual evaluator costing ~400× more still passes **45.6% of severely defective
-outputs**. Putting a vision model at the centre of a correctness oracle means building
+the failures in generated 3D are dominated by **state-schema drift and broken
+interaction chains rather than missing scene elements** — and missing scene elements are
+exactly what a visual check is good at seeing. The benchmark's own protocol verifies
+hidden runtime state with mutation-hardened contracts for that reason; so does this. Putting a vision model at the centre of a correctness oracle means building
 on a foundation already measured as insufficient — so Verbo inverts the ordering and
 enforces it in the type system: `inject(candidate, verdict)` cannot be called with a
 verdict that failed L0, L1 or L2, whatever L3 concluded.
@@ -254,6 +255,10 @@ that cannot be bought with effort.
 ## Repository layout
 
 ```
+.claude/
+  agents/              The five workstream agents, with their tool boundaries
+  skills/              Procedures that used to be instructions
+  hooks/               Deterministic controls: protected artifacts, evidence capture
 docs/
   SPEC.md              Objective, sourced constraints, decisions, 22 acceptance criteria
   SYSTEM.md            Agentic system map, with generated parallelism evidence

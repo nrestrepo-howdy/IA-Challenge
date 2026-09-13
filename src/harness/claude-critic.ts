@@ -4,7 +4,7 @@
  * This is the one place in the harness where a model is allowed to look at the
  * product. It is also the one place whose opinion changes nothing on its own: R-2
  * measured external visual scoring as uncorrelated with hidden-state correctness and
- * an agentic visual evaluator still waving through 45.6% of severely defective
+ * the measured failures living in state rather than in what a picture shows, which
  * output, so D-1 made the state contract the primary oracle and left this layer as a
  * judge of taste. `AUTHORITATIVE_LAYERS` excludes L3 and `isInjectable()` enforces it.
  *
@@ -58,7 +58,7 @@ export interface ClaudeVisualCriticOptions {
   readonly client?: Anthropic;
   readonly model?: string;
   /**
-   * Low by default. This is one judgement about one image, and R-7 already puts critic
+   * Low by default. This is one judgement about one image, and R-7 already puts model
    * latency at 4-16 s -- on a layer that cannot change the outcome.
    */
   readonly effort?: 'low' | 'medium' | 'high';

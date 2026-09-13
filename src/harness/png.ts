@@ -12,7 +12,8 @@
  * DEFLATE, which every PNG decoder accepts. It costs about 1 byte per 65 KB over the
  * raw bytes. That is the whole trade: an unbeatably boring encoder, and a frame that
  * is roughly 58 KB instead of roughly 2 KB. At one frame per accepted injection, on a
- * layer whose model call costs 4-16 s (R-7), the bytes are not the expensive part.
+ * layer whose model call is seconds, not milliseconds (R-7), the bytes are not the
+ * expensive part.
  */
 import type { Frame } from './l3-perceptual.js';
 

@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-# Verbo · control determinista. La spec y los contratos no se tocan durante
-# la implementación: son la referencia contra la que se verifica todo.
-# Escotilla explícita y auditable: VERBO_SPEC_UNLOCK=1
+# Verbo · deterministic control.
+#
+# The specification and the contracts are not editable during implementation. They are
+# the reference everything else is verified against, so an agent that can edit them can
+# make any implementation correct — which is not a rule an agent should be asked to
+# remember, it is one the environment should enforce.
+#
+# Exit code 2 is what makes this a control rather than a suggestion: Claude Code blocks
+# the tool call and returns this message to the agent.
+#
+# The hatch is explicit and auditable: VERBO_SPEC_UNLOCK=1. Amending the spec is a human
+# decision, and every use of it is recorded in docs/AI-DEV-LOG.md.
 set -u
 [ "${VERBO_SPEC_UNLOCK:-0}" = "1" ] && exit 0
 PAYLOAD="$(cat)"
@@ -9,10 +18,10 @@ TARGET="$(printf '%s' "$PAYLOAD" | jq -r '(.tool_input.file_path // .tool_input.
 for P in "docs/SPEC.md" "docs/contracts/" "src/contracts.ts" ".verbo/" ".claude/hooks/"; do
   case "$TARGET" in
     *"$P"*)
-      echo "BLOQUEADO por control determinista: '$P' es un artefacto protegido." >&2
-      echo "La spec y los contratos definen la verdad contra la que se verifica el trabajo;" >&2
-      echo "cambiarlos a mitad de implementación invalida la verificación." >&2
-      echo "Si el cambio es intencional, es una decisión humana: VERBO_SPEC_UNLOCK=1" >&2
+      echo "BLOCKED by deterministic control: '$P' is a protected artifact." >&2
+      echo "The spec and the contracts define the truth this work is verified against;" >&2
+      echo "changing them mid-implementation invalidates the verification." >&2
+      echo "If the change is intended, it is a human decision: VERBO_SPEC_UNLOCK=1" >&2
       exit 2 ;;
   esac
 done

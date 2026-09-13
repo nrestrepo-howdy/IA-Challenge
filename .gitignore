@@ -12,8 +12,6 @@ dist/
 # Agent worktrees live inside the repo; they are never part of it.
 .claude/worktrees/
 
-dist/
-
 test-results/
 playwright-report/
 

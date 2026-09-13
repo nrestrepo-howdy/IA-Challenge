@@ -1,10 +1,11 @@
 /**
  * L2 · State-contract oracle — the primary correctness oracle (D-1).
  *
- * WorldCoder-Bench measured that external visual scoring is uncorrelated with
- * hidden-state correctness (Kendall tb = -0.02) and that an agentic visual evaluator
- * costing ~400x more still passes 45.6% of severely defective output. So correctness
- * is decided here, over hidden runtime state, and the visual critic is demoted to L3.
+ * WorldCoder-Bench reports failures in generated 3D dominated by state-schema drift and
+ * broken interaction chains rather than by missing scene elements -- and missing scene
+ * elements are what looking at the picture is good at. The benchmark verifies hidden
+ * runtime state with mutation-hardened contracts for that reason. So does this, and the
+ * visual critic is demoted to L3.
  *
  * This module is pure: it takes two state snapshots and a contract, and returns a
  * verdict. No browser, no GPU, no network. That is deliberate — the oracle that

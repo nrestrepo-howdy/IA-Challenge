@@ -11,7 +11,7 @@
  *
  *   2. Decide what may be injected. L3 is advisory. A candidate that failed L0, L1 or
  *      L2 is not injectable no matter how enthusiastic the visual critic was (AC-11).
- *      WorldCoder-Bench measured an agentic visual evaluator passing 45.6% of severely
+ *      WorldCoder-Bench reports failures dominated by state-schema drift rather than by
  *      defective output, so "the vision model liked it" is not evidence of anything.
  */
 import type { Candidate, Intent, Layer, Oracle, Verdict } from '../contracts.js';

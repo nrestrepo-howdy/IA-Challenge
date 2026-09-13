@@ -36,12 +36,12 @@ These are not assumptions. Each is sourced, and each one forced a design decisio
 | ID | Constraint | Source |
 |----|------------|--------|
 | **R-1** | State of the art produces *behaviorally correct* Three.js worlds roughly **28% of the time** (best model 27.8% Verification Coverage; no system exceeds 30%) | WorldCoder-Bench (arXiv 2606.01869) |
-| **R-2** | External visual scoring is **uncorrelated** with hidden-state correctness (Kendall τb = −0.02 over 1,434 pairs). An agentic visual evaluator costing ~400× more still **passes 45.6% of severely defective outputs** | WorldCoder-Bench |
+| **R-2** | The benchmark's own protocol verifies **hidden runtime state with mutation-hardened contracts**, not appearance — and its measured failures are dominated by **state-schema drift and broken interaction chains rather than missing scene elements**, which is the class visual inspection is best at seeing | WorldCoder-Bench |
 | **R-3** | In headless environments, WebGPU canvas presentation **never reaches the compositor** on Windows/Linux. Deterministic capture requires rendering to an offscreen texture and reading back via `copyTextureToBuffer` + `mapAsync` | WebGPU headless behaviour |
 | **R-4** | ES modules imported via blob URL **can never be released**: there is no way to clear the module namespace cache. The leak is structural, not a bug | ES module semantics |
 | **R-5** | `WebGPURenderer` requires `await renderer.init()`; skipping it ships a black first frame | Three.js r182 |
 | **R-6** | `timestamp-query` values are quantized to 100 µs by default | WebGPU |
-| **R-7** | Multimodal visual critic latency runs 4–16 s depending on model | 2026 vision-model benchmarks |
+| **R-7** | A model-backed cycle costs seconds, not milliseconds: **p50 14.8 s, p95 22.6 s** end to end, measured over 17 model-resolved utterances. A visual critic on the critical path is a material share of that, which is why it runs last and never blocks | Measured — `.verbo/eval/2026-09-13.jsonl` |
 | **R-11** | WebGPU is available in workers (`WorkerNavigator.gpu`) and multiple devices per page are explicitly supported — but Three.js has known friction with `WebGPURenderer` inside `OffscreenCanvas` (a regression in r179, and it expects `canvas.style` which `OffscreenCanvas` lacks) | WebGPU explainer; three.js #31605 |
 
 ### 3.2 Product constraints
@@ -72,9 +72,14 @@ DOM access, killable by timeout — and passes through four short-circuiting ora
 
 **L2 decides correctness. L3 does not.**
 
-R-2 measures that external visual evaluation passes nearly half of severely defective
-output. Any system that puts a vision model at the center of its correctness oracle is
-built on a foundation the literature has already measured as insufficient. Verbo
+R-2 is the reason, and it is an argument about *where the failures live*. The benchmark
+reports failures dominated by state-schema drift and broken interaction chains rather
+than by missing scene elements — and missing scene elements are precisely what a visual
+check is good at. A vision model asked "does this look like rain" answers a question
+whose failure mode the measurement says is not the common one, while the common one —
+state that drifted out of agreement with what the controls believe — is invisible to it
+by construction. The benchmark's own verification protocol probes hidden runtime state
+with mutation-hardened contracts for the same reason. Verbo
 inverts the obvious ordering: hidden-state contracts are authoritative, and the
 vision model is demoted to breaking ties on aesthetics.
 
@@ -153,7 +158,7 @@ AC-21 and AC-22 are what hold it.
 
 | # | Decision | Rejected alternative | Rationale |
 |---|----------|---------------------|-----------|
-| **D-1** | State contract as the primary oracle | Visual critic as primary oracle | R-2: it passes 45.6% of broken output |
+| **D-1** | State contract as the primary oracle | Visual critic as primary oracle | R-2: the failures are in state, and a visual check looks at scene elements |
 | **D-2** | Composable typed primitive library | Free-form Three.js generation | R-1: a 28% hit rate is unusable live |
 | **D-3** | Worker + OffscreenCanvas per candidate | `try/catch` on the main thread | An infinite loop cannot be caught — only killed |
 | **D-4** | Offscreen texture render + readback | Canvas screenshot | R-3: the only deterministic cross-platform path |

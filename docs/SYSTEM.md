@@ -34,6 +34,22 @@ The rules are explicit that agent count is not the goal, and that inventing role
 satisfy the competition scores badly. Every agent below earns its separate context by
 **specialization, isolation, or parallelism** — the three reasons the rules accept.
 
+The five build-time agents are **versioned definitions**, not prompts:
+`.claude/agents/ws1-core.md` … `ws5-world.md`. Three things live there that used to live
+in whichever message happened to start an agent — its tool allowlist, which is the
+context boundary expressed as a control rather than as a rule; `isolation: worktree`, so
+the branch is where it wakes up rather than a convention it follows; and its charter,
+including the contract it must honour and its definition of done.
+
+Two procedures are versioned as skills for the same reason. `.claude/skills/
+add-primitive` encodes the four-file sequence whose seam produced five silent defects —
+a binding reading `colour` against a published `color` is not a type error and never
+throws. `.claude/skills/evidence` regenerates every artifact in this document and checks
+that none of them contains a secret.
+
+The rubric warns against inventing agent roles to satisfy a competition. These are the
+roles that ran; what changed is that they are now reproducible by someone else.
+
 ### Build-time
 
 | Agent | Context boundary | Why separate |
@@ -207,13 +223,18 @@ Four short-circuiting layers. Full definitions in [SPEC.md §4](SPEC.md).
 
 ### The inversion
 
-**L2 decides correctness; L3 does not.** WorldCoder-Bench measured that external visual
-scoring is uncorrelated with hidden-state correctness (τb = −0.02) and that an agentic
-visual evaluator costing ~400× more still passes **45.6% of severely defective
-outputs**.
+**L2 decides correctness; L3 does not.** WorldCoder-Bench reports failures in generated
+3D dominated by **state-schema drift and broken interaction chains rather than missing
+scene elements** — and missing scene elements are exactly what looking at the picture is
+good at. A vision model asked "does this look like rain" answers a question whose failure
+mode the measurement says is not the common one; the common one is state that has drifted
+out of agreement with what the controls believe, and that is invisible to it by
+construction. The benchmark's own verification protocol probes hidden runtime state with
+mutation-hardened contracts for the same reason.
 
-The obvious build puts a vision model at the center because it is the impressive part.
-That build rests on an oracle already measured as insufficient. Verbo demotes it and
+The obvious build puts a vision model at the centre because it is the impressive part.
+It answers the question that is easiest to ask rather than the one the failures are in.
+Verbo demotes it and
 promotes hidden-state contracts — and the type system enforces the ordering:
 `inject(c, v)` cannot be called with a verdict whose `failedAt` is `L0`, `L1` or `L2`,
 no matter what L3 said.

@@ -6,8 +6,9 @@
  * not. It answers "did this become visible, and does it look like what was asked?"
  *
  * It does **not** answer "is this correct". WorldCoder-Bench measured external visual
- * scoring as uncorrelated with hidden-state correctness (Kendall tb = -0.02) and found
- * an agentic visual evaluator, at ~400x the cost, still passing 45.6% of severely
+ * failures in generated 3D as dominated by state-schema drift and broken interaction
+ * chains rather than by missing scene elements -- and missing scene elements are what
+ * looking at the picture is good at. The common failure is invisible to a critic; the
  * defective output (R-2). A system that lets this layer decide is built on an oracle
  * already measured as insufficient. `AUTHORITATIVE_LAYERS` in cascade.ts excludes L3,
  * and `isInjectable()` enforces it -- so nothing here can approve anything.
@@ -17,7 +18,7 @@
  *   1. **Pixel delta** (deterministic, microseconds). Did the frame change at all?
  *      Catches the degenerate case where a candidate mounts, ticks, satisfies its
  *      contract and renders nothing -- the visual equivalent of 'present but inert'.
- *   2. **Critic** (a vision model, 4-16 s per R-7). Only reached by candidates that
+ *   2. **Critic** (a vision model; seconds, per R-7). Only reached by candidates that
  *      already cleared L0, L1, L2 and the delta, which is what keeps its cost bounded.
  */
 import type { Layer, Verdict } from '../contracts.js';

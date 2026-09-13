@@ -41,7 +41,10 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          VERBO_BASE: /verbo/
+          # Derived from the repository, not written down. Pages serves a project site
+          # under /<repo>/, and a hard-coded base is a white page the day the repository
+          # is named anything else — which it is: this one is not called "verbo".
+          VERBO_BASE: /${{ github.event.repository.name }}/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }

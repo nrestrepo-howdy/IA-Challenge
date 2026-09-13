@@ -248,16 +248,32 @@ Generated, never estimated. Regenerate with `npm run evidence` and `npm run eval
 
 ### The nightly evaluation
 
-Five nights recorded. The corpus grew with the product — it is now 30 utterances across
-twelve primitives, including four that the catalogue can only partly express and must
-therefore *disclose*. Latest run: **30/30 behaved as expected**, latency p50 **34 ms**,
-p95 **62 ms** against a 40 s budget (R-8).
+Ten nights recorded. The corpus grew with the product — it is now 30 utterances across
+fifteen primitives, including four that the catalogue can only partly express and must
+therefore *disclose*.
 
-That latency figure is real and **not yet meaningful**: the deterministic resolver does
-no reasoning, so it measures template expansion. The budget exists for the model-backed
-resolver upstream, and the number to watch is the one after that carries production
-traffic. Publishing 34 ms as though it were the answer would be the most flattering way
-available to mislead.
+For nine of those nights the number published here was **30/30 behaved as expected,
+latency p50 34 ms** — and it was a measurement of the wrong thing. The runner points at
+`localhost:4173`, the static preview build, which has no proxy and therefore no model:
+every row was the phrasebook expanding a template. 34 ms was real, honest, and not the
+product. The rows carry a `resolver` field now, per row rather than per run, because a
+result that does not say which resolver spoke cannot be read afterwards by anyone,
+including whoever wrote it.
+
+**13 September, against the model:** 30/30 behaved as expected, latency p50 **12 483
+ms**, p95 **17 568 ms**, slowest 22 602 ms, against a 40 s budget (R-8). That is the
+number the budget was written for, and it is the first run that measures the system
+this project is about.
+
+It also contains an accident worth more than the run itself. The API credit ran out
+seventeen utterances in. The remaining thirteen fell to the phrasebook floor — and the
+corpus still came out 30/30, because the floor is a floor and not a stub. An unplanned
+provider outage, mid-evaluation, with no human present, degraded exactly as designed and
+the evidence is in the file: seventeen rows marked `model`, thirteen marked
+`phrasebook`, one corpus, one result.
+
+The honest caveat is that a 30/30 spanning two resolvers is not a clean measurement of
+either. The next run with credit is the one to compare against.
 
 One night is missing from the record — 6 September, when the machine was off through
 the whole window. It is left as a gap rather than backfilled: an evaluation you can
@@ -331,9 +347,6 @@ candidate lanes, four layers, and which layer killed which candidate.
 
 Listed so their absence is not mistaken for an oversight.
 
-- **A visual critic.** L3 ships with the pixel-delta stage and an interface for the
-  model; no critic is configured. When absent it passes *and says so in the diagnosis* —
-  an unmade check must never read as an approved one.
 - **A multi-user backend.** Sharing is world serialization to a link (§ README), which
   needs no server and cannot carry code.
 - **Voice input.** Traded for rubric coverage on day one (D-8), and the trade is

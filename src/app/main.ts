@@ -14,7 +14,7 @@ import { BINDINGS, type Binding } from '../render/bindings.js';
 import { readPath } from '../harness/l2-contract.js';
 import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { keywordModel, type LanguageModel } from '../intent/model.js';
-import { ProxiedModel, withFallback } from './proxied-model.js';
+import { lastResolver, ProxiedModel, withFallback } from './proxied-model.js';
 import { browserModel, forgetKey, looksLikeKey, storeKey, storedKey } from './byok.js';
 import { ProxiedVisualCritic } from './proxied-critic.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
@@ -34,6 +34,8 @@ export interface SayResult {
   readonly unaddressed?: readonly string[];
   readonly steps: readonly { kind: string; text: string }[];
   readonly reason: string | null;
+  /** Which resolver answered: the model, or the built-in phrasebook floor. */
+  readonly resolver?: 'model' | 'phrasebook';
 }
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -352,7 +354,10 @@ async function say(utterance: string): Promise<SayResult> {
       // The panel was opened before the compile; saying nothing in it would leave a
       // started thing unfinished on screen.
       panel.dismiss(explanation);
-      return { ok: false, ms: performance.now() - startedAt, rejectedAt: 'intent', steps: [], reason: compiled.reason };
+      return {
+        ok: false, ms: performance.now() - startedAt, rejectedAt: 'intent',
+        steps: [], reason: compiled.reason, resolver: lastResolver(),
+      };
     }
     if (compiled.unaddressed.length) {
       // Accepted, and said out loud. Delivering a subset in silence is the failure
@@ -384,6 +389,7 @@ async function say(utterance: string): Promise<SayResult> {
       unaddressed: compiled.unaddressed,
       steps: outcome.steps.map((s) => ({ kind: s.kind, text: s.text })),
       reason: outcome.reason,
+      resolver: lastResolver(),
     };
   } finally {
     busy = false;

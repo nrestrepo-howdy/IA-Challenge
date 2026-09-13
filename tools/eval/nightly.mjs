@@ -53,6 +53,9 @@ try {
         results.push({
           ts: new Date().toISOString(), pass, group, utterance,
           ok: r.ok, ms: Math.round(r.ms), rejectedAt: r.rejectedAt, reason: r.reason,
+          // Recorded per row, not per run: a resolver that falls back mid-corpus would
+          // otherwise be averaged into a number nobody could interpret afterwards.
+          resolver: r.resolver ?? 'phrasebook',
           expected: group !== 'expectRejection',
           unaddressed: r.unaddressed ?? [],
           pageErrors: pageErrors.slice(before),

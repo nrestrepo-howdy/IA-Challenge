@@ -58,11 +58,30 @@ export function withFallback(model: LanguageModel, floor: LanguageModel,
   return {
     async propose(request: ModelRequest): Promise<string> {
       try {
-        return await model.propose(request);
+        const proposal = await model.propose(request);
+        answered = 'model';
+        return proposal;
       } catch (err) {
         onFallback(String(err instanceof Error ? err.message : err));
+        answered = 'phrasebook';
         return floor.propose(request);
       }
     },
   };
+}
+
+/**
+ * Which resolver answered the last utterance.
+ *
+ * Reported because the numbers are not comparable without it. The nightly evaluation
+ * ran for eleven nights against the static preview build, which has no proxy, so every
+ * row it recorded was the phrasebook — 26 of 30 at 66 ms. That is a true measurement of
+ * something, and it is not the product: the same 26 of 30 at fifteen seconds would be a
+ * completely different claim. A run that does not say which resolver spoke cannot be
+ * read later by anyone, including whoever wrote it.
+ */
+let answered: 'model' | 'phrasebook' = 'phrasebook';
+
+export function lastResolver(): 'model' | 'phrasebook' {
+  return answered;
 }

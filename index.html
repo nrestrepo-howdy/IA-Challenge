@@ -440,6 +440,39 @@
       @media (prefers-reduced-motion: reduce) {
         #key input { transition: none; }
       }
+      /* The module a candidate actually is. Clipped rather than scrolled: a panel
+         that scrolls invites reading, and this is meant to be *seen*. The mask fades
+         a long module over the line it was cut at and a short one over empty space,
+         with no measurement and no JS. */
+      .vp-lane-wrap { display: flex; flex-direction: column; }
+      .vp-lane { cursor: pointer; }
+      .vp-code {
+        max-height: 232px; overflow: hidden; position: relative;
+        margin: 2px 0 10px; padding: 9px 12px 18px;
+        border-radius: 6px; border: 1px solid var(--hair-soft);
+        background: rgba(6,9,14,.62);
+        font: 400 10.5px/1.62 var(--mono); color: var(--fg-dim);
+        white-space: pre; tab-size: 2;
+        -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+                mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+      }
+      .vp-code .add { color: var(--moon); }
+      .vp-code .del { color: var(--fg-dim); opacity: .42; }
+      .vp-code .kw  { color: var(--advise); }
+      .vp-code .str { color: #8fb39a; }
+      .vp-code .com { color: var(--fg-dim); opacity: .55; }
+      .vp-diff {
+        font: 400 9.5px/1 var(--mono); color: var(--fg-dim);
+        letter-spacing: .06em;
+      }
+      /* Directly above the code it is about. A rejection that floats away from what it
+         rejected reads as an accusation rather than a report. */
+      .vp-why {
+        margin: 2px 0 0; padding: 8px 11px;
+        border-left: 2px solid var(--ember); border-radius: 0 5px 5px 0;
+        background: rgba(107,49,40,.14);
+        font: 400 11px/1.5 var(--sans); color: var(--ember);
+      }
       #status {
         position: fixed; left: var(--gap); bottom: 22px; z-index: 4;
         display: inline-flex; align-items: center; gap: 7px;

@@ -23,6 +23,7 @@
  * The rule itself lives in `isInjectable()`; this only has to stop contradicting it.
  */
 import type { CycleStep } from './cycle.js';
+import { diffAgainst, renderSource, summarise } from './code-view.js';
 
 const LAYERS = ['L0', 'L1', 'L2', 'L3'] as const;
 type Layer = (typeof LAYERS)[number];
@@ -31,6 +32,10 @@ interface Lane {
   readonly row: HTMLElement;
   readonly cells: Map<Layer, HTMLElement>;
   readonly note: HTMLElement;
+  /** The module the prober will import. Collapsed until this lane is the open one. */
+  readonly code: HTMLElement;
+  readonly why: HTMLElement;
+  source: string | null;
   settled: boolean;
 }
 
@@ -94,6 +99,30 @@ export class VerificationPanel {
   }
 
   step(s: CycleStep): void {
+    if (s.candidate && s.source) {
+      const lane = this.#lanes.get(s.candidate) ?? this.#addLane(s.candidate);
+      const base = this.#base();
+      const isBase = base === null || base === s.source;
+      const lines = diffAgainst(isBase ? null : base, s.source);
+      lane.source = s.source;
+      lane.code.replaceChildren(renderSource(lines));
+      // "identical" rather than an implied three-way race: `reversedStrategy` reverses
+      // the directive list, so on a one-directive utterance it emits byte-identical
+      // source. Claiming three programs when two are the same file is the kind of
+      // overstatement this project refuses everywhere else.
+      const tag = document.createElement('span');
+      tag.className = 'vp-diff';
+      tag.textContent = summarise(lines, isBase);
+      lane.note.replaceChildren(tag);
+      if (this.#lanes.size === 1) this.#open(s.candidate);
+    }
+    if (s.candidate && s.diagnosis) {
+      const lane = this.#lanes.get(s.candidate);
+      if (lane) {
+        lane.why.textContent = s.diagnosis;
+        lane.why.hidden = false;
+      }
+    }
     if (!s.candidate) return;
     const lane = this.#lanes.get(s.candidate) ?? this.#addLane(s.candidate);
     if (lane.settled) return;
@@ -180,6 +209,24 @@ export class VerificationPanel {
     this.#root.append(foot);
   }
 
+  /**
+   * Exactly one source open at a time. Three modules unfolded at once is a wall of
+   * text over the world, and the world is the product.
+   */
+  #open(name: string): void {
+    for (const [key, lane] of this.#lanes) {
+      const open = key === name;
+      lane.code.hidden = !open || lane.source === null;
+      lane.row.dataset['open'] = String(open);
+    }
+  }
+
+  /** The first candidate's source is the base every other lane is diffed against. */
+  #base(): string | null {
+    for (const lane of this.#lanes.values()) if (lane.source) return lane.source;
+    return null;
+  }
+
   #addLane(name: string): Lane {
     if (this.#lanes.size === 0) this.#columns();
     const row = document.createElement('div');
@@ -210,8 +257,25 @@ export class VerificationPanel {
     note.className = 'vp-note';
     row.append(note);
 
-    (this.#body ?? this.#root).append(row);
-    const lane: Lane = { row, cells, note, settled: false };
+    // The source, and why it was refused, live under the row rather than beside it:
+    // a diagnosis is written about a specific piece of code and reads as an accusation
+    // when it floats away from what it is accusing.
+    const why = document.createElement('div');
+    why.className = 'vp-why';
+    why.hidden = true;
+
+    const code = document.createElement('div');
+    code.className = 'vp-code';
+    code.hidden = true;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'vp-lane-wrap';
+    wrap.append(row, why, code);
+
+    row.addEventListener('click', () => this.#open(name));
+
+    (this.#body ?? this.#root).append(wrap);
+    const lane: Lane = { row, cells, note, code, why, source: null, settled: false };
     this.#lanes.set(name, lane);
     return lane;
   }

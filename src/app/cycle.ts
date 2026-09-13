@@ -41,6 +41,25 @@ export interface CycleStep {
   readonly candidate?: string;
   readonly layer?: 'L0' | 'L1' | 'L2' | 'L3';
   readonly attempt?: number;
+  /**
+   * The module source, carried on the step that announces a candidate exists.
+   *
+   * `Candidate.source` is the exact string the prober imports and the blob loader
+   * loads, so a display built from this shows the artefact that was judged rather than
+   * a reconstruction of it. Carried on the step instead of fetched later because
+   * candidates are not retained anywhere after the cascade has finished with them.
+   */
+  readonly source?: string;
+  /** Where an accepted module registers. Present on the accept step only. */
+  readonly statePaths?: readonly string[];
+  /**
+   * The whole verdict, where `text` carries only its first line.
+   *
+   * An L0 or L2 diagnosis is one line per finding, and the display string keeps the
+   * first so a log line stays a line. Showing only that under-reports a candidate that
+   * failed three assertions, and a diagnosis is meant to be actionable in full.
+   */
+  readonly diagnosis?: string;
 }
 
 export interface CycleOutcome {
@@ -251,7 +270,9 @@ export async function runCycle(
     const candidates = generateCandidates(intent, attempt, repairGuidance);
     say(`attempt ${attempt + 1}: ${candidates.length} candidates${repairGuidance ? ', repaired' : ''}`,
       'info', { attempt });
-    for (const c of candidates) say(`${c.strategy}: generated`, 'info', { candidate: c.strategy, attempt });
+    for (const c of candidates) {
+      say(`${c.strategy}: generated`, 'info', { candidate: c.strategy, attempt, source: c.source });
+    }
 
     /** This attempt's diagnoses, all of them — repair reads three failures, not one. */
     const failures: FailureReport[] = [];
@@ -270,18 +291,23 @@ export async function runCycle(
         verdicts.push({ ...l0, candidateId: candidate.id });
         failed(candidate, l0);
         say(`${candidate.strategy}: L0 — ${l0.diagnosis?.split('\n')[0]}`, 'reject',
-          { candidate: candidate.strategy, layer: 'L0', attempt });
+          { candidate: candidate.strategy, layer: 'L0', attempt, ...(l0.diagnosis ? { diagnosis: l0.diagnosis } : {}) });
         continue;
       }
+      // Each layer reports as it clears, not only when it kills. Without these the
+      // cascade is only ever observable through its rejections, and a candidate that
+      // is being judged looks identical to one nothing has started on.
+      say(`${candidate.strategy}: L0 cleared`, 'info', { candidate: candidate.strategy, layer: 'L0', attempt });
 
       const { verdict: l1, stateBefore, stateAfter } = await probe(candidate, intent);
       if (!l1.passed) {
         verdicts.push({ ...l1, candidateId: candidate.id });
         failed(candidate, l1);
         say(`${candidate.strategy}: L1 — ${l1.diagnosis}`, 'reject',
-          { candidate: candidate.strategy, layer: 'L1', attempt });
+          { candidate: candidate.strategy, layer: 'L1', attempt, ...(l1.diagnosis ? { diagnosis: l1.diagnosis } : {}) });
         continue;
       }
+      say(`${candidate.strategy}: L1 cleared`, 'info', { candidate: candidate.strategy, layer: 'L1', attempt });
 
       const outcome = evaluateContract(intent.contract, stateBefore, stateAfter);
       const l2 = { ...toVerdict(outcome), candidateId: candidate.id, frame: null };
@@ -289,9 +315,10 @@ export async function runCycle(
       if (!isInjectable(l2)) {
         failed(candidate, l2);
         say(`${candidate.strategy}: L2 — ${l2.diagnosis?.split('\n')[0]}`, 'reject',
-          { candidate: candidate.strategy, layer: 'L2', attempt });
+          { candidate: candidate.strategy, layer: 'L2', attempt, ...(l2.diagnosis ? { diagnosis: l2.diagnosis } : {}) });
         continue;
       }
+      say(`${candidate.strategy}: L2 cleared`, 'info', { candidate: candidate.strategy, layer: 'L2', attempt });
 
       // The 'before' frame is taken here rather than next to the mount: nothing about
       // the picture changes between these two points, and a capture waits for the next
@@ -302,7 +329,7 @@ export async function runCycle(
 
       // Cleared every authoritative layer. L3 is advisory and cannot veto (AC-11).
       say(`${candidate.strategy}: cleared ${AUTHORITATIVE_LAYERS.join(', ')} — injecting`, 'accept',
-        { candidate: candidate.strategy, attempt });
+        { candidate: candidate.strategy, attempt, statePaths: intent.brief.directives.map((d) => d.statePath) });
       // Load first, retire second. A load that fails — a budget refusal, a blob the
       // browser will not import — must not have already disposed the emitter the user
       // is currently watching in order to make room for a module that never arrived.

@@ -24,6 +24,27 @@ export interface CandidateStrategy {
 
 const json = (v: unknown): string => JSON.stringify(v);
 
+/**
+ * The mount argument for one directive.
+ *
+ * Everything a catalogue primitive takes is JSON, so for those this is `JSON.stringify`
+ * and nothing more. `verbo:figure` is the exception, and the exception is the point: a
+ * rig's `pose` is a *function*, and a function is the one thing a parameter object
+ * cannot carry across a compiler that speaks JSON. So the brief carries `poseSource` —
+ * the body, as text — and it is spliced into the module here, as code.
+ *
+ * That is the seam where this project stops composing and starts generating, and it is
+ * deliberately one line wide. The spliced text is a function body and nothing else: it
+ * cannot import, it is never passed to `eval` or `new Function`, and it arrives in the
+ * module as source that L0 parses and lints like any other. If it does not parse, the
+ * candidate fails at L0 with a syntax error, which is the correct place to find out.
+ */
+function mountArgs(d: { readonly params: Readonly<Record<string, unknown>> }): string {
+  const { poseSource, ...rest } = d.params as { poseSource?: unknown };
+  if (typeof poseSource !== 'string') return json(d.params);
+  return `{ ...${json(rest)}, pose: (t, p) => {${poseSource}} }`;
+}
+
 /** Mounts every directive in one pass. The obvious composition. */
 export const directStrategy: CandidateStrategy = {
   name: 'direct',
@@ -32,7 +53,7 @@ export const directStrategy: CandidateStrategy = {
       .map((d, i) => `import p${i} from ${json(d.importSpecifier)};`)
       .join('\n');
     const mounts = brief.directives
-      .map((d, i) => `  mounted.push({ instance: p${i}.mount(world, ${json(d.params)}), statePath: ${json(d.statePath)} });`)
+      .map((d, i) => `  mounted.push({ instance: p${i}.mount(world, ${mountArgs(d)}), statePath: ${json(d.statePath)} });`)
       .join('\n');
     return `${imports}
 
@@ -60,7 +81,7 @@ export const resilientStrategy: CandidateStrategy = {
       .join('\n');
     const mounts = brief.directives
       .map((d, i) => `  try {
-    mounted.push({ instance: p${i}.mount(world, ${json(d.params)}), statePath: ${json(d.statePath)} });
+    mounted.push({ instance: p${i}.mount(world, ${mountArgs(d)}), statePath: ${json(d.statePath)} });
   } catch (err) { failed.push([${json(d.name)}, String(err)]); }`)
       .join('\n');
     return `${imports}

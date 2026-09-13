@@ -5,8 +5,10 @@
 in isolation, and hot-injects it into the world you are already using. No reload. No
 black frame. No lost state.
 
-Fifteen verbs today: weather, light and time of day, water, aurora, searchlights, birds,
-and structural changes to the city itself. Undo with ⌘Z, share a world as a link, and watch the verification race in
+Fifteen verbs today — weather, light and time of day, water, aurora, searchlights,
+birds, and structural changes to the city itself — plus the path out of that list: ask
+for *"un perro con una persona paseando"* and the agent writes a rig of shapes and the
+code that walks it. Undo with ⌘Z, share a world as a link, and watch the verification race in
 the panel while it happens.
 
 The interesting part is not the generation. It is the **verification**: what it takes to
@@ -44,6 +46,51 @@ verdict that failed L0, L1 or L2, whatever L3 concluded.
 
 Contracts are themselves verified. Each ships with deliberate sibling defects; a
 contract that fails to catch its own mutants is discarded and regenerated.
+
+### When the catalogue cannot answer
+
+A closed catalogue of weather and light meets *"un perro con una persona paseando"*
+with "cannot express". That is honest, and it is also the product admitting it is a
+lighting desk rather than a world — and it leaves the four oracles guarding code that
+was never dangerous, because composing validated parameters cannot go wrong in an
+interesting way.
+
+So there is a second path. `verbo:figure` takes a rig of typed shapes and a function of
+time, and the function is *written*, not chosen:
+
+```js
+import p0 from "verbo:figure";
+
+export function mount(world) {
+  return [{ instance: p0.mount(world, {
+    name: "dog-walker",
+    parts: [ /* 14 typed shapes, validated at the boundary */ ],
+    pose: (t, p) => {
+      const w = t * 3.4;
+      p[0].y = 19.3 + Math.abs(Math.sin(w)) * 1.0;   // the walker's bob
+      p[2].pitch = Math.sin(w) * 0.55;               // arms counter-swing
+      p[4].pitch = -Math.sin(w) * 0.6;               // against the legs
+      /* … */
+    },
+  }), statePath: "figures.dog-walker" }];
+}
+```
+
+This is deliberately **not** the free-form Three.js synthesis D-2 rejects, and the
+distinction is what makes it safe to run. A generated rig cannot import three, reach the
+scene graph, build a material, or name a geometry outside four. What it writes is
+arithmetic returning numbers. R-1 measures how often a model produces a behaviourally
+correct *Three.js world*; `Math.sin(t * 4) * 0.6` for a leg swing is not that task.
+
+What makes it safe is that it is verified like everything else — L0 lints the module, L1
+runs it in a worker with its capabilities revoked, L2 asserts the rig actually *moves*
+(a figure standing in a T-pose is the failure mode here), and L3 says whether it looks
+like what was asked for. Every value a pose returns is clamped on the way into state, so
+the worst a bad one can do is stand still in the wrong place.
+
+The catalogue stays closed underneath it: "make it rain" still resolves to rain and
+nothing else, a rig cannot be reached by asking for weather, and a request neither a
+primitive nor a rig can meet is still refused.
 
 ### What the advisory layer is for
 

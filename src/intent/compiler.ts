@@ -25,6 +25,8 @@ import type { Intent, IntentCompiler, IntentRejection, StateContract, WorldHandl
 import { hardenContract } from '../harness/mutation.js';
 import { CATALOGUE, findPrimitive, type PrimitiveSpec } from './catalogue.js';
 import { buildContract, buildWitness, type Selection } from './contract.js';
+import { toTranslatedVocabulary } from './es.js';
+import { matchFigure, type FigureSpec } from './figures.js';
 import { keywordModel, parseProposal, type LanguageModel, type ModelRequest } from './model.js';
 import { validateParams } from './schema.js';
 
@@ -104,7 +106,17 @@ export class CatalogueIntentCompiler implements IntentCompiler {
     const parsed = parseProposal(raw);
     if (!parsed.ok) return reject(parsed.error, 'rephrase the request');
 
-    if (parsed.proposal.primitives.length === 0) {
+    // The freeform path, before the refusal.
+    //
+    // A closed catalogue of weather and light answers "un perro con una persona
+    // paseando" with "cannot express", which is honest and is also the product
+    // admitting it is a lighting desk rather than a world. `figure` is the way out: a
+    // rig of typed shapes and a pose function, verified by the same four layers as
+    // everything else. It is added *alongside* whatever the catalogue matched, so "a
+    // dog in the rain" is one world and not a choice between two.
+    const figure = matchFigure(toTranslatedVocabulary(goal));
+
+    if (parsed.proposal.primitives.length === 0 && !figure) {
       return reject(
         // Written for a person, not for a developer. The first version listed internal
         // primitive names — "rain-emitter, orbit-modulator" — which is accurate and
@@ -146,6 +158,9 @@ export class CatalogueIntentCompiler implements IntentCompiler {
       selections.push({ spec, params });
     }
 
+    // Last, so the rig ticks after the weather it walks through.
+    if (figure) selections.push(figureSelection(figure));
+
     const key = fingerprint(goal + '|' + selections.map((s) => s.spec.name).join(','));
     const contract = buildContract(`contract-${key}`, selections);
 
@@ -171,7 +186,16 @@ export class CatalogueIntentCompiler implements IntentCompiler {
     // So: accept, and disclose. The unmet part travels with the intent and is stated
     // to the user. The one case that still rejects is a request where nothing at all
     // was addressed, which `selections.length === 0` above already covers.
-    const unaddressed = parsed.proposal.unaddressed ?? [];
+    // A rig answers for the words that selected it. The resolver reported "dog" as
+    // beyond the catalogue — which was true of the catalogue and is no longer true of
+    // the world — and leaving it in `unaddressed` would tell the user the thing walking
+    // across the frame is not there.
+    const unaddressed = (parsed.proposal.unaddressed ?? []).filter((u) => {
+      if (!figure) return true;
+      const said = u.toLowerCase();
+      const claimed = [...figure.triggers, ...(figure.covers ?? [])];
+      return !claimed.some((word) => said.includes(word) || word.includes(said));
+    });
     return compileIntent({
       id: `intent-${key}`,
       utterance: goal,
@@ -238,6 +262,61 @@ function compileIntent(input: {
     scope: input.selections.map((s) => s.spec.statePath),
     contract: input.contract,
     brief,
+  };
+}
+
+/**
+ * A rig, as a `Selection` the rest of the compiler already knows how to handle.
+ *
+ * The spec is built here rather than kept in the catalogue, and the difference is the
+ * whole design: `CATALOGUE` is the closed set the *resolver* may compose from, and
+ * putting `figure` in it would let the model answer "make it rain" with a rig. This
+ * spec exists for the length of one compile, for one named figure, so the contract and
+ * the witness machinery can treat it like anything else.
+ *
+ * The three fields are the ones worth asserting over. `count` pins the rig to the one
+ * that was asked for; `pose` is the animated field, which is the assertion that catches
+ * the dominant failure — a figure that is present and inert, standing in the plaza in a
+ * T-pose; `instance` is the resource witness, the only way a nulled `dispose()` becomes
+ * visible to L2 at all (R-4).
+ */
+function figureSelection(figure: FigureSpec): Selection {
+  const spec: PrimitiveSpec = {
+    name: 'figure',
+    summary: `a rig of shapes with a generated pose: ${figure.rationale}`,
+    statePath: `figures.${figure.name}`,
+    schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    defaults: {},
+    keywords: [],
+    fields: [
+      { key: 'count', role: 'constant', fromParam: 'count' },
+      // Two poses that differ, which is all `changesOverTime` needs of a witness: it
+      // proves the contract *can* tell a moving rig from a still one before the
+      // contract is ever pointed at a real candidate.
+      {
+        key: 'pose',
+        role: 'animated',
+        witness: [
+          [0, 0, 0, 0, 0, 0, 1],
+          [0, 1, 0, 0, 0, 0, 1],
+        ],
+      },
+      { key: 'instance', role: 'resource', witness: 'figure#0' },
+    ],
+  };
+  return {
+    spec,
+    params: {
+      name: figure.name,
+      origin: [...figure.origin],
+      parts: figure.parts.map((p) => ({
+        id: p.id, shape: p.shape,
+        size: [...p.size], color: [...p.color],
+        emissive: p.emissive ?? 0,
+      })),
+      poseSource: figure.pose,
+      count: figure.parts.length,
+    },
   };
 }
 

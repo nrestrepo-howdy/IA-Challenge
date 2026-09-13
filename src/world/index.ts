@@ -52,9 +52,19 @@ export { createWater, water, WATER_STATE_PATH } from './water.js';
 export { createAurora, aurora, AURORA_STATE_PATH } from './aurora.js';
 export { createFlock, flock, FLOCK_STATE_PATH } from './flock.js';
 export { createSearchlights, searchlights, SEARCHLIGHT_STATE_PATH } from './searchlights.js';
+export { createFigure, SHAPES, FigureValidationError } from './figure.js';
+export type { FigureParams, PartSpec, PoseTarget, Shape } from './figure.js';
 export type { WindSample } from './wind-field.js';
 
-/** A `name -> Primitive` registry. Closed: it holds the catalogue and nothing else (D-2). */
+/**
+ * A `name -> Primitive` registry: the catalogue, plus `figure`.
+ *
+ * It used to be the catalogue and nothing else. `figure` is the exception and it is
+ * the deliberate kind: it is not in `CATALOGUE`, so the resolver cannot compose it the
+ * way it composes rain, and the compiler reaches it only down the freeform path — the
+ * one taken when the catalogue genuinely cannot express what was asked. See
+ * `src/world/figure.ts` for why that is not the free-form synthesis D-2 rejects.
+ */
 export type PrimitiveRegistry = ReadonlyMap<string, Primitive<Params>>;
 
 /**
@@ -66,6 +76,8 @@ export type PrimitiveRegistry = ReadonlyMap<string, Primitive<Params>>;
  * behaviour depend on execution order, which is the cheapest way to turn a
  * deterministic oracle back into a flaky one.
  */
+import { createFigure } from './figure.js';
+
 export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegistry {
   const all: readonly Primitive<Params>[] = [
     createRainEmitter(options),
@@ -83,6 +95,16 @@ export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegis
     createAurora(options),
     createFlock(options),
     createSearchlights(options),
+    // Last, and not in the catalogue. Everything above is a thing the world can be;
+    // this is the one that lets the world become something it was not shipped knowing.
+    //
+    // The cast is the honest cost of that. Every other primitive takes JSON that a
+    // schema validated; `figure` takes a rig *and a function*, which no JSON Schema can
+    // describe — so `Primitive<FigureParams>` cannot widen to `Primitive<Params>` and
+    // the registry's uniform type has to be asserted here rather than proved. What
+    // takes the place of the proof is `validate()` inside `mount`, which runs on every
+    // call and throws a named error rather than trusting its caller.
+    createFigure() as unknown as Primitive<Params>,
   ];
 
   const registry = new Map<string, Primitive<Params>>(all.map((p) => [p.name, p]));
@@ -115,7 +137,13 @@ export function mountDirective(
       `'${directive.name}' is not an implemented primitive; the catalogue is closed (D-2)`,
     );
   }
-  if (primitive.statePath !== directive.statePath) {
+  // Equal, or a child of it. Every catalogue primitive owns exactly one path and this
+  // is an equality check for them. `figure` owns the `figures` subtree instead, because
+  // the set of rigs in a world is not known until someone asks for one — so a directive
+  // for `figures.dog-walker` is agreeing with a primitive that declares `figures`, not
+  // disagreeing with it.
+  const declared = primitive.statePath;
+  if (directive.statePath !== declared && !directive.statePath.startsWith(declared + '.')) {
     throw new Error(
       `'${directive.name}' declares '${primitive.statePath}' but the directive asks for ` +
         `'${directive.statePath}'; a contract over the second would assert over nothing`,

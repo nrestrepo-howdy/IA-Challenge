@@ -16,8 +16,8 @@ import {
   CanvasTexture, Color, CylinderGeometry, DataTexture, DoubleSide,
   EquirectangularReflectionMapping, Fog, InstancedMesh, LineBasicMaterial, LineSegments,
   Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  PlaneGeometry, Points, PointsMaterial, Quaternion, RingGeometry,
-  RGBAFormat, Scene, Vector3,
+  CapsuleGeometry, Euler, Object3D, PlaneGeometry, Points, PointsMaterial, Quaternion, RingGeometry,
+  RGBAFormat, Scene, SphereGeometry, Vector3,
 } from 'three/webgpu';
 import { sceneHandles, type SkyState } from './scene.js';
 
@@ -1081,6 +1081,123 @@ function wobble(n: number): number {
 }
 
 /** Primitive name -> how it is drawn. A name with no binding is state without a picture. */
+/**
+ * Every rig in the world, from one binding.
+ *
+ * It is keyed on the `figures` parent rather than on one figure, because the set of
+ * figures is not known until someone says something: a binding per rig would mean a
+ * binding registry that changes at runtime, and `reconcile()` in main.ts builds its
+ * bindings from the primitive list, which is fixed. So this reconciles the subtree —
+ * a rig that appears gets meshes, a rig that is undone gets them disposed.
+ *
+ * It reads two things and trusts neither. `parts` is the descriptor and never changes,
+ * so meshes are built from it once; `pose` is seven numbers per part per frame, and is
+ * read defensively because the code that writes it was generated.
+ */
+export const figureBinding: BindingFactory = (scene, statePath) => {
+  interface Rig {
+    readonly root: Object3D;
+    readonly meshes: Mesh[];
+    readonly geometries: BufferGeometry[];
+    readonly materials: MeshStandardMaterial[];
+    /** What the descriptor looked like when the meshes were built. */
+    readonly signature: string;
+  }
+  const rigs = new Map<string, Rig>();
+  const euler = new Euler();
+
+  function geometryFor(shape: string, size: readonly number[]): BufferGeometry {
+    const [x = 1, y = 1, z = 1] = size;
+    // Radii come from the widest horizontal half-extent: a capsule authored 0.3 x 1.2
+    // x 0.3 is a limb, and reading only `x` would make an arm out of a thread.
+    const radius = Math.max(0.01, Math.max(x, z));
+    if (shape === 'sphere') return new SphereGeometry(radius, 18, 12);
+    if (shape === 'capsule') return new CapsuleGeometry(radius, Math.max(0.01, y * 2), 6, 12);
+    if (shape === 'cylinder') return new CylinderGeometry(radius, radius, Math.max(0.01, y * 2), 18);
+    return new BoxGeometry(Math.max(0.01, x * 2), Math.max(0.01, y * 2), Math.max(0.01, z * 2));
+  }
+
+  function build(name: string, parts: readonly Record<string, unknown>[]): Rig {
+    const root = new Object3D();
+    root.frustumCulled = false;
+    const meshes: Mesh[] = [];
+    const geometries: BufferGeometry[] = [];
+    const materials: MeshStandardMaterial[] = [];
+    for (const part of parts) {
+      const size = Array.isArray(part['size']) ? (part['size'] as number[]) : [1, 1, 1];
+      const colour = Array.isArray(part['color']) ? (part['color'] as number[]) : [0.6, 0.6, 0.6];
+      const glow = num(part['emissive'], 0);
+      const geometry = geometryFor(String(part['shape'] ?? 'box'), size);
+      const material = new MeshStandardMaterial({
+        color: new Color(colour[0] ?? 0.6, colour[1] ?? 0.6, colour[2] ?? 0.6),
+        roughness: 0.62, metalness: 0.08,
+        emissive: new Color(colour[0] ?? 0.6, colour[1] ?? 0.6, colour[2] ?? 0.6),
+        emissiveIntensity: Math.max(0, Math.min(1, glow)) * 2.2,
+      });
+      const mesh = new Mesh(geometry, material);
+      mesh.frustumCulled = false;
+      root.add(mesh);
+      meshes.push(mesh);
+      geometries.push(geometry);
+      materials.push(material);
+    }
+    scene.add(root);
+    return { root, meshes, geometries, materials, signature: JSON.stringify(parts) };
+  }
+
+  function destroy(rig: Rig): void {
+    scene.remove(rig.root);
+    for (const g of rig.geometries) g.dispose();
+    for (const m of rig.materials) m.dispose();
+  }
+
+  return {
+    statePath,
+    update(slice) {
+      const seen = new Set<string>();
+      for (const [name, value] of Object.entries(slice)) {
+        if (!value || typeof value !== 'object') continue;
+        const figure = value as Record<string, unknown>;
+        const parts = figure['parts'];
+        const pose = figure['pose'];
+        if (!Array.isArray(parts) || !Array.isArray(pose)) continue;
+        seen.add(name);
+
+        const signature = JSON.stringify(parts);
+        let rig = rigs.get(name);
+        // Rebuilt only when the descriptor itself changes, which it does not — the
+        // check is here so that a figure replaced under the same name cannot inherit
+        // the previous rig's meshes.
+        if (rig && rig.signature !== signature) { destroy(rig); rigs.delete(name); rig = undefined; }
+        if (!rig) {
+          rig = build(name, parts as Record<string, unknown>[]);
+          rigs.set(name, rig);
+        }
+
+        for (let i = 0; i < rig.meshes.length; i++) {
+          const o = i * 7;
+          const mesh = rig.meshes[i]!;
+          mesh.position.set(num(pose[o], 0), num(pose[o + 1], 0), num(pose[o + 2], 0));
+          euler.set(num(pose[o + 4], 0), num(pose[o + 3], 0), num(pose[o + 5], 0), 'YXZ');
+          mesh.quaternion.setFromEuler(euler);
+          const scale = num(pose[o + 6], 1);
+          mesh.scale.setScalar(scale > 0 ? scale : 1);
+        }
+      }
+      // A rig whose slice is gone was undone. Its meshes go with it (AC-12).
+      for (const [name, rig] of rigs) {
+        if (seen.has(name)) continue;
+        destroy(rig);
+        rigs.delete(name);
+      }
+    },
+    dispose() {
+      for (const rig of rigs.values()) destroy(rig);
+      rigs.clear();
+    },
+  };
+};
+
 export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'rain-emitter': rainBinding,
   'snow-emitter': snowBinding,
@@ -1094,4 +1211,5 @@ export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'aurora': auroraBinding,
   'flock': flockBinding,
   'searchlights': searchlightBinding,
+  'figure': figureBinding,
 };

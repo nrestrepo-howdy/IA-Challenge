@@ -46,7 +46,15 @@ function fieldsOfRole<R extends StateField['role']>(
 describe('catalogue primitives · every declared field is real', () => {
   it('implements all six catalogue entries at their declared state paths', () => {
     const registry = createPrimitives();
-    expect([...registry.keys()].sort()).toEqual(CATALOGUE.map((s) => s.name).sort());
+    // The catalogue, and exactly one thing that is not in it.
+    //
+    // `figure` is the freeform escape hatch, and both halves of this are the point:
+    // every catalogue entry must have an implementation, and `figure` must *not* be a
+    // catalogue entry — if it were, the resolver could compose it the way it composes
+    // rain, and "make it rain" could come back as a rig. The closed set stays closed by
+    // this line rather than by intention.
+    expect(CATALOGUE.map((s) => s.name)).not.toContain('figure');
+    expect([...registry.keys()].sort()).toEqual([...CATALOGUE.map((s) => s.name), 'figure'].sort());
     for (const spec of CATALOGUE) {
       expect(primitiveFor(registry, spec).statePath).toBe(spec.statePath);
       expect(primitiveFor(registry, spec).schema).toBe(spec.schema);

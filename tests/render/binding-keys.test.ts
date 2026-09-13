@@ -25,6 +25,7 @@ import { describe, expect, it } from 'vitest';
 import { World } from '../../src/core/world.js';
 import { CATALOGUE, findPrimitive } from '../../src/intent/catalogue.js';
 import { createPrimitives } from '../../src/world/index.js';
+import { createFigure } from '../../src/world/figure.js';
 
 const SOURCE = fileURLToPath(new URL('../../src/render/bindings.ts', import.meta.url));
 const file = ts.createSourceFile(SOURCE, readFileSync(SOURCE, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -118,11 +119,18 @@ describe('bindings read only state their primitive publishes', () => {
     // Guards the reading, not the bindings: if the parse silently found nothing, every
     // case below would vacuously pass and this file would be decoration.
     expect(bindings.size).toBeGreaterThanOrEqual(12);
-    const names = new Set(CATALOGUE.map((c) => c.name));
+    const names = new Set([...CATALOGUE.map((c) => c.name), 'figure']);
     expect([...bindings.keys()].filter((n) => !names.has(n))).toEqual([]);
   });
 
   for (const [primitive, variable] of bindingVariables()) {
+    // `figure` has no catalogue entry to mount from, and its binding reads a *subtree*
+    // rather than a slice: `slice` here is the whole `figures` node, and the keys it
+    // indexes are figure names, which are chosen per request and cannot be enumerated.
+    // The keys that must line up are the ones inside a rig, and those are held by
+    // `tests/world/figure.test.ts`, which asserts the primitive publishes `parts`,
+    // `pose` and `count` before the first frame.
+    if (primitive === 'figure') continue;
     it(`${primitive} (AC-06)`, () => {
       const reads = keysReadFrom(declarationOf(variable), 'slice');
       const published = publishedKeys(primitive);
@@ -130,4 +138,35 @@ describe('bindings read only state their primitive publishes', () => {
       expect(missing, `${variable} reads keys ${primitive} never publishes`).toEqual([]);
     });
   }
+});
+
+/**
+ * The same check, for the binding that has no catalogue entry.
+ *
+ * `figureBinding` cannot be checked by the loop above: its `slice` is the whole
+ * `figures` subtree and the keys it indexes there are figure names, chosen per request.
+ * The keys that *can* drift are one level down — what it reads off a rig, and what it
+ * reads off a part — and those are exactly the shape `figure.mount` publishes. Skipping
+ * it entirely would leave the one binding whose counterpart is generated as the only
+ * one nothing holds to its state.
+ */
+describe('the figure binding reads only what a rig publishes', () => {
+  const decl = declarationOf('figureBinding');
+
+  it('reads only rig fields the primitive writes (AC-06)', () => {
+    const world = new World();
+    createFigure().mount(world, {
+      name: 'probe',
+      parts: [{ id: 'a', shape: 'box', size: [1, 1, 1], color: [1, 1, 1] }],
+      pose: () => {},
+    } as never);
+    const rig = (world.state as Record<string, Record<string, Record<string, unknown>>>)['figures']!['probe']!;
+    const published = new Set(Object.keys(rig));
+    expect([...keysReadFrom(decl, 'figure')].filter((k) => !published.has(k))).toEqual([]);
+  });
+
+  it('reads only part fields the primitive writes (AC-06)', () => {
+    const published = new Set(['id', 'shape', 'size', 'color', 'emissive']);
+    expect([...keysReadFrom(decl, 'part')].filter((k) => !published.has(k))).toEqual([]);
+  });
 });

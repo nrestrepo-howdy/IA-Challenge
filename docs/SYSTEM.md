@@ -343,6 +343,39 @@ candidate lanes, four layers, and which layer killed which candidate.
 
 ---
 
+## 8b. The freeform path
+
+Everything above composes a closed catalogue. One path does not.
+
+`verbo:figure` takes a rig of typed shapes and a `pose(t, parts)` function, and the
+function is *written* by the agent and spliced into the generated module as source. It
+exists because a catalogue of weather and light answers "un perro con una persona
+paseando" with "cannot express" — honest, and an admission that the product is a
+lighting desk rather than a world. It also left the harness guarding code that could not
+go interestingly wrong: composing validated parameters into a template is not a threat
+four oracles are needed for.
+
+| | Catalogue path | Freeform path |
+|---|---|---|
+| What the agent supplies | a name and parameters | a rig and a function of time |
+| Validated by | JSON Schema, before anything runs | `figure.mount`, per part, by name |
+| Can import | one `verbo:*` primitive per directive | `verbo:figure` and nothing else |
+| Can reach three.js | no | no |
+| L2 asserts | the declared fields of each primitive | that the rig's `pose` **moves** |
+| Failure mode it guards | a primitive present but inert | a figure standing in a T-pose |
+
+**This is not the free-form Three.js synthesis D-2 rejects.** A rig cannot import three,
+reach the scene graph, build a material, or name a geometry outside four; every value a
+pose returns is clamped on the way into state. R-1's 28% measures producing a
+behaviourally correct Three.js *world*, which is a different task from producing
+`Math.sin(t * 4) * 0.6` for a leg swing.
+
+It is still a widening of the agent's reach, and `docs/SPEC.md` — protected on purpose —
+does not yet record it. That line is a human decision, not one this agent should make
+about its own scope.
+
+---
+
 ## 9. What is deliberately absent
 
 Listed so their absence is not mistaken for an oversight.

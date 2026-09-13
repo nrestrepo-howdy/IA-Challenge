@@ -822,6 +822,87 @@ them are visible in the code.
 
 ---
 
+## 13 Sep — "Entonces la magia no existe realmente"
+
+The owner's test of the whole project, and it was the right one: *what happens if I add
+a dog with a person walking? That wouldn't work — so the magic doesn't really exist.*
+
+It didn't work. Fifteen primitives of weather, light and city met it with "cannot
+express", which is an honest refusal and is also the product admitting it is a lighting
+desk. And the refusal had a second cost I had not been counting: **a closed catalogue
+left the harness guarding code that was never dangerous.** Composing validated
+parameters into a template cannot go interestingly wrong, so four oracles, a mutation
+hardener and a capability-revoking worker were defending against a threat the
+architecture had already removed. The verification is the thesis of this project, and
+the catalogue was quietly making it unnecessary.
+
+So there is a second path now. `verbo:figure` takes a rig of typed shapes and a function
+of time, and the function is *written* rather than chosen — spliced into the generated
+module as source, parsed by L0 like anything else:
+
+```js
+pose: (t, p) => {
+  const w = t * 3.4;
+  p[0].y = 19.3 + Math.abs(Math.sin(w)) * 1.0;   // the walker's bob
+  p[2].pitch = Math.sin(w) * 0.55;               // arms counter-swing
+  p[4].pitch = -Math.sin(w) * 0.6;               // against the legs
+}
+```
+
+**Why this is not the thing D-2 rejects.** D-2 rules out free-form Three.js generation
+because R-1 measures the state of the art at 28% on that task. A rig cannot import
+three, reach the scene graph, build a material, or name a geometry outside four; what it
+writes is arithmetic returning numbers, and every number is clamped on the way into
+state. Producing a behaviourally correct Three.js world and producing
+`Math.sin(t * 4) * 0.6` for a leg swing are not the same task, and the 28% is about the
+first one. That is a judgement, it is mine, and **the SPEC still says otherwise** —
+`docs/SPEC.md` is protected, deliberately, so the line that would record this is a human
+decision rather than something I quietly wrote to make my own change look compliant.
+
+### The validator caught its own author
+
+First run, all three candidates, before anything reached the world:
+
+```
+direct:    L1 — FigureValidationError: figure: duplicate part id 'head'
+resilient: L1 — Error: every directive failed: [["figure","duplicate part id 'head'"]]
+reversed:  L1 — FigureValidationError: figure: duplicate part id 'head'
+```
+
+The pair rig is a person and a dog, and both of them have a head. I wrote that bug into
+the library ten minutes after writing the validator that refuses it, which is the only
+kind of evidence worth having that the validator works.
+
+### Four attempts to put it where it could be seen
+
+None of them were about the code. The camera orbits at a radius of 165 at a height of
+25, and its frame runs from eleven degrees below the horizon to forty-three above — and
+the prompt and the log occupy the bottom of that. A figure standing on the ground is
+always below the horizon.
+
+- **80 units:** a torso, no legs, and no walk. The rig filled the frame and its feet
+  were off the bottom of it.
+- **220 units:** the whole figure fit, and was too far away and too dark to find at all.
+- **140 units, lit:** visible, and directly behind the text box.
+- **160 units and 110 to one side:** visible, unoccluded, walking. The side took a
+  screenshot to settle — the first sign put it under the verification panel, because
+  three.js is right-handed with −Z forward, which is faster to look at than to reason
+  about.
+
+Every one of those was a composition problem wearing the costume of a rendering problem,
+which is the same lesson as the Minecraft entry above and the L3 entry before it: the
+things that make this look unfinished are visible in one screenshot and invisible in the
+code.
+
+### What it does not cost
+
+The catalogue stays closed underneath. "make it rain" still resolves to rain and nothing
+else; a rig cannot be reached by asking for weather; and *"summon a sentient octopus"* is
+still refused, because a system that answers everything is one whose answers mean
+nothing. Those three are tests, not intentions.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

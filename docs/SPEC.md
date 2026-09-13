@@ -208,7 +208,7 @@ Every AC is machine-verifiable. **An AC without a passing verification fails the
 
 ## 7. Definition of done
 
-1. All 20 acceptance criteria have automated verification, and it passes.
+1. All 22 acceptance criteria have automated verification, and it passes.
 2. The harness governs development: no commit lands without passing through it.
 3. The nightly evaluation has accumulated ≥ 5 nights and publishes success **and failure** rates.
 4. A third party clones the repo, runs one command, and sees the world using their own key.

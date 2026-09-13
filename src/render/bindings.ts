@@ -200,6 +200,9 @@ export const snowBinding: BindingFactory = (scene, statePath) => {
   };
 };
 
+/** The catalogue's maximum for `fog-volume.density`. Pinned by a test, not by trust. */
+export const FOG_MAX_DENSITY = 0.2;
+
 export const fogBinding: BindingFactory = (scene, statePath) => {
   const previous = scene.fog;
   return {
@@ -210,7 +213,17 @@ export const fogBinding: BindingFactory = (scene, statePath) => {
       // the fallback, so the colour parameter was never visible.
       const colour = Array.isArray(slice['color']) ? (slice['color'] as number[]) : [0.05, 0.07, 0.1];
       const near = 40;
-      const far = 40 + 1400 * (1 - Math.min(0.95, density));
+      // The catalogue declares `density` as 0.001..0.2. This read it as though it were
+      // 0..1, so the whole expressible range mapped to a far plane of 1120..1399 in a
+      // scene about 1400 deep: every fog the model could ask for was no fog. L3 said so
+      // the first time it was asked, on the plainest request in the demo — "add fog":
+      // "no atmospheric haze is visible: distant towers read at full contrast".
+      //
+      // `tests/render/fog-density.test.ts` pins MAX_DENSITY to the catalogue so this
+      // cannot drift back apart. Squared, because halfway along the range should read
+      // as fog rather than as slightly shorter draw distance.
+      const t = Math.min(1, Math.max(0, density / FOG_MAX_DENSITY));
+      const far = 140 + 1260 * (1 - t) ** 2;
       scene.fog = new Fog(new Color(colour[0] ?? 0, colour[1] ?? 0, colour[2] ?? 0), near, far);
     },
     dispose() { scene.fog = previous; },
@@ -677,7 +690,18 @@ export const auroraBinding: BindingFactory = (scene, statePath) => {
   const MAX_BANDS = 6;
   /** Columns per ribbon. Enough for the serpentine to read as a curve, not a fold. */
   const COLS = 44;
-  const PER_BAND = (COLS + 1) * 2;
+  /**
+   * Three rows, not two. With two, a ribbon's only vertical gradient runs from one edge
+   * to the other, so both edges are as bright as the colour put there — and the foot,
+   * being a straight horizontal line of bright green across the sky, read as the bottom
+   * of a pane of glass. L3 looked at it and reported no aurora at all: "the sky holds
+   * only stars and a moon", of a frame with a teal slab across a third of it.
+   *
+   * A middle row lets the light live in the middle and fall off at both edges, which is
+   * the whole difference between a curtain and a sheet.
+   */
+  const ROWS = 3;
+  const PER_BAND = (COLS + 1) * ROWS;
 
   const geometry = new BufferGeometry();
   const positions = new Float32Array(MAX_BANDS * PER_BAND * 3);
@@ -691,8 +715,11 @@ export const auroraBinding: BindingFactory = (scene, statePath) => {
   for (let b = 0; b < MAX_BANDS; b++) {
     const base = b * PER_BAND;
     for (let i = 0; i < COLS; i++) {
-      const a = base + i * 2;
-      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      for (let r = 0; r < ROWS - 1; r++) {
+        const a = base + i * ROWS + r;
+        const c = base + (i + 1) * ROWS + r;
+        indices.push(a, a + 1, c, a + 1, c + 1, c);
+      }
     }
   }
   geometry.setIndex(indices);
@@ -703,7 +730,9 @@ export const auroraBinding: BindingFactory = (scene, statePath) => {
   // not leave its own geometry is a painted band with a cut edge, which is what the
   // first screenshot showed.
   const material = new MeshBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0.85, color: new Color(1.5, 1.5, 1.5),
+    // 0.55, down from 0.85: additive blending at near-full opacity over a wide arc is a
+    // light source the size of the sky, and it flattened into one colour.
+    vertexColors: true, transparent: true, opacity: 0.55, color: new Color(1.25, 1.25, 1.25),
     blending: AdditiveBlending, depthWrite: false, fog: false, side: DoubleSide,
   });
   const curtains = new Mesh(geometry, material);
@@ -731,7 +760,10 @@ export const auroraBinding: BindingFactory = (scene, statePath) => {
 
       // Fewer bands, wider each: one lone ribbon spanning 30 degrees of a sky the
       // camera takes four minutes to orbit is a verb the user would have to wait for.
-      const arc = Math.max(1.6, Math.min(4.4, (Math.PI * 2 * 1.4) / Math.max(1, bands)));
+      // Capped at about 125 degrees. The old ceiling of 4.4 radians is 252 degrees —
+      // one ribbon wrapping most of the way round the sky, which cannot read as a
+      // ribbon from inside it.
+      const arc = Math.max(1.0, Math.min(2.2, (Math.PI * 2 * 1.4) / Math.max(1, bands)));
 
       for (let b = 0; b < bands; b++) {
         const centre = (b / Math.max(1, bands)) * Math.PI * 2;
@@ -739,27 +771,46 @@ export const auroraBinding: BindingFactory = (scene, statePath) => {
           const u = i / COLS;
           const azimuth = centre + (u - 0.5) * arc;
           const radius = 1400 + 170 * Math.sin(u * 4.1 + phase * 7 + b);
-          const foot = 235 + 95 * Math.sin(u * 2.7 + phase * 5 + b * 1.7);
-          const height = 300 + 150 * Math.sin(u * 3.3 + phase * 4 + b * 2.3);
+          // High in the sky, not along the skyline. These sat at a foot of 235 and a
+          // height of 300 — about seven degrees above the horizon at this radius, which
+          // put the curtains behind the towers and out of frame. L3 reported the sky as
+          // containing "only stars and a moon" while the aurora was rendering correctly
+          // underneath the city. Now they span roughly 13 to 46 degrees of elevation,
+          // which is where one is actually seen.
+          const foot = 620 + 180 * Math.sin(u * 2.7 + phase * 5 + b * 1.7);
+          const height = 520 + 240 * Math.sin(u * 3.3 + phase * 4 + b * 2.3);
           const cx = Math.cos(azimuth) * radius;
           const cz = Math.sin(azimuth) * radius;
 
-          const o = (b * PER_BAND + i * 2) * 3;
-          positions[o] = cx; positions[o + 1] = foot; positions[o + 2] = cz;
-          positions[o + 3] = cx; positions[o + 4] = foot + height; positions[o + 5] = cz;
-
-          // The vertical rays, drifting along the ribbon. Without them a curtain is a
-          // painted band; with them it is something moving through the sky. The ends
-          // taper to nothing so a ribbon has no cut edge hanging in the air.
+          const o = (b * PER_BAND + i * ROWS) * 3;
           const rays = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(u * 27 + phase * 21 + b * 3));
           const taper = Math.sin(Math.PI * u);
           const k = rays * taper * taper;
-          colors[o] = low.r * k; colors[o + 1] = low.g * k; colors[o + 2] = low.b * k;
-          colors[o + 3] = high.r * k; colors[o + 4] = high.g * k; colors[o + 5] = high.b * k;
+
+          // Dim at the foot, brightest just above it, fading out through the top: the
+          // vertical profile of a curtain. The ends of the ribbon taper to nothing so it
+          // has no cut edge hanging in the air, and the rays drifting along it are what
+          // make it something moving through the sky rather than a painted band.
+          for (let r = 0; r < ROWS; r++) {
+            const v = r / (ROWS - 1);
+            positions[o + r * 3] = cx;
+            positions[o + r * 3 + 1] = foot + height * v * v;
+            positions[o + r * 3 + 2] = cz;
+
+            // 0 at the foot, 1 at the bright band, falling away above it. `<=` matters:
+            // the middle row is the bright core and it must take the green, or the whole
+            // curtain draws in the fringe colour and the vertical split disappears.
+            const profile = v < 0.5 ? v * 2 : 1 - (v - 0.5) * 1.7;
+            const c = v <= 0.5 ? low : high;
+            const g = k * Math.max(0, profile);
+            colors[o + r * 3] = c.r * g;
+            colors[o + r * 3 + 1] = c.g * g;
+            colors[o + r * 3 + 2] = c.b * g;
+          }
         }
       }
 
-      geometry.setDrawRange(0, bands * COLS * 6);
+      geometry.setDrawRange(0, bands * COLS * (ROWS - 1) * 6);
       posAttr.needsUpdate = true;
       colAttr.needsUpdate = true;
     },

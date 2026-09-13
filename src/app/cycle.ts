@@ -170,6 +170,44 @@ async function probe(
  * times out, a frame that will not encode: each ends in a step that says what went
  * unchecked, and none of them changes what happened to the world.
  */
+/**
+ * Wait for the world to finish arriving, before judging the picture.
+ *
+ * L3 used to capture two frames after the mount — about thirty milliseconds — and
+ * almost nothing in this world is instant. `daylight` cross-fades, and `aurora` takes
+ * three and a half seconds to brighten from a deliberate `glow: 0`, because a verb must
+ * land on the sky the user is already looking at (AC-14). So L3 judged an aurora that
+ * had not arrived and reported, accurately, that the sky held only stars and a moon —
+ * of a frame that a second and a half later held a green curtain across a third of it.
+ *
+ * `mix` is the signal because the primitives already agree on it: every slice that
+ * takes time to become itself publishes its 0..1 arrival ramp under that name, and
+ * `tests/world/arrival.test.ts` holds them to it. A verb composed only of primitives
+ * that arrive at once publishes no `mix` and is judged immediately, which is why this
+ * costs nothing on the verbs that do not need it — and it sits inside the
+ * per-utterance budget (R-8), so that matters.
+ *
+ * The cap is the backstop: a primitive whose ramp stalls delays a judgement, it does
+ * not hang the cycle.
+ */
+async function settle(): Promise<void> {
+  const CAP_MS = 4000;
+  const started = Date.now();
+  for (;;) {
+    const state = (globalThis as { __VERBO_STATE__?: Record<string, Record<string, unknown>> })
+      .__VERBO_STATE__;
+    let arriving = false;
+    for (const group of Object.values(state ?? {})) {
+      for (const slice of Object.values(group ?? {})) {
+        const mix = (slice as Record<string, unknown>)?.['mix'];
+        if (typeof mix === 'number' && mix < 0.98) arriving = true;
+      }
+    }
+    if (!arriving || Date.now() - started >= CAP_MS) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 async function reviewVisually(
   candidate: Candidate,
   intent: Intent,
@@ -388,6 +426,7 @@ export async function runCycle(
           // the picture from before it -- comparing against that would report every
           // successful injection as having changed nothing.
           await capture();
+          await settle();
           const { verdict, guidance } = await reviewVisually(
             candidate, intent, before, await capture(), visual.critic, attempt,
           );

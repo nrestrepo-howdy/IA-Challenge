@@ -128,13 +128,13 @@ describe('daylight · what it publishes for a binding to draw', () => {
     readPath(world.state, `${DAYLIGHT_STATE_PATH}.${key}`) as number;
 
   it('starts at the authored night, so frame zero is the world already on screen', () => {
-    const world = mount({ phase: 0.5, transition: 4 });
+    const world = mount({ phase: 0.5, transition: 3 });
     expect(read(world, 'phaseNow')).toBe(AUTHORED_PHASE);
     expect(read(world, 'phase')).toBe(0.5);
   });
 
   it('cross-fades rather than cutting: the phase the binding draws moves every frame', () => {
-    const world = mount({ phase: 0.5, transition: 4 });
+    const world = mount({ phase: 0.5, transition: 3 });
     const seen: number[] = [];
     for (let i = 0; i < 120; i++) {
       world.tick(FRAME);
@@ -148,7 +148,7 @@ describe('daylight · what it publishes for a binding to draw', () => {
   });
 
   it('rises through dawn on the way to noon rather than taking the shorter arc', () => {
-    const world = mount({ phase: 0.5, transition: 4 });
+    const world = mount({ phase: 0.5, transition: 3 });
     let sawDawn = false;
     for (let i = 0; i < 300; i++) {
       world.tick(FRAME);

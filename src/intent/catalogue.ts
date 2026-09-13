@@ -391,7 +391,13 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
         // One turn of the clock. 0 and 1 are the same midnight, which is what makes a
         // sweep across the wrap point expressible rather than a special case.
         phase: { type: 'number', minimum: 0, maximum: 1 },
-        transition: { type: 'number', minimum: 0.25, maximum: 60 },
+        // Up to three seconds, not sixty. The wide range was the catalogue describing
+        // what a crossfade *could* be; the product is "say it and watch", and a model
+        // reading "up to 60" quite reasonably picked 48 for a slow dawn — after which
+        // the world sat visibly unchanged for most of a minute and L3, judging the
+        // frame right after the mount, reported a starry night for "amanece sobre el
+        // mar". Both complaints are the same number being too large.
+        transition: { type: 'number', minimum: 0.25, maximum: 3 },
       },
       required: ['phase', 'transition'],
       additionalProperties: false,
@@ -402,7 +408,7 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     // that is already night. Dawn, dusk and night stay reachable — the hosted resolver
     // reads the schema and moves `phase`; the keyword path cannot, and says so by
     // giving the request that matters the answer it wants.
-    defaults: { phase: 0.5, transition: 5 },
+    defaults: { phase: 0.5, transition: 2.5 },
     keywords: [
       'day', 'daytime', 'daylight', 'daybreak', 'morning', 'noon', 'midday',
       'afternoon', 'sun', 'sunny', 'sunrise', 'sunset', 'dawn', 'dusk', 'twilight',

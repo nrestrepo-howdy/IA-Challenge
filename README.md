@@ -5,8 +5,8 @@
 in isolation, and hot-injects it into the world you are already using. No reload. No
 black frame. No lost state.
 
-Twelve verbs today: weather, light and time of day, water, and structural changes to the
-city itself. Undo with ⌘Z, share a world as a link, and watch the verification race in
+Fifteen verbs today: weather, light and time of day, water, aurora, searchlights, birds,
+and structural changes to the city itself. Undo with ⌘Z, share a world as a link, and watch the verification race in
 the panel while it happens.
 
 The interesting part is not the generation. It is the **verification**: what it takes to
@@ -32,7 +32,7 @@ near your world:
 | **L0** static | compiles, writes only in declared scope, no forbidden APIs | ~5 ms | yes |
 | **L1** runtime | no crash, no black frame, ≤ 16 ms frames, budgets held | ~200 ms | yes |
 | **L2** state contract | assertions over hidden runtime state, before/after snapshots | ~1 s | **yes — decides correctness** |
-| **L3** perceptual | pixel delta plus a visual critic | ~5 s | **no — advisory only** |
+| **L3** perceptual | pixel delta plus a visual critic, on a settled frame | ~5 s | **no — advisory only** |
 
 **L2 decides correctness. L3 does not.** WorldCoder-Bench measured that external visual
 scoring is uncorrelated with hidden-state correctness (Kendall τb = −0.02), and that an
@@ -44,6 +44,22 @@ verdict that failed L0, L1 or L2, whatever L3 concluded.
 
 Contracts are themselves verified. Each ships with deliberate sibling defects; a
 contract that fails to catch its own mutants is discarded and regenerated.
+
+### What the advisory layer is for
+
+L3 cannot block an injection, and it is not decoration. On its first live frames it
+found four defects nothing else could have: fog whose entire declared range rendered as
+no fog, an aurora drawn seven degrees above the horizon and hidden behind the towers, a
+storm rendered at midday, and a sea that could not be seen at any level because the
+camera's frame began five degrees *above* the horizon. L0 parsed every one of those, L1
+measured their frames, and L2 confirmed that every declared state field moved exactly as
+its contract said. The contract says the world is correct; only a layer that looks can
+say the world is wrong.
+
+It judges a settled frame rather than the next one. Primitives arrive over time — a
+cross-fade, an aurora brightening from zero — and the first version of this captured
+thirty milliseconds after the mount and reported, accurately, on a world that no longer
+existed a second later.
 
 ### The retry loop is a repair loop
 
@@ -84,6 +100,16 @@ The language model earns its place **upstream**, resolving an utterance into a b
 A model failure degrades to an explained rejection, never to broken code reaching the
 world. Set `ANTHROPIC_API_KEY` to enable it; everything still works without it.
 
+Resolution is two calls, and the reason is worth stating because it is not obvious.
+Naming a primitive's parameters in the output grammar is the only thing that makes a
+model fill them: against an open `record` it composes correctly and returns `{}` for
+every parameter, at any effort, under any instruction — a field with no name has no box
+to fill. But a grammar naming all fifteen primitives' parameters at once is refused as
+too large, because constrained decoding admits an object's keys in any order and k keys
+cost k! paths. So the call splits where the reasoning already divides: one call chooses
+what to compose, one sets the numbers for the three or four it chose, reading the
+first's interpretation rather than re-deriving it.
+
 ### A link carries intent, not code
 
 A shared world is a URL holding the *utterances* that built it. Opening it replays them
@@ -98,8 +124,8 @@ not pixel-identical.
 
 ```bash
 npm run dev            # the world
-npm test               # 280 unit tests — no browser, no key
-npm run test:browser   # 23 acceptance tests in a real browser
+npm test               # 396 unit tests — no browser, no key
+npm run test:browser   # 25 acceptance tests in a real browser
 npm run gate           # acceptance-criteria coverage against docs/SPEC.md
 npm run verify         # all of the above; the definition of done
 npm run eval           # one pass of the nightly evaluation corpus

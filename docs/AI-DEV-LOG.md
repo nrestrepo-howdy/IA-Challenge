@@ -603,11 +603,142 @@ not, and both times the audit told me.
 
 ---
 
+## 13 Sep — The advisory layer went first, and found four things nothing else could
+
+L3 had existed since day nine and had never looked at anything. The critic class was
+written, tested against a stub, and unreachable from the running app: every verb logged
+*"no visual critic configured, so appearance was not judged"*, which was honest and also
+an admission that a quarter of the harness was decorative. It went first today for
+exactly that reason.
+
+Its first live judgement, on *"una noche de tormenta"*:
+
+> **L3** — Nothing in the frame reads as a night scene: the image is overwhelmingly
+> white/bright.
+
+True, and a product defect nothing else could have caught. The resolver had read the
+request correctly — its own words were *"oscuridad nocturna, lluvia intensa empujada por
+el viento y relámpagos"* — and then returned `daylight` with `{}` for parameters, which
+the compiler filled with defaults, and the default phase for `daylight` is midday. A
+storm at noon, from a model that had just written down that it was night.
+
+**The cause was the schema, not the prompt.** `params` was an open `z.record`: valid
+JSON Schema, and it declares no field names, so a model generating into it is handed an
+object with no boxes and closes the brace. I confirmed this rather than assumed it —
+with the full catalogue in the system prompt, an explicit *"never `{}`"* on the field,
+and effort raised to high, every parameter still came back empty while the composition
+itself was correct.
+
+Naming them fixes it, and naming all fifteen at once is not possible. Three shapes were
+refused with *"The compiled grammar is too large"*: an array over a fifteen-member
+union, a flat object with one slot per primitive, and the same object grouped by
+`statePath`. A bisect put the ceiling between eight and eleven keys, which is the shape
+of a factorial — constrained decoding admits an object's keys in any order, so k
+required keys cost k! paths, and it multiplies down the tree.
+
+So resolution is two calls now, split where the reasoning already divides: one chooses
+what to compose, one sets the numbers for the three or four chosen, reading the first's
+interpretation rather than re-deriving it. The second runs at low effort, because the
+judgement that needed effort has already been made.
+
+### Then the critic was judging a picture of its own PNG
+
+Its next verdicts were confidently wrong: *"nothing but horizontal noise bands on a
+white background"*, of a night city that had rendered correctly. The browser encoded the
+frame to PNG and sent it; the proxy read those bytes straight into `frame.data` as
+though they were RGBA and encoded them again. The model was shown a picture of a
+compressed byte stream and described it accurately.
+
+Nothing threw, because a 160×90 frame is 57,600 bytes and its PNG came to 57,758 —
+close enough to fill the array and never look wrong. **A coincidence of size is the
+entire reason that survived being written.** The frame crosses as pixels now, so there
+is one encoder and it lives on the side that talks to the model.
+
+### Four real defects, and one that was mine
+
+With the critic seeing actual frames, a sweep of eight utterances produced four
+complaints. Every one was true:
+
+- **Fog**: the catalogue declares `density` as 0.001..0.2 and the binding divided by an
+  implied 1, so the whole expressible range mapped to a far plane of 1120..1399 in a
+  scene about 1400 deep. Every fog the model could ask for was no fog.
+- **Aurora**: rendered correctly and invisibly, at a foot of 235 — about seven degrees
+  of elevation — so the curtains hung behind the towers. Raised, they became a flat slab
+  across a third of the sky, because a two-row strip can only gradient from one edge to
+  the other and its foot was a straight bright line.
+- **Dawn**: `daylight.transition` topped out at 60 seconds, the model reasonably picked
+  48 for a slow dawn, and the world then sat visibly unchanged for most of a minute.
+- **Water**: *"no water is visible"*, three times, over a primitive that was working.
+
+The fourth is the one worth recording. Its state moved exactly as its contract said —
+`levelNow: 150`, `mix: 1` — the binding was constructed, the mesh was in the scene, and
+a material painted magenta to prove the point put no magenta pixel on screen. The camera
+sat at y≈34 and pitched up 32° with a 54° field, so **the frame ran from +5° to +59° of
+elevation and everything at or below the horizon was off the bottom of it**. Not a
+rendering bug. A framing one. Below 25 the surface fell out of frame; at 38 it passed
+through the viewpoint and veiled the city; at 150 it was overhead, and a single-sided
+plane seen from beneath is not drawn at all. Three correct renderings of the wrong
+shape, and L2 was satisfied every time, because the state was right and the state is
+not the picture.
+
+Lowering the camera is the change I would not have made on my own — the framing was
+deliberate, tuned, and the reason the skyline reads as towers rather than a model on a
+table. The city gained its own ground and its full depth from it.
+
+### The complaint that was about my harness, not my world
+
+The aurora failed again after it had been fixed. L3 captured two frames after the mount
+— about thirty milliseconds — and `aurora` takes three and a half seconds to brighten
+from a deliberate `glow: 0`, because a verb must land on the sky the user is already
+looking at (AC-14). The critic was accurate about a frame of a world that did not exist
+a second later.
+
+The cycle waits for arrival now, and `mix` is the signal because the primitives already
+agreed on it — four of them publish a 0..1 ramp under that name. But four files agreeing
+by habit is not an interface, so `tests/world/arrival.test.ts` holds them to it: starts
+below one, reaches one. A verb of only instant primitives publishes no `mix` and is
+judged immediately.
+
+### And the hole that had opened five times, closed by reading the source
+
+`slice['colour']` beside a primitive publishing `color` is not a type error, not a
+runtime error, and not a visible failure: the binding reads `undefined`, falls back to
+its default, and draws something plausible forever. It had happened five times — fog's
+colour, snow drawing rain streaks, `fallHeight` against `spread`, `vector` against
+`direction`, and the density range, which is the same mistake in units rather than
+spelling. Each was found by eye, late.
+
+`tests/render/binding-keys.test.ts` reads the bindings instead of trusting them: the
+TypeScript AST gives every `slice['key']` in every factory, mounting the primitive gives
+every key it publishes, and the first must be a subset of the second. Verified against a
+deliberate hole rather than assumed — the lesson from 9 Sep — and it names the offender:
+
+```
+× fog-volume (AC-06)
+  → fogBinding reads keys fog-volume never publishes:
+    expected [ 'densities' ] to deeply equal []
+```
+
+### What today actually argues
+
+Six of the sweep's eight utterances now pass L3 unprompted. The one that still does not
+is *"amanece sobre el mar"*, and its verdict is *"the scene is a foggy city skyline, not
+a sunrise over the sea; the ground should be a reflective sea"* — which is correct. The
+catalogue can put a sea around a city and cannot replace the city with one. The verb ran
+anyway, the world changed, and the part that did not happen is written where the user
+can read it.
+
+That is the design, and today is the first day it was load-bearing rather than
+asserted. An advisory layer that cannot block found four defects in a world that three
+authoritative layers had passed; and every time it was wrong, it was wrong about a frame
+my harness had handed it, not about the picture.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:
 
-- **L3 perceptual oracle.** The capture seam exists; the critic does not.
 - **Nightly evaluation results**, including failures and rejections per layer.
 - **The injection policy decision** — what may auto-inject and what requires approval.
 - **More failures during implementation.** The first is recorded above; there will

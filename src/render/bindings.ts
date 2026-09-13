@@ -13,11 +13,11 @@
  */
 import {
   AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry,
-  CanvasTexture, Color, CylinderGeometry, DoubleSide,
-  Fog, InstancedMesh, LineBasicMaterial, LineSegments,
+  CanvasTexture, Color, CylinderGeometry, DataTexture, DoubleSide,
+  EquirectangularReflectionMapping, Fog, InstancedMesh, LineBasicMaterial, LineSegments,
   Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  PlaneGeometry, Points, PointsMaterial, Quaternion,
-  Scene, Vector3,
+  PlaneGeometry, Points, PointsMaterial, Quaternion, RingGeometry,
+  RGBAFormat, Scene, Vector3,
 } from 'three/webgpu';
 import { sceneHandles, type SkyState } from './scene.js';
 
@@ -596,11 +596,61 @@ function lerpSky(
 /** The three wave trains' amplitudes, summed: the deepest trough the swell can reach. */
 const SWELL_SUM = 1 + 0.72 + 1.35;
 
+/**
+ * A sky for the water to reflect.
+ *
+ * The surface was a smooth metal plane in a scene with no environment map, so it
+ * reflected the two lights the night city has and nothing else — which is to say it
+ * rendered as dark ground, and L3 said exactly that on "the city is flooded": "no water
+ * is visible: the base plane reads as dark ground". Roughness and metalness were both
+ * already right; there was simply nothing in the world for them to work on.
+ *
+ * Equirectangular, 64x32, built once and shared: a bright band at the horizon over a
+ * dark dome, which is what a night sky gives water to hold. It goes on the water's own
+ * material rather than on `scene.environment`, because the second would put a sheen on
+ * every building in the city to fix a plane none of them touch.
+ */
+function nightSkyEnvironment(): DataTexture {
+  const w = 64, h = 32;
+  const data = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const v = y / (h - 1);
+    // Brightest just above the horizon and falling off both ways: the gradient is the
+    // reflection, so its shape is the whole of what the water looks like.
+    const horizon = Math.exp(-((v - 0.5) ** 2) / 0.0016);
+    const up = Math.max(0, 1 - v * 2);
+    const r = 6 + 44 * horizon + 4 * up;
+    const g = 10 + 56 * horizon + 8 * up;
+    const b = 20 + 78 * horizon + 20 * up;
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4;
+      data[o] = Math.min(255, r); data[o + 1] = Math.min(255, g);
+      data[o + 2] = Math.min(255, b); data[o + 3] = 255;
+    }
+  }
+  const texture = new DataTexture(data, w, h, RGBAFormat);
+  texture.mapping = EquirectangularReflectionMapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export const waterBinding: BindingFactory = (scene, statePath) => {
-  // Matches the authored ground plane, so the waterline reaches the horizon instead of
-  // ending in a visible edge the fog has to hide.
-  const SEGMENTS = 96;
-  const geometry = new PlaneGeometry(4000, 4000, SEGMENTS, SEGMENTS);
+  // A sea *around* the city, not a sheet *through* it.
+  //
+  // This was a 4000-unit plane centred on the origin, and the camera orbits inside that
+  // at a radius of 150 to 280 and a height of about 34 — so the surface passed under
+  // and around the viewpoint, and there was no level at which it could be seen. Below
+  // about 25 it fell outside a frame that looks upward at 300-unit towers; at 38 it
+  // filled the whole frame with a veil the city showed through; at 150 it was overhead,
+  // and a single-sided plane seen from beneath is not drawn at all. Every one of those
+  // is a correct rendering of the wrong shape, which is why L3 kept reporting no water
+  // over a primitive whose state was moving exactly as its contract said.
+  //
+  // An annulus starting at 420 clears the orbit entirely — the dolly reaches 280. What it draws is a sea
+  // beginning past the edge of the city and running to the horizon, which is both the
+  // thing that can actually be seen from street level and the thing "amanece sobre el
+  // mar" is asking for.
+  const geometry = new RingGeometry(420, 2400, 128, 24);
   const position = geometry.getAttribute('position') as BufferAttribute;
   const normal = geometry.getAttribute('normal') as BufferAttribute;
   const pos = position.array as Float32Array;
@@ -611,7 +661,23 @@ export const waterBinding: BindingFactory = (scene, statePath) => {
     // angle is most of the water most of the time.
     color: new Color(0.03, 0.09, 0.16), roughness: 0.12, metalness: 0.55,
     transparent: true, opacity: 0.94,
+    // Visible from underneath, which is most of why it was never visible at all. The
+    // camera orbits at about fifty units; the catalogue lets `level` reach 260, and a
+    // single-sided plane above the camera is a plane seen from its culled face. A
+    // flood the model set to 150 drew nothing — the primitive published `levelNow: 150`
+    // and `mix: 1`, the binding was constructed, and the surface was simply facing the
+    // other way. Seeing the underside of the water you are standing in is also the
+    // truthful picture.
+    side: DoubleSide,
   });
+  const environment = nightSkyEnvironment();
+  material.envMap = environment;
+  // The reflection is the only thing distinguishing this plane from the ground it sits
+  // on, and it is also the thing that will swallow the city if it is too bright: the
+  // camera orbits twelve units above a typical waterline, so the surface is seen at a
+  // grazing angle and the horizon band is most of what it shows. A wide bright band
+  // there rendered as milky haze over the lower half of the frame.
+  material.envMapIntensity = 0.9;
   const mesh = new Mesh(geometry, material);
   mesh.rotation.x = -Math.PI / 2;
   mesh.frustumCulled = false;
@@ -655,6 +721,7 @@ export const waterBinding: BindingFactory = (scene, statePath) => {
     },
     dispose() {
       scene.remove(mesh);
+      environment.dispose();
       geometry.dispose();
       material.dispose();
     },

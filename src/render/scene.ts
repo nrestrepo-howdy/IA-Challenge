@@ -621,9 +621,17 @@ export function createBaseScene(): BaseScene {
       // is the whole point: at 26 the camera was level with nothing and taller than
       // the low-rises, so the skyline read as a model on a table.
       camera.position.set(Math.sin(a) * dolly, 20 + dolly * 0.09 + Math.sin(elapsed * 0.09) * 2.5, Math.cos(a) * dolly);
-      // Biased off-centre and high, so the subject sits near a thirds intersection and
-      // the frame has somewhere for the eye to travel.
-      camera.lookAt(Math.sin(a + 0.42) * 70, 78 + framing * 70, Math.cos(a + 0.42) * 70);
+      // Biased off-centre, and lowered from 78 so the horizon is inside the frame.
+      //
+      // At 78 the camera pitched up about 32 degrees with a 54-degree field, so the
+      // frame ran from +5 to +59 degrees of elevation and everything at or below the
+      // horizon — the ground, the bases of the towers, any water at all — was off the
+      // bottom of it. That is why the water primitive could not be seen at any level:
+      // not a rendering bug, a framing one, and it took L3 reporting "no water is
+      // visible" over a correct render three times to find it. Lower, the city gains
+      // its own ground and its full depth, which it needed anyway.
+      // Still off a thirds intersection, so the frame has somewhere for the eye to go.
+      camera.lookAt(Math.sin(a + 0.42) * 70, 50 + framing * 60, Math.cos(a + 0.42) * 70);
       winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;
     },
   };

@@ -971,6 +971,59 @@ threshold is wrong.** Loosening it would have shipped a dog nobody could see.
 
 ---
 
+## 13 Sep — The telemetry could not see 95% of its own verifications
+
+Judging the submission against the rules from the outside, the autonomous-loop evidence
+was the weakest thing in it: prose describing four loops, where the rules ask for "a
+screenshot, short execution log, interaction history excerpt, test output… as long as
+judges can verify that the loop closed autonomously". A paragraph saying a loop closed
+without a human in it is not evidence of the absence of a human. It is a claim about
+something that did not happen, and only a record kept at the time can settle it.
+
+The record existed and had never been used for this. Every lifecycle event carries the
+id of the human prompt whose turn it belongs to, which makes the absence *mechanical*:
+if the failing verification, the edits that answered it, and the passing verification
+all share one prompt id, no new instruction arrived between them, because there is
+nowhere for one to have gone. `tools/evidence/autonomy.mjs` reconstructs those windows
+and prints the count of distinct prompt ids across each one.
+
+The first version found eight loops. It was wrong, and the way it was wrong is worth
+recording: the verification pattern matched anywhere in the shell string, so a heredoc
+writing a test file counted as running one, and the traces it produced opened with a
+failing `mkdir`. Evidence that looks like evidence and is not is worse than none —
+a reviewer who reads it carefully trusts everything else less.
+
+Tightened to commands that actually invoke the harness, **eight loops became one.**
+
+### Why, and it is the finding
+
+`npm run verify` exits non-zero when it fails. 127 verification invocations are in the
+log. **121 of them — 95% — were piped through `tail` or `grep`**, because that is how
+you read the output of a command that prints four hundred lines. A shell pipeline exits
+with the status of its *last* command, so every one of those reported success.
+
+The event log recorded 2 failures out of 127. Not because the suite was green 125 times
+out of 127, but because the exit code was being discarded by the habit of trimming
+output in order to read it.
+
+**A record that can be silenced by how a command was invoked is not back pressure.** This
+is the component whose entire purpose is machine-readable feedback, and it had been
+blind for twelve days, in a project whose central argument is that agents need feedback
+they cannot talk their way around.
+
+The two available fixes were "remember not to pipe" and "make the record not depend on
+it". This repository's own rule decides that: *if you find yourself writing "the agent
+should remember to…", make it impossible instead.* The verify chain now writes its own
+outcome to `.verbo/verify.jsonl` — exit status, criteria verified, session — from inside
+`npm run verify`, where nothing downstream can hide it.
+
+The honest state of the evidence, today: one loop provable from the event log with the
+prompt-id argument, and a recorder that makes every subsequent one provable without it.
+Reporting one loop with a mechanical proof is worth more than four with a narrative, and
+the reason there is only one is now a fixed defect rather than an unexamined number.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

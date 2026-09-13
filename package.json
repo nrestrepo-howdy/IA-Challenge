@@ -10,8 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "gate": "node tools/evidence/ac-gate.mjs",
-    "verify": "npm run typecheck && npm test && npm run test:browser && npm run gate",
+    "gate": "node tools/evidence/ac-gate.mjs | tee .verbo/gate.txt",
+    "verify": "npm run typecheck && npm test && npm run test:browser && npm run gate && node tools/evidence/record-verify.mjs ok || (node tools/evidence/record-verify.mjs fail && exit 1)",
     "evidence": "node tools/evidence/report.mjs --write",
     "dev": "vite",
     "build": "vite build",
@@ -19,7 +19,8 @@
     "test:browser": "playwright test",
     "verify:fast": "npm run typecheck && npm test && npm run gate",
     "eval": "node tools/eval/nightly.mjs",
-    "audit": "node tools/evidence/mutate-suite.mjs"
+    "audit": "node tools/evidence/mutate-suite.mjs",
+    "evidence:autonomy": "node tools/evidence/autonomy.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

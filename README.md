@@ -189,6 +189,7 @@ npm run gate           # acceptance-criteria coverage against docs/SPEC.md
 npm run verify         # all of the above; the definition of done
 npm run eval           # one pass of the nightly evaluation corpus
 npm run evidence       # regenerate the parallelism evidence in SYSTEM.md
+npm run evidence:autonomy   # reconstruct autonomous loops from the event log
 ```
 
 `npm run verify` runs the browser suite deliberately. The gate counts browser criteria,

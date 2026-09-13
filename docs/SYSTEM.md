@@ -328,7 +328,47 @@ toward the null result, making the measured gap a floor rather than a ceiling.
 ## 8. Autonomous loops
 
 Required shape: `ACT → VERIFY → OBSERVE → FIX → VERIFY`, with no human prompt in the
-middle. Four are recorded in [AI-DEV-LOG.md](AI-DEV-LOG.md); the shortest to verify:
+middle. The claim is about something that did **not** happen, so it is settled from the
+event log rather than from memory: every lifecycle event carries the id of the human
+prompt whose turn it belongs to, and if the failing verification, the edits, and the
+passing verification all share one id, no instruction arrived between them — there is
+nowhere for one to have gone.
+
+```
+$ node tools/evidence/autonomy.mjs --trace 0
+
+prompt 195ffb65-3591-409a-804a-a95305ca25f4  —  one human instruction, 119s
+
+  13:54:39  FAILED  Bash     pkill -f "vite preview"; npm run verify 2>&1 | tail -60
+  13:54:41          Bash     npx tsc --noEmit …
+  13:54:47          Bash     npm run preview -- --port 4173 …
+  13:54:54          Bash     node …/probe.mjs
+  13:55:11          Bash     npm run verify 2>&1 | tail -70
+  13:55:50          Bash     npx playwright test tests/browser/…
+  13:55:56          Write    .claude/worktrees/agent-a05e52cf5e8ee0f11/probe.mjs
+  13:56:34          Bash     sed -n '1,40p' src/app/main.ts
+  13:56:38          Bash     pkill -f "vite preview"; sleep 1; npm run verify …
+
+  distinct prompt ids across the whole window: 1  (no new human instruction arrived)
+```
+
+**One loop meets that bar across twelve days, and finding out why is worth more than the
+loop.** `npm run verify` exits non-zero when it fails; 95% of the 127 verification
+invocations in the log were piped through `tail` or `grep` to be readable, and a shell
+pipeline exits with the status of its *last* command. So the telemetry recorded 2
+failures out of 127 — not because the suite was passing, but because the exit code was
+being thrown away by the habit of trimming output in order to read it.
+
+The project's own rule says which fix to take: if you find yourself writing "the agent
+should remember to…", make it impossible instead. The verify chain now writes its own
+outcome to `.verbo/verify.jsonl`, where no amount of piping downstream can hide it.
+
+A record that can be silenced by how a command was invoked is not back pressure. That
+this went unnoticed for twelve days in the component whose entire purpose is
+machine-readable feedback is the most useful thing in this section.
+
+Four more loops are described in [AI-DEV-LOG.md](AI-DEV-LOG.md) with their diagnoses;
+the shortest to verify:
 
 **The mutation engine mutated nothing.** Wrote three harness modules and 27 tests →
 `npm test` → 26 passed, 1 failed → the `dropStateUpdate` mutant was implemented as an

@@ -1,0 +1,100 @@
+
+Acceptance criteria: 22/22 verified (100%)
+
+  [verified] AC-01  The base scene loads with `await renderer.init()` resolved and a ...
+               tests/browser/base-scene.spec.ts
+  [verified] AC-02  The base scene holds ≥ 55 median fps for 10 s on reference hardwa...
+               tests/browser/base-scene.spec.ts
+  [verified] AC-03  With WebGPU disabled, it falls back to WebGL2 and AC-01 still hol...
+               tests/browser/base-scene.spec.ts
+  [verified] AC-04  L0 rejects a module that fails to compile, in < 50 ms.
+               tests/harness/l0-static.test.ts
+  [verified] AC-05  L0 rejects a module that writes outside its declared scope.
+               tests/harness/l0-static.test.ts
+               tests/intent/scope.test.ts
+               tests/world/primitives.test.ts
+               tests/world/spectacle.test.ts
+               tests/world/structures.test.ts
+  [verified] AC-06  L1 rejects a module whose median frame time exceeds 16 ms.
+               tests/browser/base-scene.spec.ts
+               tests/harness/l1-runtime.test.ts
+               tests/harness/prober-node.test.ts
+               tests/render/binding-keys.test.ts
+               tests/render/fog-density.test.ts
+               tests/runtime/repair-loop.test.ts
+               tests/world/figure.test.ts
+  [verified] AC-07  L1 rejects a module that produces an all-black frame.
+               tests/harness/l1-runtime.test.ts
+               tests/harness/prober-node.test.ts
+  [verified] AC-08  L1 kills an infinite-loop candidate by timeout without affecting ...
+               tests/browser/live-cycle.spec.ts
+               tests/harness/l1-runtime.test.ts
+               tests/harness/prober-node.test.ts
+  [verified] AC-09  L2 rejects a candidate that does not satisfy its state contract.
+               tests/harness/l2-contract.test.ts
+               tests/world/contract-e2e.test.ts
+               tests/world/daylight-water.test.ts
+               tests/world/lightning.test.ts
+               tests/world/spectacle.test.ts
+               tests/world/structures.test.ts
+  [verified] AC-10  A contract that fails to catch its three sibling mutants is disca...
+               tests/harness/mutation.test.ts
+               tests/intent/contract.test.ts
+               tests/world/lightning.test.ts
+               tests/world/structures.test.ts
+  [verified] AC-11  L3 can never approve on its own: a candidate failing L2 is not in...
+               tests/browser/live-cycle.spec.ts
+               tests/harness/cascade.test.ts
+               tests/harness/claude-critic.test.ts
+               tests/harness/l3-perceptual.test.ts
+               tests/runtime/cycle.test.ts
+               tests/runtime/injector.test.ts
+  [verified] AC-12  After an injection, prior user state (camera, inputs, created obj...
+               tests/browser/world-controls.spec.ts
+               tests/core/world.test.ts
+               tests/world/daylight-water.test.ts
+               tests/world/lightning.test.ts
+               tests/world/primitives.test.ts
+               tests/world/spectacle.test.ts
+               tests/world/structures.test.ts
+  [verified] AC-13  An injection that throws within the first 3 s rolls back automati...
+               tests/runtime/injector.test.ts
+  [verified] AC-14  The world never renders a black frame during an injection.
+               tests/browser/live-cycle.spec.ts
+               tests/world/arrival.test.ts
+               tests/world/figure.test.ts
+  [verified] AC-15  After 20 consecutive injections, memory stays within the declared...
+               tests/runtime/injector.test.ts
+               tests/world/lightning.test.ts
+               tests/world/primitives.test.ts
+  [verified] AC-16  Every intent produces a (code, contract) pair — never code withou...
+               tests/intent/compiler.test.ts
+               tests/intent/contract.test.ts
+               tests/intent/scope.test.ts
+               tests/world/daylight-water.test.ts
+               tests/world/lightning.test.ts
+               tests/world/spectacle.test.ts
+               tests/world/structures.test.ts
+  [verified] AC-17  An impossible intent produces an explained rejection, not a silen...
+               tests/browser/live-cycle.spec.ts
+               tests/intent/compiler.test.ts
+               tests/intent/figure-author.test.ts
+               tests/intent/figures.test.ts
+               tests/intent/spanish-disclosure.test.ts
+  [verified] AC-18  "Make it rain" completes the full cycle in ≤ 40 s at p50.
+               tests/browser/live-cycle.spec.ts
+  [verified] AC-19  With all three candidates failing, the system retries ≤ 3 times t...
+               tests/runtime/claude-repair.test.ts
+               tests/runtime/cycle.test.ts
+               tests/runtime/repair-loop.test.ts
+  [verified] AC-20  A world serializes to a link and restores with the same verbs app...
+               tests/app/share.test.ts
+               tests/browser/live-cycle.spec.ts
+               tests/core/world.test.ts
+               tests/world/structures.test.ts
+  [verified] AC-21  A request the catalogue cannot express produces a rig that is vis...
+               tests/browser/figures.spec.ts
+               tests/intent/figures.test.ts
+  [verified] AC-22  The freeform surface does not widen the catalogue: a request the ...
+               tests/intent/figures.test.ts
+

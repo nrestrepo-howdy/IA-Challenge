@@ -56,7 +56,8 @@ export const MOODS: readonly Mood[] = [
     ],
   },
   {
-    triggers: ['beautiful', 'gorgeous', 'stunning', 'surprise me', 'something nice', 'wow', 'amazing', 'spectacular'],
+    triggers: ['beautiful', 'gorgeous', 'stunning', 'surprise me', 'something nice', 'wow',
+               'amazing', 'spectacular', 'hola', 'hello', 'hi', 'anything', 'whatever'],
     rationale: 'aurora and water under a clear night',
     primitives: [
       { name: 'daylight', params: { phase: 0 } },
@@ -85,7 +86,7 @@ export const MOODS: readonly Mood[] = [
     ],
   },
   {
-    triggers: ['desert', 'dunes', 'arid', 'sahara', 'wasteland'],
+    triggers: ['desert', 'dunes', 'arid', 'sahara', 'wasteland', 'ground-tint'],
     rationale: 'pale sand under a high sun',
     primitives: [
       { name: 'daylight', params: { phase: 0.5 } },

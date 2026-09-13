@@ -106,7 +106,14 @@ export class CatalogueIntentCompiler implements IntentCompiler {
 
     if (parsed.proposal.primitives.length === 0) {
       return reject(
-        `nothing in the primitive catalogue expresses "${goal}". Available: ${names(this.catalogue).join(', ')}`,
+        // Written for a person, not for a developer. The first version listed internal
+        // primitive names — "rain-emitter, orbit-modulator" — which is accurate and
+        // useless: nobody types "orbit-modulator", and a refusal nobody can act on
+        // teaches them the world is broken rather than that it is finite.
+        `this world can't do "${goal}" — it knows weather, light and time of day, water, ` +
+        `and the shape of the city. Try: rain, snow, fog, wind, a storm, lightning, ` +
+        `day or night, dawn or dusk, water, a tower, taller buildings, a different ground, ` +
+        `aurora, birds, searchlights.`,
         nearestByKeyword(this.catalogue, goal),
       );
     }

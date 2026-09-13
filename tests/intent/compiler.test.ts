@@ -97,7 +97,15 @@ describe('AC-17 · an impossible intent is explained, never silently attempted',
     const compiler = new CatalogueIntentCompiler({ model: keywordModel });
     const r = expectRejection(await compiler.compile('give the world a talking dragon', world));
 
-    expect(r.reason).toContain('nothing in the primitive catalogue expresses');
+    // Asserts the *shape* of a good refusal, not its wording: it quotes what was
+    // asked, it says the world cannot do it, and it names things it can — so someone
+    // who was refused knows what to type next. The first version listed internal
+    // primitive names, which satisfied a weaker version of this test and taught a user
+    // nothing.
+    expect(r.reason).toContain('give the world a talking dragon');
+    expect(r.reason).toMatch(/can't do|cannot/);
+    expect(r.reason).toMatch(/\bTry:/);
+    expect(r.reason).not.toMatch(/-emitter|-volume|-modulator|-field/);
     // A wrong suggestion costs the user a whole verification cycle, so none is offered.
     expect(r.suggestion).toBeNull();
   });

@@ -14,6 +14,7 @@
  */
 import type { PrimitiveSpec } from './catalogue.js';
 import { matchMood } from './moods.js';
+import { toCatalogueVocabulary } from './es.js';
 
 export interface ModelRequest {
   readonly utterance: string;
@@ -142,7 +143,11 @@ export const keywordModel: LanguageModel = {
     // built something reasonable. Moods are compositions of primitives that exist,
     // with parameters inside their declared ranges, and they go through the same
     // compiler, contracts and oracles as anything else.
-    const mood = matchMood(request.utterance);
+    // Spanish first. Every keyword and mood trigger in this catalogue is English, and
+    // the owner of this project types Spanish — 2 of 32 ordinary utterances resolved
+    // before this line existed, and both of those were written in English.
+    const text = toCatalogueVocabulary(request.utterance);
+    const mood = matchMood(text);
     if (mood) {
       const available = new Set(request.catalogue.map((c) => c.name));
       const primitives = mood.primitives.filter((p) => available.has(p.name));
@@ -157,7 +162,7 @@ export const keywordModel: LanguageModel = {
       }
     }
 
-    const words = tokenize(request.utterance);
+    const words = tokenize(text);
     const hits = request.catalogue
       .map((spec) => ({
         spec,

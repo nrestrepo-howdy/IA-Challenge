@@ -304,6 +304,15 @@ let busy = false;
  * product (AC-18).
  */
 async function say(utterance: string): Promise<SayResult> {
+  // Timed from the utterance, not from the cycle.
+  //
+  // `ms` used to carry `outcome.ms`, which starts after the resolver has answered —
+  // so AC-18's 40 s budget (R-8) was measured against everything except the part that
+  // could breach it. With the deterministic phrasebook the two numbers are the same
+  // and nobody noticed; the first live model call read 108 ms for an 8.8 s request.
+  //
+  // A budget that excludes the slow half is not a budget.
+  const startedAt = performance.now();
   if (busy) return { ok: false, ms: 0, rejectedAt: null, steps: [], reason: 'busy' };
   busy = true;
   input.disabled = true;
@@ -324,7 +333,7 @@ async function say(utterance: string): Promise<SayResult> {
       // The panel was opened before the compile; saying nothing in it would leave a
       // started thing unfinished on screen.
       panel.dismiss(explanation);
-      return { ok: false, ms: 0, rejectedAt: 'intent', steps: [], reason: compiled.reason };
+      return { ok: false, ms: performance.now() - startedAt, rejectedAt: 'intent', steps: [], reason: compiled.reason };
     }
     if (compiled.unaddressed.length) {
       // Accepted, and said out loud. Delivering a subset in silence is the failure
@@ -351,7 +360,7 @@ async function say(utterance: string): Promise<SayResult> {
     // worth knowing: whether failures are concentrated somewhere fixable.
     return {
       ok: outcome.ok,
-      ms: outcome.ms,
+      ms: performance.now() - startedAt,
       rejectedAt: outcome.ok ? null : (outcome.verdicts.at(-1)?.failedAt ?? 'unknown'),
       unaddressed: compiled.unaddressed,
       steps: outcome.steps.map((s) => ({ kind: s.kind, text: s.text })),

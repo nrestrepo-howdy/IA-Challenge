@@ -117,6 +117,36 @@ mandatory `dispose()` (R-4) and a declared slice of `__VERBO_STATE__`.
 This collapses the task from open-ended Three.js synthesis, where the state of the art
 succeeds 28% of the time, down to constrained composition over a known API surface.
 
+### 4.5 The freeform surface (amended 13 Sep, D-10)
+
+A closed catalogue of weather, light and city answers *"un perro con una persona
+paseando"* with **cannot express**. That is an honest refusal and it has two costs. The
+product is then a lighting desk rather than a world; and the harness is guarding code
+that cannot go interestingly wrong, since composing validated parameters into a template
+is not a threat four oracles and a capability-revoking worker are needed for.
+
+So there is a second surface, and it is narrow on purpose:
+
+| | Catalogue surface (§4.4) | Freeform surface |
+|---|---|---|
+| Agent supplies | a primitive name and parameters | a rig of shapes and `pose(t, parts)` |
+| Validated | by JSON Schema, before anything runs | per part, by name, in `figure.mount` |
+| May import | one `verbo:*` primitive per directive | `verbo:figure`, and nothing else |
+| May reach Three.js | no | no |
+| May name a geometry | no | one of four |
+| L2 asserts | each primitive's declared fields | that the rig's `pose` **moves** |
+
+**This is not the alternative D-2 rejects.** R-1's 28% measures producing a
+behaviourally correct *Three.js world*: a scene graph, materials, geometry, a render
+loop. A rig's generated half is arithmetic over a fixed-length array of targets, and
+every value it returns is clamped on the way into state. The tasks are not the same
+size, and the evidence for one is not evidence about the other.
+
+The cost is stated rather than hidden: this is the only code in the project that the
+agent **writes** rather than selects, and its correctness is therefore established by
+the cascade at runtime rather than by construction. That is the trade D-10 makes, and
+AC-21 and AC-22 are what hold it.
+
 ---
 
 ## 5. Major technical decisions
@@ -131,6 +161,7 @@ succeeds 28% of the time, down to constrained composition over a known API surfa
 | **D-6** | Bounded injection budget per session | Unlimited injections | R-4: the leak is structural, so it is bounded rather than pretended away |
 | **D-7** | TSL rather than hand-written WGSL/GLSL | Native shader code | One source compiles to both; WebGL2 fallback comes free |
 | **D-8** | No voice in v1 | Voice as the differentiator | 12 h buys more as rubric coverage than as garnish |
+| **D-10** | Two surfaces: a closed catalogue, plus a narrow freeform rig the agent writes `pose()` for | Catalogue only (as D-2 shipped) / free-form Three.js | A catalogue-only agent cannot answer "a dog walking" at all, and leaves the cascade guarding code that cannot fail interestingly. The freeform surface admits no imports, no scene access, no materials and four geometries, so R-1's 28% — measured on open-ended Three.js synthesis — is not evidence about it. Amends §4.4; held by AC-21, AC-22 |
 | **D-9** | Split the shadow: the **candidate's code** runs in a Worker, the **shadow render** runs on the main thread in a second offscreen context | Full `WebGPURenderer` inside the Worker | R-11. Isolation is needed for *code* — an infinite loop must be killable — not for pixels. Rendering where Three.js is supported avoids a known-broken path, and a device may drive any number of canvases, so a second context costs nothing. The `Prober` interface is unchanged, which is why this could be decided after it was built |
 
 ---
@@ -168,6 +199,10 @@ Every AC is machine-verifiable. **An AC without a passing verification fails the
 - **AC-18** "Make it rain" completes the full cycle in ≤ 40 s at p50.
 - **AC-19** With all three candidates failing, the system retries ≤ 3 times then reports; it never hangs.
 - **AC-20** A world serializes to a link and restores with the same verbs applied.
+
+### The freeform surface (D-10)
+- **AC-21** A request the catalogue cannot express produces a rig that is visibly on screen and moving; a rig whose `pose` does not move is rejected by L2, not injected.
+- **AC-22** The freeform surface does not widen the catalogue: a request the catalogue can express never produces a rig, and a request neither surface can express is still refused with a reason.
 
 ---
 

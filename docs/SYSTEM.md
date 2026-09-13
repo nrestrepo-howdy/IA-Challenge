@@ -370,9 +370,16 @@ pose returns is clamped on the way into state. R-1's 28% measures producing a
 behaviourally correct Three.js *world*, which is a different task from producing
 `Math.sin(t * 4) * 0.6` for a leg swing.
 
-It is still a widening of the agent's reach, and `docs/SPEC.md` — protected on purpose —
-does not yet record it. That line is a human decision, not one this agent should make
-about its own scope.
+It is recorded in the SPEC as **D-10**, with its rejected alternatives and its cost:
+this is the only code in the project the agent *writes* rather than selects, so its
+correctness is established by the cascade at runtime instead of by construction. Writing
+it required opening the protected-artifact lock with `VERBO_SPEC_UNLOCK=1`, which is
+logged in AI-DEV-LOG under 13 Sep.
+
+**AC-21** and **AC-22** hold it, and they are split the way D-1 splits everything else:
+that the rig *moves* is a claim about hidden state and is decided by a contract shown
+failing on a rig whose pose is identical between frames; that the rig is *on screen* is a
+claim about pixels and is decided in a browser.
 
 ---
 

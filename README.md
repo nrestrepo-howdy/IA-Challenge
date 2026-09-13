@@ -97,7 +97,12 @@ the author is unreachable the request still returns the ground and discloses the
 
 The catalogue stays closed underneath it: "make it rain" still resolves to rain and
 nothing else, a rig cannot be reached by asking for weather, and a request neither a
-primitive nor a rig can meet is still refused.
+primitive nor a rig can meet is still refused. That is **AC-22**, and the decision and
+its cost are recorded as **D-10** in the SPEC rather than argued in a commit message.
+
+The camera reframes for a rig, because a walking figure is forty units tall in a city of
+three-hundred-unit towers and from the default viewpoint it is a detail. Someone who
+says "un perro con una persona paseando" has named the subject of the picture.
 
 ### What the advisory layer is for
 
@@ -178,8 +183,8 @@ not pixel-identical.
 
 ```bash
 npm run dev            # the world
-npm test               # 396 unit tests — no browser, no key
-npm run test:browser   # 25 acceptance tests in a real browser
+npm test               # 436 unit tests — no browser, no key
+npm run test:browser   # 26 acceptance tests in a real browser
 npm run gate           # acceptance-criteria coverage against docs/SPEC.md
 npm run verify         # all of the above; the definition of done
 npm run eval           # one pass of the nightly evaluation corpus
@@ -238,7 +243,7 @@ that cannot be bought with effort.
 
 ```
 docs/
-  SPEC.md              Objective, sourced constraints, decisions, 20 acceptance criteria
+  SPEC.md              Objective, sourced constraints, decisions, 22 acceptance criteria
   SYSTEM.md            Agentic system map, with generated parallelism evidence
   AI-DEV-LOG.md        Iterations, failures, corrections, human decisions
   contracts/           Why the workstream boundaries sit where they do

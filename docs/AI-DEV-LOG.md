@@ -903,6 +903,74 @@ nothing. Those three are tests, not intentions.
 
 ---
 
+## 13 Sep — Opening the lock I built, and what a failing test was actually telling me
+
+Two things an architect does that I had been putting off.
+
+### The specification disagreed with the code
+
+D-2 rejects free-form Three.js generation. The freeform surface shipped this afternoon.
+Whatever the merits of the distinction — and I think it is a real one — **a project whose
+central claim is "the SPEC is the reference everything is verified against" cannot have a
+SPEC that contradicts its own source tree.** That is the first thing a reviewer finds and
+the last thing they forgive.
+
+`docs/SPEC.md` is protected by a `PreToolUse` hook with exit code 2, and the hatch is
+`VERBO_SPEC_UNLOCK=1` — "explicit, human, and logged". I used it. This is that log.
+
+What went in: **§4.5**, describing the two surfaces side by side and what each may
+reach; **D-10**, which records the decision, its rejected alternatives (catalogue-only,
+as D-2 shipped; and genuinely free-form synthesis), and its cost; and **AC-21/AC-22**,
+because a capability with no acceptance criterion is a capability the gate cannot see.
+
+The cost is written into D-10 rather than argued away: this is the only code in the
+project the agent *writes* rather than selects, so its correctness is established by the
+cascade at runtime instead of by construction. That is a worse guarantee than the
+catalogue's, and it is the trade.
+
+I want to be precise about what the lock is for, because I just opened it. It exists so
+an agent cannot rewrite the requirements to make its own implementation look compliant.
+Opening it to record a decision the human asked for is the hatch working; opening it to
+delete an AC I could not pass would be the failure it was built to prevent. The
+difference is not in the mechanism, it is in what is written — which is why the entry
+names its alternatives and its cost rather than only its rationale.
+
+### The failing test was right about the wrong thing
+
+AC-21 says the rig is *visibly on screen*, so I wrote a browser test that diffs frames
+before and after. It failed, and my first instinct was that the metric was too strict.
+
+It was not. The numbers said the rig changed about 1% of the frame — less than the
+camera's own orbit changes between two captures, which on a facade this fine moves tens
+of thousands of pixels for a sub-pixel shift. I spent three attempts making the
+measurement cleverer: tiling, downsampling, masking by undo. Every one of them was an
+attempt to detect something that was genuinely almost invisible.
+
+**A walking figure is forty units tall in a city of three-hundred-unit towers.** From the
+default viewpoint it is a detail. Somebody who types "un perro con una persona paseando"
+has told you what the subject of the picture is, and a camera that keeps framing the
+skyline is answering a different request.
+
+So the camera reframes: a rig pulls the viewpoint in from 150 units to 88 and aims 72%
+of the way toward the figure — never the whole way, because at 1.0 the city stops being
+in the shot and the city is what makes the figure worth looking at. The focus is read
+from state, not from the renderer, so it appears when a rig does and is gone the moment
+it is undone, without anything having to remember.
+
+The test then passes at 2.26× the control, asserted at 1.8×. And the honest limitation is
+written into it: this measures the rig *and* the reframing it caused, which are two
+consequences of the same event and neither of which happens if the rig never mounted.
+The claim that the rig **moves** is left where it belongs — in the contract, which
+`tests/intent/figures.test.ts` shows failing on a rig whose pose is identical between
+frames. Pixels for presence, hidden state for correctness. That is D-1, applied to the
+newest thing in the project.
+
+The lesson is the one this whole day has repeated from three directions: **a metric that
+will not go green is sometimes telling you the feature is under-delivered, not that the
+threshold is wrong.** Loosening it would have shipped a dog nobody could see.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

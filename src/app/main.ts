@@ -90,6 +90,29 @@ function reconcile(): void {
 }
 
 /**
+ * Where the world's subject is, if it has one.
+ *
+ * Read from state rather than from the renderer, because the renderer has no idea what
+ * the user asked for and the state does: a rig publishes its `pose`, and the first
+ * part's position is where the figure is standing. Only the first rig counts — a camera
+ * that tried to hold two subjects at once holds neither.
+ *
+ * Returns null the moment the rig is undone, so the camera goes back to framing the
+ * city without anything having to remember to tell it.
+ */
+function focusPoint(): readonly [number, number, number] | null {
+  const state = (globalThis as { __VERBO_STATE__?: Record<string, unknown> }).__VERBO_STATE__;
+  const figures = state?.['figures'] as Record<string, { pose?: unknown }> | undefined;
+  for (const figure of Object.values(figures ?? {})) {
+    const pose = figure?.pose;
+    if (!Array.isArray(pose) || pose.length < 3) continue;
+    const [x, y, z] = pose as number[];
+    if (typeof x === 'number' && typeof y === 'number' && typeof z === 'number') return [x, y, z];
+  }
+  return null;
+}
+
+/**
  * Frame capture, performed inside the loop immediately after `render()`.
  *
  * Reading the canvas from outside the loop returns an empty buffer: presentation does
@@ -175,7 +198,7 @@ handle.renderer.setAnimationLoop(() => {
     typeof skyline === 'number' ? (skyline - 1) / 4 : 0,
     typeof tower === 'number' ? tower / 900 : 0,
   ));
-  base.update(world.clock.elapsed);
+  base.update(world.clock.elapsed, focusPoint());
   frame.render();
   drain();
 });

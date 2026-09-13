@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { CATALOGUE } from '../../src/intent/catalogue.js';
 import { CatalogueIntentCompiler } from '../../src/intent/compiler.js';
 import { matchFigure } from '../../src/intent/figures.js';
+import { evaluateContract } from '../../src/harness/l2-contract.js';
 import type { WorldHandle } from '../../src/contracts.js';
 
 const world = { state: {}, scene: null, clock: { elapsed: 0 } } as unknown as WorldHandle;
@@ -35,7 +36,7 @@ async function compile(utterance: string) {
   };
 }
 
-describe('the freeform path (AC-17)', () => {
+describe('the freeform path (AC-17, AC-21)', () => {
   it('builds a rig for a request the catalogue cannot express', async () => {
     const out = await compile('un perro con una persona paseando');
     expect(out.rejected).toBe(false);
@@ -74,7 +75,7 @@ describe('the freeform path (AC-17)', () => {
   });
 });
 
-describe('what opening the path did not cost', () => {
+describe('what opening the path did not cost (AC-22)', () => {
   it('leaves the catalogue closed: weather still resolves to weather', async () => {
     const out = await compile('make it rain');
     if (out.rejected) throw new Error(out.reason);
@@ -84,6 +85,51 @@ describe('what opening the path did not cost', () => {
   it('still refuses what neither a primitive nor a rig can do', async () => {
     const out = await compile('summon a sentient octopus');
     expect(out.rejected).toBe(true);
+  });
+});
+
+/**
+ * The other half of AC-21: a rig that does not move must be rejected, not injected.
+ *
+ * "Present but inert" is the dominant real failure mode behind R-1, and on the catalogue
+ * surface it is a primitive that mounts and never ticks. On the freeform surface it is
+ * worse and more likely, because the motion is the part that was *written*: a pose that
+ * throws, returns nothing, or sets the same numbers every frame produces a figure
+ * standing in the plaza in a T-pose, with a state slice that exists, parts that are
+ * correct, and nothing wrong that L0 or L1 can see.
+ *
+ * The contract catches it, and this proves the contract catches it by building one
+ * against a real rig and running it over two snapshots that are identical.
+ */
+describe('a rig that does not move is rejected by L2 (AC-21)', () => {
+  it('fails its own contract when pose is unchanged between frames', async () => {
+    const out = await compiler.compile('a person walking', world);
+    if ('rejected' in out) throw new Error(out.reason);
+
+    const still = {
+      figures: { walker: { count: 6, pose: [0, 0, 0, 0, 0, 0, 1], instance: 'figure#0' } },
+    };
+    const verdict = evaluateContract(out.contract, still, still);
+
+    expect(verdict.passed).toBe(false);
+    expect(verdict.failedIds).toContain('a:figures.walker.pose');
+    const why = verdict.results.find((r) => r.id === 'a:figures.walker.pose')!;
+    expect(why.detail).toMatch(/present but inert/);
+  });
+
+  it('passes the same contract once the pose moves', () => {
+    // The half that keeps the assertion above from passing for the wrong reason: a
+    // contract that rejected everything would satisfy the first test and be useless.
+    const before = {
+      figures: { walker: { count: 6, pose: [0, 0, 0, 0, 0, 0, 1], instance: 'figure#0' } },
+    };
+    const after = {
+      figures: { walker: { count: 6, pose: [0, 1.4, 0, 0, 0.3, 0, 1], instance: 'figure#0' } },
+    };
+    return compiler.compile('a person walking', world).then((out) => {
+      if ('rejected' in out) throw new Error(out.reason);
+      expect(evaluateContract(out.contract, before, after).passed).toBe(true);
+    });
   });
 });
 

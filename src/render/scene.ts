@@ -34,7 +34,10 @@ export interface BaseScene {
   /** The authored sky, for the binding of the primitive that decides what time it is. */
   readonly sky: SkyHandle;
   resize(w: number, h: number): void;
-  update(elapsed: number): void;
+  /**
+   * @param focus  Where the world's subject is, if it has one. The camera frames it.
+   */
+  update(elapsed: number, focus?: readonly [number, number, number] | null): void;
 }
 
 /**
@@ -820,6 +823,8 @@ export function createBaseScene(): BaseScene {
    */
   const camera = new PerspectiveCamera(54, 1, 0.5, 4000);
   let dolly = 165;
+  const aim = new Vector3();
+  const subject = new Vector3();
   let framing = 0;
 
   (scene.userData as Record<string, unknown>)[HANDLES_KEY] = { skyline, ground, sky } satisfies SceneHandles;
@@ -840,7 +845,7 @@ export function createBaseScene(): BaseScene {
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
     },
-    update(elapsed) {
+    update(elapsed, focus) {
       // A slow orbit, low to the ground so the skyline crosses the moon. Motion in the
       // base scene is what makes an injected change read as an addition to a living
       // world rather than a page that swapped itself out.
@@ -849,7 +854,15 @@ export function createBaseScene(): BaseScene {
       // because a world that can be reshaped needs a viewpoint that survives being
       // reshaped -- otherwise the first structural verb puts the camera inside a wall.
       // Eased, so the move reads as the world settling rather than a cut.
-      const want = 150 + framing * 130;
+      // A rig pulls the camera in; the city pushes it out.
+      //
+      // A walking figure is about forty units tall in a city of three-hundred-unit
+      // towers, so from the default distance it is roughly one percent of the frame —
+      // present, verifiable, and not what anyone asked to look at. When someone says
+      // "un perro con una persona paseando", the subject of the picture is the dog and
+      // the person, and a camera that keeps framing the skyline is answering a
+      // different request.
+      const want = (focus ? 88 : 150) + framing * 130;
       dolly += (want - dolly) * 0.02;
       // Low, and looking up. 12 units is street level against 300-unit towers, which
       // is the whole point: at 26 the camera was level with nothing and taller than
@@ -867,7 +880,15 @@ export function createBaseScene(): BaseScene {
       // visible" over a correct render three times to find it. Lower, the city gains
       // its own ground and its full depth, which it needed anyway.
       // Still off a thirds intersection, so the frame has somewhere for the eye to go.
-      camera.lookAt(Math.sin(a + 0.42) * 70, 50 + framing * 60, Math.cos(a + 0.42) * 70);
+      // Eased toward the subject rather than cut to it, and never all the way: at 1.0
+      // the figure sits dead centre and the city stops being in the shot, which loses
+      // the thing that makes the figure worth looking at.
+      aim.set(Math.sin(a + 0.42) * 70, 50 + framing * 60, Math.cos(a + 0.42) * 70);
+      if (focus) {
+        subject.set(focus[0], focus[1] + 16, focus[2]);
+        aim.lerp(subject, 0.72);
+      }
+      camera.lookAt(aim);
       winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;
       // A beacon is on or off, not dimmed: a sine here reads as a pulsing bulb, and
       // the thing being imitated is a shutter.

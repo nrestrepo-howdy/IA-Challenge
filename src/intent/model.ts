@@ -187,6 +187,11 @@ export const keywordModel: LanguageModel = {
       ...h.spec.keywords,
       ...Object.keys(h.spec.paramHints ?? {}).filter((w) => words.has(w)),
     ]));
+    // A word can select a primitive and still not be answered by it. `thunder` brings
+    // the lightning and the catalogue has no sound, so it comes back out of `matched`:
+    // triggering and delivering are different claims, and only the second is what
+    // `unaddressed` is about.
+    for (const hit of hits) for (const word of hit.spec.partial ?? []) matched.delete(word);
     // Over the translated text, not the doubled one the search used: see
     // `toTranslatedVocabulary`. Disclosing a word *because* it was translated is a
     // claim of failure made about the part that worked.

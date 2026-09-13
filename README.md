@@ -183,7 +183,7 @@ not pixel-identical.
 
 ```bash
 npm run dev            # the world
-npm test               # 436 unit tests — no browser, no key
+npm test               # 439 unit tests — no browser, no key
 npm run test:browser   # 26 acceptance tests in a real browser
 npm run gate           # acceptance-criteria coverage against docs/SPEC.md
 npm run verify         # all of the above; the definition of done

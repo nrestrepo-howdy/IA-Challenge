@@ -20,7 +20,10 @@
     "make the buildings taller",
     "make it a desert",
     "a sunny flooded city",
-    "a stormy night with towers"
+    "a stormy night with towers",
+    "un perro con una persona paseando",
+    "a person walking",
+    "a dog in the rain"
   ],
   "expectDisclosure": [
     "make it rain money",

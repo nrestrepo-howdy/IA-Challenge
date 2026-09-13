@@ -76,6 +76,20 @@ export interface PrimitiveSpec {
    * A ranking signal, not a parser. The hosted resolver still does the real work.
    */
   readonly paramHints?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /**
+   * Words that select this primitive and that it can only half deliver.
+   *
+   * `thunder` is the case. It is the right keyword for `lightning` — it is what people
+   * type when they want the sky to flash — and the catalogue has the flash and cannot
+   * make the sound. Treating it as an ordinary keyword made the offline resolver claim
+   * a request it had half met; dropping it would have made "thunder" resolve to nothing
+   * at all. It triggers, and it is disclosed, which is both halves of the truth.
+   *
+   * The hosted resolver reaches this conclusion on its own and says so in `unaddressed`;
+   * this is how the keyword path arrives at the same answer without being able to reason
+   * about it.
+   */
+  readonly partial?: readonly string[];
   /** Resolution hints for the offline model. A ranking signal, not a parser. */
   readonly keywords: readonly string[];
   readonly fields: readonly StateField[];
@@ -100,6 +114,15 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     },
     defaults: { count: 4000, speed: 24, spread: 120 },
     keywords: ['rain', 'raining', 'rainy', 'downpour', 'drizzle', 'shower', 'storm', 'stormy', 'precipitation'],
+    // "heavy rain" used to produce ordinary rain and then disclose `heavy` — the word
+    // was neither expressed nor addressed, which is the honest half of a failure the
+    // other half of which is that the rain should simply have been heavier.
+    paramHints: {
+      heavy: { count: 16000, speed: 58 }, torrential: { count: 19000, speed: 66 },
+      hard: { count: 15000, speed: 58 }, downpour: { count: 18000, speed: 62 },
+      light: { count: 3500, speed: 22 }, drizzle: { count: 3000, speed: 18 },
+      gentle: { count: 3200, speed: 20 }, soft: { count: 3200, speed: 20 },
+    },
     fields: [
       { key: 'particles', role: 'constant', fromParam: 'count' },
       { key: 'fallSpeed', role: 'constant', fromParam: 'speed' },
@@ -234,6 +257,7 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       // the half that makes it one — and because 'stormy' matched nothing at all, the
       // resolver then disclosed the word, reporting failure for the request it had
       // just half-answered.
+      partial: ['thunder', 'thunderclap'],
       keywords: ['lightning', 'thunder', 'thunderstorm', 'thunderbolt', 'bolt', 'flash', 'flashes', 'flashing', 'strike', 'strikes', 'storm', 'stormy'],
     fields: [
       { key: 'peak', role: 'constant', fromParam: 'intensity' },
@@ -262,7 +286,11 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       additionalProperties: false,
     },
     defaults: { speed: 1, radius: 12, axis: 'y' },
-    keywords: ['orbit', 'orbiting', 'spin', 'spinning', 'rotate', 'rotating', 'revolve', 'circle', 'swirl'],
+    // 'move' and its forms are here because "make the light move" is the plainest way
+    // anyone asks for this, and it matched nothing: the request resolved to a light that
+    // did not move, and disclosed the only word that said what to do.
+    keywords: ['orbit', 'orbiting', 'spin', 'spinning', 'rotate', 'rotating', 'revolve', 'circle', 'swirl',
+      'move', 'moving', 'moves', 'travel', 'travelling', 'sweep', 'sweeping'],
     fields: [
       { key: 'speed', role: 'constant', fromParam: 'speed' },
       { key: 'axis', role: 'constant', fromParam: 'axis' },

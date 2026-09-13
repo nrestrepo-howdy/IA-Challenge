@@ -62,6 +62,30 @@ describe('Spanish disclosure (AC-17)', () => {
     expect((await resolve('add pink neon fog')).unaddressed).toContain('pink');
   });
 
+  it('discloses a word that selects a primitive it can only half deliver', async () => {
+    // `thunder` is the right keyword for lightning — it is what people type when they
+    // want the sky to flash — and the catalogue has the flash and no sound. Treating it
+    // as an ordinary keyword made the offline resolver claim a request it had half met;
+    // dropping it would have made "thunder" resolve to nothing at all. It triggers, and
+    // it is disclosed.
+    const out = await resolve('thunder and lightning');
+    expect(out.primitives.map((p) => p.name)).toContain('lightning');
+    expect(out.unaddressed).toEqual(['thunder']);
+  });
+
+  it('does not disclose the whole phenomenon when the flash is what was asked for', async () => {
+    // The half that keeps the rule above from becoming "always disclose": a
+    // thunderstorm is the weather, and the weather is expressible.
+    expect((await resolve('a thunderstorm')).unaddressed).toEqual([]);
+  });
+
+  it('moves the numbers an intensity word asks for, instead of disclosing it', async () => {
+    const out = await resolve('heavy rain');
+    const rain = out.primitives.find((p) => p.name === 'rain-emitter');
+    expect(rain?.params?.['count']).toBe(16000);
+    expect(out.unaddressed).toEqual([]);
+  });
+
   it('still names what the catalogue genuinely cannot express', async () => {
     // The half that keeps the silence above from being achieved by never speaking.
     expect((await resolve('que llueva dinero')).unaddressed).toContain('dinero');

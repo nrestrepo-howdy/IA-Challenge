@@ -265,6 +265,16 @@ ms**, p95 **17 568 ms**, slowest 22 602 ms, against a 40 s budget (R-8). That is
 number the budget was written for, and it is the first run that measures the system
 this project is about.
 
+**13 September, later, offline, under a stricter rule:** the corpus grew to 33 with the
+freeform utterances, and `expectSuccess` now requires acceptance *with nothing
+disclosed* — the mirror of the disclosure rule, which nothing was checking. Replaying the
+morning's run under it turned 30/30 into 27/30 and named three defects that had been
+scoring as clean passes. All three are fixed, and the phrasebook now reaches **33/33** at
+p50 77 ms: `heavy rain` moves the numbers instead of disclosing `heavy`; `make the light
+move` reaches the modulator that exists for it; and `thunder` is disclosed while the
+lightning still fires, because a word can select a primitive and still not be answered by
+it.
+
 It also contains an accident worth more than the run itself. The API credit ran out
 seventeen utterances in. The remaining thirteen fell to the phrasebook floor — and the
 corpus still came out 30/30, because the floor is a floor and not a stub. An unplanned

@@ -19,9 +19,11 @@ Record twice. Have someone who did not build this drive the keyboard for take on
 | 0:12 | It rains. The camera keeps orbiting; nothing reloads, nothing blanks. | "It didn't reload. Your world is still your world." |
 | 0:25 | Type **`una noche de tormenta`** — in Spanish, and not the name of anything. Let it work; talk over the wait. | "Nothing in there is a primitive. It's a mood — and it becomes night, heavy rain, wind driving the rain sideways, and lightning. Four things composed, because that is what the sentence meant." |
 | 0:42 | Point at the four `import` lines in the panel's code view. | "Every one of these is code that did not exist a second ago." |
-| 0:50 | Click the status line, bottom-left. Paste the URL into a second browser window. The same world rebuilds. | "The link carries what you *said*, not the code. So a shared world gets re-verified when it opens — you can't hand someone a link that runs something in their browser." |
-| 1:10 | Type something the world cannot do: **`make it rain money`**. It rains, and the log says *cannot express: "money"*. | "And when it can only do part of what you asked, it says which part." |
-| 1:25 | Hold on the finished world. | *(silence)* |
+| 0:50 | Type **`un perro con una persona paseando`**. The camera moves in to meet them. Hold on it. | "That is not in the catalogue. There is no dog primitive and no walk primitive — so the agent wrote the rig and the gait, and the camera reframed because the subject of the picture changed." |
+| 1:02 | Scroll the panel's code view to the `pose` function. | "This is the part that was written rather than chosen. It's arithmetic — it cannot import anything, reach the scene, or name a shape outside four. That narrowness is what makes it safe to run, and the four layers are what make it safe to inject." |
+| 1:12 | Click the status line, bottom-left. Paste the URL into a second browser window. The same world rebuilds. | "The link carries what you *said*, not the code. So a shared world gets re-verified when it opens — you can't hand someone a link that runs something in their browser." |
+| 1:20 | Type something the world cannot do: **`make it rain money`**. It rains, and the log says *cannot express: "money"*. | "And when it can only do part of what you asked, it says which part." |
+| 1:28 | Hold on the finished world. | *(silence)* |
 
 ---
 
@@ -34,7 +36,7 @@ Record twice. Have someone who did not build this drive the keyboard for take on
 | 1:46 | Point at the **L3** cell and the dashed rule above it labelled *advise*. Then the `L3 —` line in the log. | "Three of those four decide. The fourth looks at the frame and only ever files an opinion — it cannot block. It is also the layer that found four real defects the other three passed, including a storm rendering at midday while every contract said it was correct." |
 | 1:50 | `docs/SPEC.md`, scroll the constraints table. Stop on **R-2**. | "This is the decision the project is built on. A 2026 benchmark measured that scoring generated 3D by *looking* at it is uncorrelated with whether it works — and that an agentic visual evaluator, at four hundred times the cost, still passes 45% of severely broken output." |
 | 2:05 | `src/harness/cascade.ts`, highlight `AUTHORITATIVE_LAYERS`. | "So the vision model does not decide. Hidden-state contracts do. And it's the type system that enforces it — you cannot call `inject` with a verdict that failed L0, L1 or L2, whatever the critic thought." |
-| 2:20 | Terminal: `npm run verify`. Let it run. 396 tests, 25 browser, 20/20. | "The same harness that gates the agent gates every commit, and the deploy. There is no separate CI." |
+| 2:20 | Terminal: `npm run verify`. Let it run. 436 tests, 26 browser, 22/22. | "The same harness that gates the agent gates every commit, and the deploy. There is no separate CI." |
 | 2:35 | `docs/SYSTEM.md` §3 — the swimlane chart. | "Five workstreams, in parallel worktrees, against contracts frozen before any of them started. Zero merge conflicts. Those charts are generated from the event log — if the agents hadn't overlapped, no formatting would say they did." |
 | 2:45 | `docs/AI-DEV-LOG.md`, the ablation table. | "Two agents, same task, one with the written context and one without. The guided run used **more** calls, not fewer — and wrote eleven tests against zero. Guidance isn't a shortcut. It's a definition of done." |
 | 2:55 | Back to the world, still raining. | "One person. Thirteen days. The interesting part was never the generation — it was what it takes to make it safe to inject machine-written code into something already running." |
@@ -56,7 +58,10 @@ Walk it five times looking for the break, not for the flow.
   only one of them demonstrates the part that understands Spanish. Record with the key.
 - **Type slowly enough to read.** If you type fast, the panel resolves before anyone
   sees it happen.
-- **Do not narrate over silence at 0:00 and 1:25.** Both are doing work.
+- **Do not narrate over silence at 0:00 and 1:28.** Both are doing work.
+- **The dog is the answer to the obvious objection.** Every viewer is privately asking
+  whether this only does weather. Ask it for them, out loud, and then answer it — that
+  beat is worth more than any of the architecture slides that follow it.
 
 ## Fallbacks
 

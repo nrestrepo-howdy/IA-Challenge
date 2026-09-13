@@ -735,6 +735,93 @@ my harness had handed it, not about the picture.
 
 ---
 
+## 13 Sep — "Se ve como Minecraft", and the three reasons it did
+
+The owner's words, on a build I had just spent a day improving: everything is seen
+from above, and the buildings look like Minecraft. Both were true, and neither was
+about the thing I had been fixing.
+
+**A building was one box.** `BoxGeometry(1,1,1)` scaled three ways, once per building —
+which is precisely the shape the word "blocky" names, and no texture or rim light
+repairs a silhouette. Every building is now between two and five volumes chosen by
+archetype: a slab with a mechanical cap, a three-tier setback, a four-step taper, or a
+tall shaft with a low wing offset to one side. Masts go on the tall ones only; every
+tower wearing an antenna is as uniform as none of them wearing one. Tiers are expressed
+as *fractions* of the building's height for the same reason the windows already were —
+`skyline-shift` multiplies that height, and a setback in world units would stay behind
+while the tower left without it.
+
+**The window was scaled to the building.** A cube's UVs run 0..1 across a face whatever
+that face measures, so one tile of windows stretched to fit buildings between sixteen
+and forty-six units wide: the near towers wore windows three times the size of the far
+ones. In a real city the window is the constant and the building is the variable, so the
+facade is mapped in world units now — U from world x or z depending on which way the
+face points, V from world height. A pane is a pane everywhere in the scene.
+
+That took two attempts. The first used a scale of one tile every six world units, which
+is a window every third of a unit: not "small windows" but beige corduroy, because a
+facade tiled eight times over averages its lit and dark floors back into a uniform glow.
+Thirty-six units across and a hundred and forty up is a window every two units, a floor
+every three and a half, and — the part that matters — roughly one tile per building, so
+a tile's worth of variety stays attached to one building.
+
+**The facade had no structure.** It was lit rectangles floating in black. Real ones are
+a frame with glass in it: mullions run the full height between window columns, floor
+slabs the full width between them, both barely lighter than the wall. And occupancy is
+per *floor*, not per window — offices empty a floor at a time, so lighting each window
+independently produces a static of lit squares no building has ever shown.
+
+Three smaller things came out of looking at the result rather than reasoning about it:
+
+- The fine facade **tore itself apart** without a mip chain — a tower fifty units wide
+  covering two hundred pixels asks for one texel in four, and what came back was a
+  shimmering herringbone. Anisotropy is the other half: these faces are nearly always
+  seen at a grazing angle, where a trilinear sample blurs along the wrong axis.
+- I painted the street-level warmth into the bottom of the tile, and it **tiled with
+  it** — every tower wore a sunset stripe forty floors up. It belongs in the shader,
+  against world height. Then I set the falloff to thirty-four units and the city looked
+  lit from below by something enormous; a street lamp reaches the lobby and two floors
+  above it, which is twelve.
+- The ground was an empty grey plane, and it made the city read as a model on a table:
+  everything had detail except the thing it all stood on. Twenty-six hundred small warm
+  points now. They answer to `windowGlow` with the windows, because lamps burning at
+  noon is one defect written in two places.
+
+**And the camera.** The nearest ring of buildings started at 24 units against a
+viewpoint at 35, so the buildings closest to the eye were the ones it looked *down* on —
+which is the whole of "se ve desde arriba". Nothing near the camera is shorter than the
+camera now, and the camera sits lower. Standing in a city rather than hovering over one
+is mostly a question of what is taller than you.
+
+### The test that had been recalibrated twice, and would have been a third time
+
+`"a taller denser city"` failed afterwards, at 1.23x against a threshold of 1.25x. The
+easy read is that the threshold needs loosening again. It had already been loosened
+once — from 1.8x, when rim lighting and bloom lifted every building edge — and the
+comment left at that recalibration said the quiet part out loud: *loosening it further
+would turn a measurement into a formality.*
+
+The metric counted dark pixels, which is an *area* proxy for "more city". Setbacks add
+mass low and take it away high, so the same real verb moves less area than it did when
+every building was a solid box. Three recalibrations of one threshold is a metric
+telling you it is measuring the renderer rather than the verb.
+
+So it measures skyline *height* now — for every column, how far above the bottom of the
+frame the city first appears, summed. That is what `skyline-shift` actually does, and it
+reads 1.76x against 1.0x for a verb that did nothing. The threshold is 1.4x, which has
+room in it.
+
+The temptation was to type `1.2` and move on. It would have passed, and the next person
+to change the renderer would have found a test that could no longer fail.
+
+The lesson is the same one L3 taught this morning from the other direction. I had spent
+the day on the parts of the render I could reason about — bloom thresholds, fog ranges,
+tone mapping — and the three things actually making it look cheap were a silhouette, a
+texture scale, and a camera height. All three are visible in one screenshot and none of
+them are visible in the code.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

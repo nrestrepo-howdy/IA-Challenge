@@ -27,6 +27,22 @@ type Api = {
 interface Metrics {
   /** Pixels dark enough to be silhouette rather than sky. More geometry, more of them. */
   readonly dark: number;
+  /**
+   * Summed height of the silhouette: for every column, how far above the bottom of the
+   * frame the city first appears, added up.
+   *
+   * `dark` is an *area* proxy, and it stopped having room in it. When every building
+   * was a solid box, doubling the city's density and height added 1.8x the dark pixels;
+   * with setbacks and tapers, the same verb adds mass lower down and takes it away
+   * higher up, and the same real change measures 1.23x against a threshold of 1.25.
+   * The honest reading of that is not that the verb stopped working — it is that the
+   * metric was measuring a side effect of the old geometry.
+   *
+   * This measures what `skyline-shift` actually does: it makes the skyline taller. The
+   * same change is 1.76x here, against 1.0x for a verb that did nothing, which is the
+   * headroom an assertion needs to still be an assertion.
+   */
+  readonly skyline: number;
   /** Mean red-minus-blue over the bottom of the frame: what the ground is made of. */
   readonly groundRB: number;
 }
@@ -49,15 +65,21 @@ const VERBS = [
     utterance: 'a taller denser city',
     note: 'the authored skyline is rescaled',
     slice: 'structures',
-    // Was 1.8x. The cinematic pass added rim lighting and bloom, which raise the value
-    // of every building edge — so the same extra geometry now produces fewer pixels
-    // below the silhouette threshold. The metric still measures the right thing; the
-    // multiplier was calibrated against flat shading.
+    // Measured on skyline height rather than silhouette area, and the change of metric
+    // is the point rather than a loosening.
     //
-    // 1.25x is still a real assertion: a skyline-shift that did nothing lands at 1.0x,
-    // and the measured value with the new renderer is 1.33x. Loosening it further would
-    // turn a measurement into a formality.
-    check: (control: Metrics, after: Metrics) => expect(after.dark).toBeGreaterThan(control.dark * 1.25),
+    // `dark` was calibrated at 1.8x against flat-shaded solid boxes, cut to 1.25x when
+    // rim lighting and bloom lifted every building edge, and would have had to be cut
+    // again — to below 1.23x — once buildings gained setbacks, which add mass low and
+    // remove it high. Three recalibrations of the same threshold is a metric telling
+    // you it is measuring the renderer instead of the verb, and the comment left at the
+    // second one said as much: loosening it further would turn a measurement into a
+    // formality.
+    //
+    // Height is what this verb changes. It measures 1.76x against 1.0x for a no-op, so
+    // 1.4x is a bound with real room under it.
+    check: (control: Metrics, after: Metrics) =>
+      expect(after.skyline).toBeGreaterThan(control.skyline * 1.4),
   },
   {
     utterance: 'make it a desert',
@@ -89,7 +111,17 @@ test.describe('structural verbs are visible, not merely contracted', () => {
               if (y > h * 0.7) { groundR += r; groundB += b; groundN++; }
             }
           }
-          return { dark, groundRB: (groundR - groundB) / Math.max(1, groundN) };
+          // Column by column, top down, to the first silhouette pixel. A column with no
+          // city in it contributes nothing rather than a full-height zero, so widening
+          // the skyline counts as well as raising it — which is what "denser" means.
+          let skyline = 0;
+          for (let x = 0; x < w; x++) {
+            for (let y = 0; y < h; y++) {
+              const i = (y * w + x) * 4;
+              if (data[i]! + data[i + 1]! + data[i + 2]! < 24) { skyline += h - y; break; }
+            }
+          }
+          return { dark, skyline, groundRB: (groundR - groundB) / Math.max(1, groundN) };
         };
 
         // The control is taken after several seconds of idle orbit, so it carries the

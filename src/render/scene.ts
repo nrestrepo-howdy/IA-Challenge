@@ -13,14 +13,14 @@
  */
 import {
   AdditiveBlending, AmbientLight, BackSide, BoxGeometry,
-  BufferAttribute, BufferGeometry, CanvasTexture, Color,
+  BufferAttribute, BufferGeometry, CanvasTexture, Color, LinearMipmapLinearFilter,
   DirectionalLight, Fog, InstancedMesh, Matrix4,
   Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshStandardNodeMaterial,
   PerspectiveCamera, PlaneGeometry, Points, PointsMaterial,
   Quaternion, RepeatWrapping, SRGBColorSpace, Scene,
   SphereGeometry, Vector3,
 } from 'three/webgpu';
-import { normalView, positionViewDirection, texture, uniform, uv, vec2 } from 'three/tsl';
+import { abs, normalView, normalWorld, positionViewDirection, positionWorld, texture, uniform, vec2, vec3 } from 'three/tsl';
 
 export interface BaseScene {
   readonly scene: Scene;
@@ -170,6 +170,23 @@ export function sceneHandles(scene: Scene): SceneHandles | null {
   return (handles as SceneHandles | undefined) ?? null;
 }
 
+/**
+ * One volume of one building.
+ *
+ * `y0` and `h` are fractions of the building's height rather than world units, for the
+ * same reason the windows are: `skyline-shift` multiplies a building's height, and a
+ * setback expressed in units would stay where it was while the tower left without it.
+ */
+interface Box {
+  /** Offset from the building's centre, in the building's own rotated frame. */
+  readonly dx: number;
+  readonly dz: number;
+  readonly w: number;
+  readonly d: number;
+  readonly y0: number;
+  readonly h: number;
+}
+
 /** One building: authored once, redrawn whenever the skyline is shifted. */
 interface Slot {
   readonly x: number;
@@ -178,8 +195,16 @@ interface Slot {
   readonly depth: number;
   readonly height: number;
   readonly rotation: number;
+  /**
+   * The massing. A single box is a box; what makes a tower read as a tower is that it
+   * changes as it rises — a shoulder, a setback, a crown, a mast. Every building here
+   * is between two and five of these, chosen by archetype.
+   */
+  readonly boxes: readonly Box[];
   /** Window offsets from the building's centre, with the height fraction each sits at. */
   readonly windows: readonly { readonly dx: number; readonly dz: number; readonly t: number }[];
+  /** Height fraction of the aviation beacon, or null on anything too short to carry one. */
+  readonly beacon: number | null;
 }
 
 /** Deterministic: the scene is identical on every load, so a screenshot is a fact. */
@@ -343,10 +368,61 @@ export function createBaseScene(): BaseScene {
     // middle distance rather than adding a second horizon nobody can see.
     const infill = i >= COUNT;
     const radius = infill ? 150 + rand() * 620 : 170 + rand() * 1000;
-    const height = (infill ? 24 + rand() * rand() * 200 : 28 + rand() * rand() * 300);
+    // The infill ring sits closest to the camera, and it used to start at 24 units
+    // against a viewpoint at 35 — so the buildings nearest the eye were the ones whose
+    // roofs it looked down on, and a street-level camera read as a drone. Nothing near
+    // is shorter than the viewpoint now.
+    const height = (infill ? 70 + rand() * rand() * 240 : 28 + rand() * rand() * 300);
     const width = 16 + rand() * 30;
     const depth = width * (0.7 + rand() * 0.6);
     const nx = Math.cos(angle), nz = Math.sin(angle);
+
+    // The massing.
+    //
+    // Every building used to be one box scaled three ways, which is exactly the shape
+    // the word "blocky" describes — and no amount of texture or rim light fixes a
+    // silhouette. Real towers change as they rise, so these are built from tiers:
+    // each one starts where the last is still going, sits in by a little, and stops
+    // short of it. Four archetypes, chosen by a roll, because a city where every
+    // building is assembled by the same rule reads as one building repeated.
+    const boxes: Box[] = [];
+    const shape = rand();
+    if (shape < 0.3) {
+      // Slab: one volume, with a mechanical cap. The plainest of them, and the reason
+      // the skyline still has flat shoulders to set the spires against.
+      boxes.push({ dx: 0, dz: 0, w: 1, d: 1, y0: 0, h: 1 });
+      boxes.push({ dx: 0, dz: 0, w: 0.52, d: 0.52, y0: 1, h: 0.035 });
+    } else if (shape < 0.68) {
+      // Setback tower: three tiers stepping in, the profile of almost every pre-war
+      // high-rise and the one that most reads as "city" from a distance.
+      const t1 = 0.42 + rand() * 0.2;
+      const t2 = t1 + (0.28 + rand() * 0.16);
+      boxes.push({ dx: 0, dz: 0, w: 1, d: 1, y0: 0, h: t1 });
+      boxes.push({ dx: 0, dz: 0, w: 0.82, d: 0.82, y0: t1, h: t2 - t1 });
+      boxes.push({ dx: 0, dz: 0, w: 0.62, d: 0.62, y0: t2, h: 1 - t2 });
+      boxes.push({ dx: 0, dz: 0, w: 0.3, d: 0.3, y0: 1, h: 0.05 + rand() * 0.04 });
+    } else if (shape < 0.88) {
+      // Tapered: four short steps. Reads as a spire from far away and as detail near.
+      let y = 0;
+      for (let t = 0; t < 4; t++) {
+        const next = y + (1 - y) * (0.42 + rand() * 0.22);
+        const k = 1 - t * 0.17;
+        boxes.push({ dx: 0, dz: 0, w: k, d: k, y0: y, h: next - y });
+        y = next;
+      }
+      boxes.push({ dx: 0, dz: 0, w: 0.34, d: 0.34, y0: y, h: 1 - y });
+    } else {
+      // Shouldered: a low wing against a tall shaft, offset to one side. This is the
+      // one that breaks the rule that a building is symmetrical about its own centre.
+      const side = rand() < 0.5 ? -1 : 1;
+      boxes.push({ dx: 0, dz: 0, w: 0.66, d: 1, y0: 0, h: 1 });
+      boxes.push({ dx: side * 0.62, dz: 0, w: 0.58, d: 0.78, y0: 0, h: 0.34 + rand() * 0.22 });
+      boxes.push({ dx: 0, dz: 0, w: 0.26, d: 0.4, y0: 1, h: 0.04 });
+    }
+    // A mast on the tall ones only. Every tower wearing an antenna is as uniform as
+    // none of them wearing one.
+    const tall = height > 150 && rand() < 0.55;
+    if (tall) boxes.push({ dx: 0, dz: 0, w: 0.055, d: 0.055, y0: 1, h: 0.16 + rand() * 0.12 });
 
     // Lit windows, placed on the two faces that face the origin so the camera sees
     // them. The first attempt scattered them with sign flips that cancelled out and
@@ -367,9 +443,46 @@ export function createBaseScene(): BaseScene {
 
     slots.push({
       x: nx * radius, z: nz * radius, width, depth, height,
-      rotation: rand() * Math.PI, windows,
+      rotation: rand() * Math.PI, windows, boxes,
+      // Above the mast if there is one, on the roof if not. Only on what is tall
+      // enough that a real one would be required to carry it.
+      beacon: height > 150 ? (tall ? 1.3 : 1.02) : null,
     });
   }
+
+  /**
+   * Street light: a carpet of small warm points on the ground between the towers.
+   *
+   * The lower third of the frame was an empty grey plane, and it made the city look
+   * like a model standing on a table — every tower had detail and the thing they all
+   * stood on had none, so the eye read the ground as the backdrop it was. A night city
+   * seen from above the rooftops is mostly this: lamps, windows at street level,
+   * headlights, none of them individually legible and all of them together the reason
+   * the ground glows instead of sitting there.
+   *
+   * Scattered rather than gridded. A grid at this density moires against the pixel grid
+   * as the camera turns, and a real street plan is not visible from inside it anyway.
+   */
+  const LAMPS = 2600;
+  const lampGeo = new BufferGeometry();
+  const lampPos = new Float32Array(LAMPS * 3);
+  for (let i = 0; i < LAMPS; i++) {
+    const a = rand() * Math.PI * 2;
+    // Biased outward by the square root so the density is even over the area rather
+    // than piling up around the camera, which is where it would be most obviously fake.
+    const r = 90 + Math.sqrt(rand()) * 1500;
+    lampPos[i * 3] = Math.cos(a) * r;
+    lampPos[i * 3 + 1] = 1.5 + rand() * 3;
+    lampPos[i * 3 + 2] = Math.sin(a) * r;
+  }
+  lampGeo.setAttribute('position', new BufferAttribute(lampPos, 3));
+  const lampMat = new PointsMaterial({
+    size: 2.6, color: new Color(1, 0.63, 0.3), transparent: true, opacity: 0.55,
+    blending: AdditiveBlending, depthWrite: false,
+  });
+  const lamps = new Points(lampGeo, lampMat);
+  lamps.frustumCulled = false;
+  scene.add(lamps);
 
   // A node material rather than a plain standard one, for one reason: the rim.
   //
@@ -403,43 +516,147 @@ export function createBaseScene(): BaseScene {
    * a few are warmer than the rest, and the columns are not perfectly aligned.
    */
   const facade = document.createElement('canvas');
-  facade.width = 256;
-  facade.height = 512;
+  facade.width = 512;
+  facade.height = 1024;
   const fx = facade.getContext('2d')!;
-  fx.fillStyle = '#000';
-  fx.fillRect(0, 0, 256, 512);
-  const cols = 8, rows = 26;
+  fx.fillStyle = '#05070c';
+  fx.fillRect(0, 0, 512, 1024);
+
+  const cols = 18, rows = 40;
+  const cw = 512 / cols, ch = 1024 / rows;
+
+  // Structure before glass. A facade is not a field of lit rectangles floating in
+  // black — it is a frame with glass in it, and the frame is what the eye reads as
+  // construction. Mullions run the full height between window columns; floor slabs run
+  // the full width between them. Both are barely lighter than the wall, which is all
+  // they need to be: at this distance they are the difference between a building and
+  // a QR code.
+  fx.fillStyle = 'rgba(150,168,198,0.035)';
+  for (let c = 0; c <= cols; c++) fx.fillRect(c * cw - 1, 0, 2, 1024);
+  for (let r = 0; r <= rows; r++) fx.fillRect(0, r * ch - 1, 512, 2);
+
   for (let r = 0; r < rows; r++) {
+    // Occupancy by floor, not by window. Offices empty a floor at a time, so lighting
+    // each window independently is the tell — it produces a static of lit squares no
+    // real building has ever shown. A few floors are fully lit (lobby, mechanical,
+    // someone's very bad night) and most are empty.
+    const roll = rand();
+    const occupancy = roll > 0.86 ? 0.92 : roll > 0.62 ? 0.34 : roll > 0.34 ? 0.12 : 0;
+    if (occupancy === 0) continue;
+    // One temperature per floor, with drift. A building lit at one colour is
+    // generated; a building lit at twenty is a Christmas tree. Floors share bulbs.
+    const floorWarm = rand();
     for (let c = 0; c < cols; c++) {
-      if (rand() > 0.34) continue;
-      // Warm, cool, or dim — three temperatures, because a night city lit at one
-      // colour temperature is the tell that it was generated rather than observed.
-      const warm = rand();
-      fx.fillStyle = warm > 0.72 ? 'rgba(255,214,150,0.95)'
-        : warm > 0.3 ? 'rgba(238,228,205,0.8)'
-        : 'rgba(176,198,226,0.55)';
-      const x = c * 32 + 8 + rand() * 3;
-      const y = r * 19.7 + 5 + rand() * 2;
-      fx.fillRect(x, y, 14 + rand() * 4, 9 + rand() * 3);
+      if (rand() > occupancy) continue;
+      const warm = floorWarm * 0.72 + rand() * 0.28;
+      fx.fillStyle = warm > 0.74 ? `rgba(255,206,142,${0.55 + rand() * 0.4})`
+        : warm > 0.3 ? `rgba(240,231,210,${0.4 + rand() * 0.38})`
+        : `rgba(168,194,228,${0.3 + rand() * 0.3})`;
+      // Inset inside its cell so the mullion and the slab both survive, and the glass
+      // reads as glass held in something rather than as a tile.
+      fx.fillRect(c * cw + 2.5, r * ch + 2, cw - 5, ch - 4.5);
     }
   }
+
   const facadeMap = new CanvasTexture(facade);
   facadeMap.wrapS = facadeMap.wrapT = RepeatWrapping;
   facadeMap.colorSpace = SRGBColorSpace;
+  // Mipmaps and anisotropy, or the windows tear themselves apart.
+  //
+  // A facade this fine is mostly high-frequency detail, and a tower fifty units wide
+  // covering two hundred pixels of screen asks for one texel out of every four. Without
+  // a mip chain the sampler picks whichever it lands on, and the result was not "small
+  // windows" but a shimmering herringbone — the towers looked like untuned television.
+  // Anisotropy is the other half: these surfaces are almost always seen at a grazing
+  // angle, where a trilinear sample blurs along the wrong axis and the floors smear
+  // into stripes.
+  facadeMap.generateMipmaps = true;
+  facadeMap.minFilter = LinearMipmapLinearFilter;
+  facadeMap.anisotropy = 16;
+  facadeMap.needsUpdate = true;
   // Combined, not assigned. `emissiveNode` *replaces* the emissive chain, so setting
   // the rim light there silently discarded `emissiveMap` — the facade was uploaded,
   // bound, and never sampled. The windows were there the whole time and nothing drew
   // them, which is the same class of bug as a binding reading a key nobody writes.
-  const facadeGlow = texture(facadeMap, uv().mul(vec2(1.6, 2.4)))
+  /**
+   * The facade is mapped in world units, not in the box's own UVs.
+   *
+   * A cube's UVs run 0..1 across a face whatever that face measures, so one tile of
+   * windows stretched to fit every building — and the buildings here are between
+   * sixteen and forty-six units wide. The near towers wore windows three times the size
+   * of the far ones, which is the single most reliable way to make architecture read as
+   * Lego: in a real city the window is the constant and the building is the variable.
+   *
+   * So U comes from world x or z depending on which way the face points, V comes from
+   * world height, and a floor is a floor and a pane is a pane everywhere in the scene.
+   * The `oneMinus(up)` mask is what keeps roofs out of it: a vertical projection has
+   * nothing to say about a horizontal surface, and without the mask every rooftop wore
+   * a smear of stretched glass.
+   */
+  const nAbs = abs(normalWorld);
+  // 36 world units per tile across, 140 up. With 18 columns and 40 rows in the tile
+  // that is a window every two units and a floor every three and a half — and, at the
+  // sizes the city is authored in, roughly one tile per building. Both halves of that
+  // matter: the first makes a window a fixed thing, and the second keeps a tile's worth
+  // of variety attached to one building. Tiling a facade eight times over averages the
+  // lit and dark floors back into a uniform glow, which is how the first attempt turned
+  // every tower into beige corduroy.
+  const facadeUv = vec2(
+    positionWorld.x.mul(nAbs.z).add(positionWorld.z.mul(nAbs.x)).mul(1 / 36),
+    positionWorld.y.mul(1 / 140),
+  );
+  const facadeGlow = texture(facadeMap, facadeUv)
     .rgb
-    .mul(0.85);
+    .mul(nAbs.y.oneMinus().clamp())
+    .mul(0.62);
+  /**
+   * The warmth street light throws up the first few floors of a building.
+   *
+   * It belongs in the shader and not in the texture, which is where it started: a
+   * gradient painted along the bottom of the tile tiles with it, so every tower wore a
+   * warm band at each repeat — a sunset stripe forty floors up.
+   *
+   * Twelve units of falloff, not thirty-four. The first pass reached a hundred units up
+   * at a tenth strength, which over a frame this tall is not a glow at the kerb, it is
+   * an orange bath: the city looked lit from below by something enormous. A street lamp
+   * lights the lobby and the two floors above it and then gives up.
+   */
+  const streetWarmth = vec3(1, 0.6, 0.3).mul(
+    positionWorld.y.max(0).mul(-1 / 12).exp().mul(0.3).mul(nAbs.y.oneMinus().clamp()),
+  );
   blockMaterial.emissiveNode = rimTint
     .mul(rimStrength)
     .mul(normalView.dot(positionViewDirection).clamp().oneMinus().pow(4.5))
-    .add(facadeGlow);
+    .add(facadeGlow)
+    .add(streetWarmth);
 
-  const blocks = new InstancedMesh(new BoxGeometry(1, 1, 1), blockMaterial, CAPACITY);
+  // One instance per *volume*, not per building, so the draw range is still a prefix
+  // sum and `skyline-shift` still costs a count change rather than a rebuild (AC-14).
+  const boxStart: number[] = [0];
+  for (const slot of slots) boxStart.push(boxStart[boxStart.length - 1]! + slot.boxes.length);
+  const blocks = new InstancedMesh(
+    new BoxGeometry(1, 1, 1), blockMaterial, boxStart[boxStart.length - 1]!,
+  );
   scene.add(blocks);
+
+  /**
+   * Aviation beacons — the red lights on the masts.
+   *
+   * A handful of pixels, and one of the strongest single cues that a skyline is a
+   * photograph of somewhere rather than a diagram of somewhere. They blink together
+   * here rather than independently, which is wrong and reads right: independent phases
+   * at this distance look like noise.
+   */
+  const beacons = slots.filter((slot) => slot.beacon !== null);
+  const beaconGeo = new BufferGeometry();
+  beaconGeo.setAttribute('position', new BufferAttribute(new Float32Array(beacons.length * 3), 3));
+  const beaconMat = new PointsMaterial({
+    size: 4.6, color: new Color(1, 0.16, 0.12), transparent: true, opacity: 0.9,
+    blending: AdditiveBlending, depthWrite: false,
+  });
+  const beaconPoints = new Points(beaconGeo, beaconMat);
+  beaconPoints.frustumCulled = false;
+  scene.add(beaconPoints);
 
   // One window buffer for every slot the mesh can draw, filled in slot order. Visible
   // buildings are always a prefix of `slots`, so the draw range is a prefix sum.
@@ -460,18 +677,33 @@ export function createBaseScene(): BaseScene {
 
   const m = new Matrix4(), q = new Quaternion(), pos = new Vector3(), scl = new Vector3();
   const axisY = new Vector3(0, 1, 0);
+  const offset = new Vector3();
 
   function drawSkyline(heightScale: number, visible: number): void {
     const shown = Math.max(0, Math.min(CAPACITY, Math.round(visible)));
     const attr = winGeo.getAttribute('position') as BufferAttribute;
     const out = attr.array as Float32Array;
+    const beaconOut = (beaconGeo.getAttribute('position') as BufferAttribute).array as Float32Array;
+    let lit = 0;
     for (let i = 0; i < shown; i++) {
       const slot = slots[i]!;
       const height = slot.height * heightScale;
-      pos.set(slot.x, height / 2, slot.z);
-      scl.set(slot.width, height, slot.depth);
       q.setFromAxisAngle(axisY, slot.rotation);
-      blocks.setMatrixAt(i, m.compose(pos, q, scl));
+      for (let b = 0; b < slot.boxes.length; b++) {
+        const box = slot.boxes[b]!;
+        // The offset turns with the building. A wing placed in world axes would swing
+        // out of its own tower the moment the tower was rotated.
+        offset.set(box.dx * slot.width, 0, box.dz * slot.depth).applyQuaternion(q);
+        pos.set(slot.x + offset.x, height * (box.y0 + box.h / 2), slot.z + offset.z);
+        scl.set(slot.width * box.w, height * box.h, slot.depth * box.d);
+        blocks.setMatrixAt(boxStart[i]! + b, m.compose(pos, q, scl));
+      }
+      if (slot.beacon !== null) {
+        beaconOut[lit * 3] = slot.x;
+        beaconOut[lit * 3 + 1] = height * slot.beacon;
+        beaconOut[lit * 3 + 2] = slot.z;
+        lit++;
+      }
       for (let w = 0; w < slot.windows.length; w++) {
         const win = slot.windows[w]!;
         const o = (windowStart[i]! + w) * 3;
@@ -480,8 +712,10 @@ export function createBaseScene(): BaseScene {
         out[o + 2] = slot.z + win.dz;
       }
     }
-    blocks.count = shown;
+    blocks.count = boxStart[shown]!;
     blocks.instanceMatrix.needsUpdate = true;
+    beaconGeo.setDrawRange(0, lit);
+    (beaconGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
     winGeo.setDrawRange(0, windowStart[shown]!);
     attr.needsUpdate = true;
   }
@@ -620,7 +854,9 @@ export function createBaseScene(): BaseScene {
       // Low, and looking up. 12 units is street level against 300-unit towers, which
       // is the whole point: at 26 the camera was level with nothing and taller than
       // the low-rises, so the skyline read as a model on a table.
-      camera.position.set(Math.sin(a) * dolly, 20 + dolly * 0.09 + Math.sin(elapsed * 0.09) * 2.5, Math.cos(a) * dolly);
+      // Lower than the shortest tower, which is the whole difference between standing
+      // in a city and hovering over one.
+      camera.position.set(Math.sin(a) * dolly, 15 + dolly * 0.06 + Math.sin(elapsed * 0.09) * 2.5, Math.cos(a) * dolly);
       // Biased off-centre, and lowered from 78 so the horizon is inside the frame.
       //
       // At 78 the camera pitched up about 32 degrees with a 54-degree field, so the
@@ -633,6 +869,12 @@ export function createBaseScene(): BaseScene {
       // Still off a thirds intersection, so the frame has somewhere for the eye to go.
       camera.lookAt(Math.sin(a + 0.42) * 70, 50 + framing * 60, Math.cos(a + 0.42) * 70);
       winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;
+      // A beacon is on or off, not dimmed: a sine here reads as a pulsing bulb, and
+      // the thing being imitated is a shutter.
+      beaconMat.opacity = (Math.sin(elapsed * 2.1) > 0.35 ? 0.95 : 0.06) * windowGlow;
+      // Street light answers to the time of day for the same reason the windows do:
+      // lamps burning at noon is one defect written in two places.
+      lampMat.opacity = 0.55 * windowGlow;
     },
   };
 }

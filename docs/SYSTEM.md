@@ -160,6 +160,32 @@ All 2 were simultaneously live for **16m 01s**. Serial execution would have take
 
 76% of tool calls happened inside an isolated workstream context, not in the main thread.
 
+### What delegation cost — `npm run evidence:autonomy -- --delegation`
+
+```
+  21 subagents delegated, 14 reported finishing
+  8 never reported (38%)
+  peak concurrency 9; 5 windows with two or more live
+  3 git worktrees created
+```
+
+Peak nine is the parallelism claim, and **38% is the honest half of it**. Eight delegated
+agents never reported finishing: some were killed when a session hit its limits, one died
+mid-workstream and left a worktree that was deliberately never merged rather than
+inspected and trusted.
+
+That number is the argument for where the boundaries were drawn, not against it. A
+subagent that dies takes its entire context with it, and the only question that matters
+is what it takes with it *besides* — which is a property of the seam, not of the agent.
+Because `src/contracts.ts` was frozen before any workstream started and every agent owned
+one directory, a dead agent cost exactly its own workstream and nothing else: no partial
+merge, no half-written interface for the next one to discover, nothing to reconcile.
+Five workstreams integrated with zero merge conflicts *while* 38% of delegations were
+failing.
+
+Had the boundaries been drawn by feature rather than by contract, that same 38% would
+have been eight partially-completed features entangled in one branch.
+
 ### Recorded failures
 
 52 tool failures and 35 commits are in the log. Failures are kept because a run with none is a run that was not instrumented.
@@ -328,8 +354,49 @@ toward the null result, making the measured gap a floor rather than a ceiling.
 ## 8. Autonomous loops
 
 Required shape: `ACT → VERIFY → OBSERVE → FIX → VERIFY`, with no human prompt in the
-middle. The claim is about something that did **not** happen, so it is settled from the
-event log rather than from memory: every lifecycle event carries the id of the human
+middle. Two of them are shown here: the one the *product* runs, which has no human in it
+at any point, and the one the *development* ran, where the absence has to be proven.
+
+### The product's loop — `npm run evidence:loop`
+
+Held by `tests/runtime/repair-loop.test.ts` and printed by the command above, using the
+same real generator, repair agent, bounded cycle and injector. The only stand-in is the
+oracle, and it stands in for a *measurement*, not a judgement: it reads the particle
+count back out of the module the generator actually emitted and rejects it the way L1
+rejects a candidate that blows the frame budget.
+
+```
+  intent    "make it rain"
+  brief     rain-emitter count 12000, wind-field strength 6
+  oracle    L1, 16 ms frame budget   (affordable at 8000 particles)
+
+  attempt 1   3 candidates
+    direct     L1 rejected — median frame 24.0 ms exceeds the 16 ms budget with count 12000
+    resilient  L1 rejected — median frame 24.0 ms exceeds the 16 ms budget with count 12000
+    reversed   L1 rejected — median frame 24.0 ms exceeds the 16 ms budget with count 12000
+
+  repair      no human input; 3 diagnoses read
+              L1 rejected 3 candidate(s) — the module runs but blows a frame-time budget
+              rain-emitter.count: 12000 -> 6000
+              rain-emitter.speed: 24 -> 12
+              wind-field.strength: 6 -> 3
+              try first next: resilient, reversed, direct
+
+  resilient  cleared L1 — injected
+
+  closed: injected after 2 attempt(s), 0 human instructions
+```
+
+The line that matters is `rain-emitter.count: 12000 -> 6000`. It is read back out of the
+*emitted module*, not out of the guidance object, which is the only way to show the
+repair reached the generated code rather than the intention to generate it. A retry loop
+would have produced three byte-identical candidates and called it three attempts; the
+test asserts that no attempt-2 candidate matches any attempt-1 candidate.
+
+### The development loop — `npm run evidence:autonomy`
+
+The same shape, one level up, and here the claim is about something that did **not**
+happen, so it is settled from the event log rather than from memory: every lifecycle event carries the id of the human
 prompt whose turn it belongs to, and if the failing verification, the edits, and the
 passing verification all share one id, no instruction arrived between them — there is
 nowhere for one to have gone.

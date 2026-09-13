@@ -25,8 +25,20 @@ case "${CLAUDE_PROJECT_DIR:-$CWD}" in
   *) case "$CWD" in "$REPO"|"$REPO"/*) ;; *) exit 0 ;; esac ;;
 esac
 
+# Secrets are stripped here, at the only moment they can be stripped once.
+#
+# The evidence layer records every command, and a command is exactly where a key ends
+# up: `ANTHROPIC_API_KEY=sk-ant-... npm run dev` is the shape of the fix for a server
+# that needs one. 58 lines of this log held a live credential before this existed, and
+# the log is a required submission artifact — so the leak was not hypothetical, it was
+# scheduled.
+#
+# Redacting at write time rather than before publishing is the difference between a rule
+# and a guarantee: a redaction step that runs at publish is one somebody has to remember,
+# and the whole argument of this project is that those become defects.
 DIR="$REPO/.verbo"
 mkdir -p "$DIR" 2>/dev/null || exit 0
+PAYLOAD="$(printf '%s' "$PAYLOAD" | sed -E 's/(sk-ant-[A-Za-z0-9_-]{6})[A-Za-z0-9_-]+/\1<redacted>/g; s/(gh[pousr]_)[A-Za-z0-9]{10,}/\1<redacted>/g; s/(AKIA)[A-Z0-9]{12,}/\1<redacted>/g')"
 printf '%s' "$PAYLOAD" | jq -c --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
   ts:        $ts,
   event:     (.hook_event_name // "unknown"),

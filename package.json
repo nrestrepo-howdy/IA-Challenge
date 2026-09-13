@@ -20,7 +20,8 @@
     "verify:fast": "npm run typecheck && npm test && npm run gate",
     "eval": "node tools/eval/nightly.mjs",
     "audit": "node tools/evidence/mutate-suite.mjs",
-    "evidence:autonomy": "node tools/evidence/autonomy.mjs"
+    "evidence:autonomy": "node tools/evidence/autonomy.mjs",
+    "evidence:loop": "npx tsx tools/evidence/loop-trace.mts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

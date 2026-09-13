@@ -1024,6 +1024,53 @@ the reason there is only one is now a fixed defect rather than an unexamined num
 
 ---
 
+## 13 Sep — The evidence was not in the repository, and committing it would have leaked a key
+
+Working through the rubric category by category, Reproducibility turned up something
+worse than a low score.
+
+`.verbo/events.jsonl` was in `.gitignore`. So were the nightly evaluation results. Those
+two files are the **Parallelization Evidence** and the **Autonomous Loop Evidence** the
+submission requires, and every tool that reads them — the swimlanes, the delegation
+counts, the loop reconstruction — would have run on a judge's clone against nothing at
+all. Evidence that exists only on the machine that produced it is not evidence; it is a
+claim with a script attached.
+
+So: un-ignore them. And then the second thing.
+
+**58 lines of that log contained a live API key in plaintext.** The evidence layer
+records every command, and a command is exactly where a key ends up — `ANTHROPIC_API_KEY=
+sk-ant-… npm run dev` is the shape of the fix for a server that needs one, and I had
+typed it a dozen times today. The rules say it plainly: *never commit API keys, tokens,
+passwords, or other secrets to source control.* The leak was not hypothetical. It was
+scheduled: two files away from being pushed, in the one artifact the submission is
+required to include.
+
+The two fixes available were "redact before publishing" and "never write it down". A
+redaction step that runs at publish time is a step somebody has to remember, and this
+project's entire argument is that the things somebody has to remember become defects. So
+the stripping happens in `log-event.sh`, at write time, where the raw value never reaches
+the file — key-shaped strings for Anthropic, GitHub and AWS, one `sed` before the payload
+is parsed. The existing 3,954 lines were redacted in place and re-validated as JSON.
+
+Two things are worth keeping from this.
+
+The first is that the failure was *structural and invisible*. Nothing was wrong with the
+hook, the log, or the gitignore taken one at a time. The defect only existed at the
+intersection of three correct decisions — record everything, keep the big file out of
+git, and ship the evidence — and it would have surfaced as a leaked credential in a
+public repository rather than as a failing test.
+
+The second is what it says about the shape of this whole project. The harness is very
+good at catching what it was pointed at. Every real defect found today — the storm at
+noon, the fog that was never fog, the water that could not be framed, the metric that had
+been recalibrated twice, the telemetry blind to 95% of its own verifications, and this —
+was found by *pointing it somewhere new*. The layers do not find what nobody thought to
+check. They make it cheap to check once you have thought of it, which is a different and
+more honest claim than the one I would have made this morning.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

@@ -100,6 +100,40 @@ const short = (s, n) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const rel = (p) => (p ?? '').replace(ROOT, '').replace(/^.*\/scratchpad\//, 'scratch/');
 const traceIndex = process.argv.indexOf('--trace');
 
+/**
+ * Delegation, counted rather than described — including what it cost.
+ *
+ * The interesting number here is not how many agents ran. It is how many of them never
+ * reported finishing: a subagent that dies takes its context with it, and whether that
+ * is survivable is a property of where the boundaries were drawn, not of the agents.
+ */
+if (process.argv.includes('--delegation')) {
+  const starts = rows.filter((r) => r.event === 'SubagentStart');
+  const stops = rows.filter((r) => r.event === 'SubagentStop');
+  const stopped = new Set(stops.map((r) => r.agent));
+  const orphans = starts.filter((r) => !stopped.has(r.agent));
+
+  const timeline = [
+    ...starts.map((r) => ({ t: r.ts, d: 1 })),
+    ...stops.map((r) => ({ t: r.ts, d: -1 })),
+  ].sort((a, b) => a.t.localeCompare(b.t));
+  let live = 0, peak = 0, windows = 0;
+  for (const e of timeline) {
+    const before = live;
+    live += e.d;
+    peak = Math.max(peak, live);
+    if (before < 2 && live >= 2) windows += 1;
+  }
+
+  console.log(`
+  ${starts.length} subagents delegated, ${stops.length} reported finishing`);
+  console.log(`  ${orphans.length} never reported (${Math.round((100 * orphans.length) / starts.length)}%)`);
+  console.log(`  peak concurrency ${peak}; ${windows} windows with two or more live`);
+  console.log(`  ${rows.filter((r) => r.event === 'WorktreeCreate').length} git worktrees created
+`);
+  process.exit(0);
+}
+
 if (traceIndex === -1) {
   console.log(`\n  ${loops.length} loops closed inside a single human turn`);
   console.log(`  ${turns.size} turns in the log, ${rows.length} events`);

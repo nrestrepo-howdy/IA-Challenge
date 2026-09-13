@@ -1,6 +1,8 @@
 node_modules/
 dist/
-.verbo/events.jsonl
+# .verbo/events.jsonl is NOT ignored: it is the parallelism and autonomous-loop
+# evidence the submission requires, and evidence that lives only on one machine is
+# not evidence. Secrets are stripped at write time by .claude/hooks/log-event.sh.
 .env
 .env.local
 *.local
@@ -15,4 +17,5 @@ dist/
 test-results/
 playwright-report/
 
-.verbo/eval/
+# Nor are the nightly evaluation results: the useful number is the curve across
+# nights, and a curve nobody else can see is a claim.

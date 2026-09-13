@@ -190,12 +190,23 @@ npm run verify         # all of the above; the definition of done
 npm run eval           # one pass of the nightly evaluation corpus
 npm run evidence       # regenerate the parallelism evidence in SYSTEM.md
 npm run evidence:autonomy   # reconstruct autonomous loops from the event log
+npm run evidence:loop       # run the product's own repair loop and print the trace
 ```
 
 `npm run verify` runs the browser suite deliberately. The gate counts browser criteria,
 so a verification that skipped their tests would mark an acceptance criterion verified
 by something it never executed — precisely the false green this project exists to
 prevent. `npm run verify:fast` is the Node-only loop for iteration.
+
+### The evidence is in the repository
+
+`.verbo/events.jsonl` (3,956 lifecycle events across twelve days) and `.verbo/eval/` (ten
+nights) are committed, because every evidence tool above reads them and evidence that
+lives only on the machine that produced it is a claim with a script attached.
+
+Secrets are stripped **at write time** by `.claude/hooks/log-event.sh`, not before
+publishing: the log records every command, and a command is exactly where a key ends up.
+Fifty-eight lines held one before that existed.
 
 ### Requirements
 

@@ -25,11 +25,30 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm' }
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run verify
+      # Typecheck, the 465 unit tests, and the acceptance-criteria gate. Not the browser
+      # suite, and the reason is worth writing down rather than leaving as an omission.
+      #
+      # A GitHub runner has no GPU. Its WebGPU is SwiftShader, which comes up and then
+      # drops the device part-way through a run — twenty-four "Instance dropped in
+      # popErrorScope" errors, after which every frame capture waits on a device that is
+      # gone. Forcing the WebGL2 path instead does render, and takes 27.5 seconds to
+      # reach first frame, so a suite written against a real renderer's timings sits on
+      # the wrong side of every timeout.
+      #
+      # Either way what CI would be measuring is a software rasteriser, not the product.
+      # The browser suite runs where there is a GPU — `npm run verify` locally, which is
+      # what the contributing rules require before anything is reported finished — and
+      # its results are what `.verbo/` records. Pretending otherwise by loosening the
+      # timeouts until it passes would be the exact failure this project is about.
+      - run: npm run verify:fast
 
   deploy:
     needs: verify
+    # Pages needs a public repository on this plan: on a private one the API answers
+    # "Your current plan does not support GitHub Pages for this repository", and a job
+    # that cannot succeed should not be reported as a failure. Make the repository
+    # public and this deploys on the next push, with no edit here.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

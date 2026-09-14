@@ -5,8 +5,8 @@
 in isolation, and hot-injects it into the world you are already using. No reload. No
 black frame. No lost state.
 
-Fifteen verbs today — weather, light and time of day, water, aurora, searchlights,
-birds, and structural changes to the city itself — plus the path out of that list: ask
+Sixteen verbs today — weather, light and time of day, water, aurora, searchlights,
+birds, falling bodies under gravity, and structural changes to the city itself — plus the path out of that list: ask
 for *"un perro con una persona paseando"* and the agent writes a rig of shapes and the
 code that walks it. Drag to look around, wheel to push in and out — the camera returns to its own shot after
 a few seconds. Undo with ⌘Z, share a world as a link, and watch the verification race in
@@ -107,6 +107,24 @@ its cost are recorded as **D-10** in the SPEC rather than argued in a commit mes
 The camera reframes for a rig, because a walking figure is forty units tall in a city of
 three-hundred-unit towers and from the default viewpoint it is a detail. Someone who
 says "un perro con una persona paseando" has named the subject of the picture.
+
+### One assertion that is a law rather than a preference
+
+Every other contract checks that the code did what it was told: rain falls at the speed
+the catalogue named, a dawn takes the seconds it was given. `debris` can be checked
+against physics instead. A semi-implicit integrator with restitution below one is
+dissipative, so **total mechanical energy falls monotonically** — and a world that gains
+energy every bounce does not look broken, it looks *livelier*, right up until the bodies
+leave the frame.
+
+That is the failure class WorldCoder-Bench reports as dominant — hidden state drifting
+out of agreement with a scene that still looks plausible — and it is exactly what a
+visual check cannot see. Switching the integrator to explicit Euler, the classic mistake,
+renders beautifully and fails the test by name:
+
+```
+energy rose on 39 frames, worst by 13.34: expected 39 to be +0
+```
 
 ### What the advisory layer is for
 

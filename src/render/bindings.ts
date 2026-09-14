@@ -1198,6 +1198,61 @@ export const figureBinding: BindingFactory = (scene, statePath) => {
   };
 };
 
+/**
+ * The falling bodies, as one instanced draw.
+ *
+ * Boxes rather than spheres, and the reason is the light: a sphere at this size is four
+ * shaded pixels and reads as a dot, where a box catches the key on one face and the rim
+ * on another and reads as a thing with edges. The rig primitives use spheres where a
+ * sphere is the shape; this is rubble.
+ *
+ * Capacity is the catalogue's maximum, allocated once. An InstancedMesh cannot grow, and
+ * rebuilding geometry mid-verb is how an injection drops a frame (AC-14).
+ */
+export const debrisBinding: BindingFactory = (scene, statePath) => {
+  const CAPACITY = 400;
+  const geometry = new BoxGeometry(1, 1, 1);
+  const material = new MeshStandardMaterial({
+    color: new Color(0.09, 0.095, 0.11), roughness: 0.82, metalness: 0.12,
+    emissive: new Color(0.05, 0.045, 0.04), emissiveIntensity: 0.9,
+  });
+  const mesh = new InstancedMesh(geometry, material, CAPACITY);
+  mesh.frustumCulled = false;
+  mesh.count = 0;
+  scene.add(mesh);
+
+  const m = new Matrix4(), q = new Quaternion(), pos = new Vector3(), scl = new Vector3();
+  const spin = new Vector3(0.57, 0.79, 0.21).normalize();
+
+  return {
+    statePath,
+    update(slice) {
+      const bodies = slice['bodies'];
+      if (!Array.isArray(bodies)) { mesh.count = 0; return; }
+      const size = num(slice['size'], 4);
+      const shown = Math.min(CAPACITY, Math.floor(bodies.length / 3));
+
+      for (let i = 0; i < shown; i++) {
+        const o = i * 3;
+        pos.set(num(bodies[o], 0), num(bodies[o + 1], 0), num(bodies[o + 2], 0));
+        // Tumble derived from the body's own position rather than from a clock, so a
+        // body at rest is visually at rest: a rotation driven by elapsed time keeps
+        // spinning after the physics has stopped, which reads as a bug in the physics.
+        q.setFromAxisAngle(spin, pos.x * 0.21 + pos.z * 0.13 + pos.y * 0.07);
+        scl.setScalar(size);
+        mesh.setMatrixAt(i, m.compose(pos, q, scl));
+      }
+      mesh.count = shown;
+      mesh.instanceMatrix.needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(mesh);
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+};
+
 export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'rain-emitter': rainBinding,
   'snow-emitter': snowBinding,
@@ -1211,5 +1266,6 @@ export const BINDINGS: Readonly<Record<string, BindingFactory>> = {
   'aurora': auroraBinding,
   'flock': flockBinding,
   'searchlights': searchlightBinding,
+  'debris': debrisBinding,
   'figure': figureBinding,
 };

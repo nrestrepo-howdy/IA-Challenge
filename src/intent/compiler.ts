@@ -433,6 +433,19 @@ function nearestByKeyword(catalogue: readonly PrimitiveSpec[], utterance: string
   for (const spec of catalogue) {
     for (const keyword of spec.keywords) {
       for (const word of words) {
+        // The first letter has to agree.
+        //
+        // Edit distance is inflated by shared *suffixes*, and a suggestion built on one
+        // is nonsense: "talking" and "falling" differ in two characters out of seven,
+        // score 0.71, and clear a bar of 0.7 — so "give the world a talking dragon" was
+        // answered with "the closest thing the catalogue can do is debris". A typo
+        // almost never changes the first letter of a word; a coincidental rhyme almost
+        // always does.
+        //
+        // This surfaced when the catalogue grew: more keywords means more chances at a
+        // spurious near-match, and nothing was watching the quality of the suggestion as
+        // the vocabulary expanded.
+        if (word[0] !== keyword[0]) continue;
         const score = similarity(word, keyword);
         if (!best || score > best.score) best = { spec, score };
       }

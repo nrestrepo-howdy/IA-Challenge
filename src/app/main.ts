@@ -107,53 +107,98 @@ function reconcile(): void {
 }
 
 /**
- * Where the world's subject is, if it has one.
+ * One subject, measured from the state a rig publishes.
  *
  * Read from state rather than from the renderer, because the renderer has no idea what
- * the user asked for and the state does: a rig publishes its `pose`, and the first
- * part's position is where the figure is standing. Only the first rig counts — a camera
- * that tried to hold two subjects at once holds neither.
- *
- * Returns null the moment the rig is undone, so the camera goes back to framing the
- * city without anything having to remember to tell it.
+ * the user asked for and the state does. The radius is what decides how far away to
+ * stand: without it the camera went to a fixed distance whatever it was looking at, so a
+ * rig the model happened to build large arrived filling the entire frame.
  */
-function focusPoint(): readonly [number, number, number, number] | null {
+function subjectOf(pose: readonly unknown[]): readonly [number, number, number, number] | null {
+  let x = 0, y = 0, z = 0, n = 0;
+  for (let i = 0; i + 6 < pose.length; i += 7) {
+    const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
+    if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
+    x += px; y += py; z += pz; n += 1;
+  }
+  if (n === 0) return null;
+  const cx = x / n, cy = y / n, cz = z / n;
+  let radius = 0;
+  for (let i = 0; i + 6 < pose.length; i += 7) {
+    const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
+    if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
+    radius = Math.max(radius, Math.hypot(px - cx, py - cy, pz - cz));
+  }
+  return [cx, cy + Math.max(14, radius * 0.5), cz, Math.max(12, radius)];
+}
+
+/** Every rig in the world, in the order they were added. */
+function subjects(): { readonly name: string; readonly at: readonly [number, number, number, number] }[] {
   const state = (globalThis as { __VERBO_STATE__?: Record<string, unknown> }).__VERBO_STATE__;
   const figures = state?.['figures'] as Record<string, { pose?: unknown }> | undefined;
-  for (const figure of Object.values(figures ?? {})) {
+  const out: { name: string; at: readonly [number, number, number, number] }[] = [];
+  for (const [name, figure] of Object.entries(figures ?? {})) {
     const pose = figure?.pose;
-    if (!Array.isArray(pose) || pose.length < 7) continue;
-
-    // The centroid of every part, not the first one. The first version aimed at
-    // `pose[0..2]` plus a fixed lift, which works for a rig whose first part happens to
-    // be a torso at eye height and fails for one whose first part is a car body three
-    // units off the ground: the camera came in to 88 units and pointed at the pavement.
-    let x = 0, y = 0, z = 0, n = 0;
-    for (let i = 0; i + 6 < pose.length; i += 7) {
-      const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
-      if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
-      x += px; y += py; z += pz; n += 1;
-    }
-    if (n === 0) continue;
-    const cx = x / n, cy = y / n, cz = z / n;
-
-    // And how big it is, which decides how far away to stand.
-    //
-    // Without this the camera went to a fixed distance whatever it was looking at, so a
-    // rig the model happened to build large — an aeroplane with forty-unit parts, which
-    // the schema permits — arrived filling the entire frame with the city nowhere behind
-    // it. Distance has to come from the subject: a big thing is framed from further
-    // back, which is what a camera operator does without being asked.
-    let radius = 0;
-    for (let i = 0; i + 6 < pose.length; i += 7) {
-      const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
-      if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
-      radius = Math.max(radius, Math.hypot(px - cx, py - cy, pz - cz));
-    }
-    return [cx, cy + Math.max(14, radius * 0.5), cz, Math.max(12, radius)];
+    if (!Array.isArray(pose)) continue;
+    const at = subjectOf(pose);
+    if (at) out.push({ name, at });
   }
-  return null;
+  return out;
 }
+
+/**
+ * What the camera should be looking at, which is usually *everything*.
+ *
+ * The first version locked on to a rig the moment one existed and never let go: ask for
+ * an aeroplane and the city was gone, permanently, with no way back. That is not a
+ * camera decision, it is a camera *bug* — framing something is an act with a beginning
+ * and an end, and this one had no end.
+ *
+ * So the wide shot is the default and focus is a state you enter and leave. A new rig
+ * takes the frame for a few seconds because the thing you just asked for is worth
+ * looking at; then it gives it back. Tab cycles through the rigs by hand and Escape
+ * returns to the wide shot, for the times when a few seconds is not enough.
+ */
+const FOCUS_HOLD_S = 7;
+let focusIndex: number | null = null;
+let focusUntil = 0;
+
+function focusPoint(): readonly [number, number, number, number] | null {
+  const all = subjects();
+  if (all.length === 0) { focusIndex = null; return null; }
+
+  // A manual pick holds until it is changed or released; an automatic one expires.
+  if (focusIndex !== null && focusUntil !== Infinity && world.clock.elapsed > focusUntil) {
+    focusIndex = null;
+  }
+  if (focusIndex === null) return null;
+  return all[focusIndex % all.length]?.at ?? null;
+}
+
+/** Called when a verb lands, so the newest rig gets the frame briefly. */
+function glanceAtNewest(): void {
+  const all = subjects();
+  if (all.length === 0) return;
+  focusIndex = all.length - 1;
+  focusUntil = world.clock.elapsed + FOCUS_HOLD_S;
+}
+
+function cycleFocus(): void {
+  const all = subjects();
+  if (all.length === 0) return;
+  focusIndex = focusIndex === null ? 0 : (focusIndex + 1) % all.length;
+  // Held, not timed: the viewer asked for this one.
+  focusUntil = Infinity;
+  line(`framing “${all[focusIndex]!.name}” — tab for the next, esc for the whole city`, 'info');
+}
+
+function releaseFocus(): void {
+  if (focusIndex === null) return;
+  focusIndex = null;
+  line('framing the whole city', 'info');
+}
+
+
 
 
 
@@ -476,6 +521,9 @@ async function say(utterance: string): Promise<SayResult> {
       // is cumulative, so each verb refines one address instead of stacking history
       // entries a back button would have to unwind.
       worldHistory.push(before);
+      // The newest rig takes the frame for a few seconds, then gives it back. Framing
+      // something is an act with an end.
+      glanceAtNewest();
       sync();
     }
     // The full shape is returned, not just ok/ms, because the nightly evaluation
@@ -593,6 +641,11 @@ addEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault();
     void undo();
   }
+  // Tab and Escape only when the prompt is not where the typing is going: a viewer
+  // mid-sentence pressing tab wants a tab, not a camera move.
+  const typing = document.activeElement === input || document.activeElement === keyInput;
+  if (e.key === 'Tab' && !typing) { e.preventDefault(); cycleFocus(); }
+  if (e.key === 'Escape' && !typing) { e.preventDefault(); releaseFocus(); }
 });
 
 /**

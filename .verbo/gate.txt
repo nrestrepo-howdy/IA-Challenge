@@ -22,6 +22,7 @@ Acceptance criteria: 22/22 verified (100%)
                tests/render/binding-keys.test.ts
                tests/render/fog-density.test.ts
                tests/runtime/repair-loop.test.ts
+               tests/world/debris.test.ts
                tests/world/figure.test.ts
   [verified] AC-07  L1 rejects a module that produces an all-black frame.
                tests/harness/l1-runtime.test.ts

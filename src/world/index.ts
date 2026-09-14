@@ -49,6 +49,7 @@ export { createSkylineShift, skylineShift, SKYLINE_STATE_PATH } from './skyline-
 export { createGroundTint, groundTint, GROUND_STATE_PATH } from './ground-tint.js';
 export { createDaylight, daylight, DAYLIGHT_STATE_PATH, AUTHORED_PHASE } from './daylight.js';
 export { createWater, water, WATER_STATE_PATH } from './water.js';
+export { createDebris, DEBRIS_STATE_PATH } from './debris.js';
 export { createAurora, aurora, AURORA_STATE_PATH } from './aurora.js';
 export { createFlock, flock, FLOCK_STATE_PATH } from './flock.js';
 export { createSearchlights, searchlights, SEARCHLIGHT_STATE_PATH } from './searchlights.js';
@@ -76,6 +77,7 @@ export type PrimitiveRegistry = ReadonlyMap<string, Primitive<Params>>;
  * behaviour depend on execution order, which is the cheapest way to turn a
  * deterministic oracle back into a flaky one.
  */
+import { createDebris } from './debris.js';
 import { createFigure } from './figure.js';
 
 export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegistry {
@@ -92,6 +94,7 @@ export function createPrimitives(options: PrimitiveOptions = {}): PrimitiveRegis
     createGroundTint(options),
     createDaylight(options),
     createWater(options),
+    createDebris(options),
     createAurora(options),
     createFlock(options),
     createSearchlights(options),

@@ -1384,6 +1384,70 @@ It was the framing and the ability to look somewhere else.
 
 ---
 
+## 13 Sep — Physics, a camera that lets go, and a suggestion that got worse as the catalogue grew
+
+Three complaints in one message, and the third was the one I would never have found.
+
+### "Se queda toda la escena solo en el avión"
+
+The camera locked on to a rig the moment one existed and never let go. Ask for an
+aeroplane and the city was gone — permanently, with no way back to it.
+
+That is not a camera decision, it is a camera *bug*: **framing something is an act with a
+beginning and an end**, and this one had no end. The wide shot is the default now and
+focus is a state you enter and leave. A new rig takes the frame for seven seconds because
+the thing you just asked for is worth looking at, then gives it back. Tab cycles the rigs
+by hand, Escape returns to the whole city.
+
+### "No hay físicas"
+
+`debris` is the first primitive whose correctness is a *law* rather than a preference.
+Everything else is judged against what someone decided it should do — rain falls at the
+speed the catalogue named. This one integrates: gravity, velocity, restitution, and a
+ground that takes energy out of every bounce.
+
+Which gives L2 something no other primitive can offer. **Total mechanical energy falls
+monotonically**, because a semi-implicit integrator with restitution below one is
+dissipative. That invariant is invisible in a screenshot: a world that *gains* energy
+every bounce does not look broken, it looks livelier, right up until the bodies leave the
+frame. It is exactly the failure WorldCoder-Bench reports as dominant — hidden state
+drifting out of agreement with a scene that still looks plausible.
+
+Verified against the bug it exists to catch, not assumed. Switching to explicit Euler —
+reading velocity before the acceleration is applied rather than after, the classic
+mistake — renders beautifully and fails by name:
+
+```
+energy rose on 39 frames, worst by 13.343: expected 39 to be +0
+```
+
+The mirror is asserted too, because a pile frozen at its starting height also never gains
+energy and would pass: it must *lose* ninety percent of it, come fully to rest, keep every
+body above the floor at the bounciest setting, and survive a frame that took a whole
+second — which is a browser tab coming back from the background, and unclamped it
+integrates a body straight through the ground.
+
+### And the one nobody asked about
+
+Adding `debris` broke a test I had not thought about: `"give the world a talking dragon"`
+started being answered with *"the closest thing the catalogue can do is debris"*.
+
+**"talking" and "falling" differ in two characters out of seven.** Score 0.71, over a bar
+of 0.7. Edit distance is inflated by shared *suffixes*, and a suggestion built on a rhyme
+is nonsense — which the function's own comment already said: *a wrong suggestion is worse
+than none.*
+
+The first letter has to agree now. A typo almost never changes it; a coincidental rhyme
+almost always does. `raning` still finds rain and `fogg` still finds fog.
+
+What is worth keeping is not the fix. It is that **the quality of that suggestion degraded
+as the vocabulary grew, and nothing was watching it.** More keywords means more chances at
+a spurious near-match, and the only reason it surfaced is that an unrelated test happened
+to use a word that rhymed with a new one. That is luck, and luck is not a verification
+strategy.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

@@ -487,6 +487,45 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
     ],
   },
   {
+    name: 'debris',
+    summary: 'Bodies that fall, bounce and come to rest under gravity.',
+    statePath: 'physics.debris',
+    schema: {
+      type: 'object',
+      properties: {
+        count: { type: 'integer', minimum: 8, maximum: 400 },
+        size: { type: 'number', minimum: 0.6, maximum: 14 },
+        // Restitution. Capped below 1 because at 1 the integrator stops dissipating and
+        // the energy invariant this primitive exists to demonstrate stops holding.
+        bounce: { type: 'number', minimum: 0, maximum: 0.85 },
+        height: { type: 'number', minimum: 30, maximum: 400 },
+        spread: { type: 'number', minimum: 10, maximum: 260 },
+      },
+      required: ['count', 'size', 'bounce', 'height', 'spread'],
+      additionalProperties: false,
+    },
+    defaults: { count: 90, size: 4, bounce: 0.42, height: 180, spread: 95 },
+    keywords: [
+      'drop', 'dropping', 'drops', 'fall', 'falling', 'gravity', 'physics',
+      'debris', 'rubble', 'boxes', 'crates', 'bounce', 'bouncing', 'collapse', 'hail',
+    ],
+    paramHints: {
+      heavy: { size: 9, bounce: 0.2 }, huge: { size: 12, bounce: 0.18 },
+      light: { size: 1.6, bounce: 0.7 }, small: { size: 1.6, bounce: 0.7 },
+      hail: { count: 320, size: 1.1, bounce: 0.62 },
+      bouncy: { bounce: 0.82 }, bounce: { bounce: 0.75 },
+    },
+    fields: [
+      { key: 'count', role: 'constant', fromParam: 'count' },
+      // The positions, which must move — and the energy, which must move *and* is the
+      // only field in this catalogue whose correct behaviour is a law rather than a
+      // preference. A world that gains energy every bounce looks livelier, not broken.
+      { key: 'bodies', role: 'animated', witness: [[0, 40, 0], [0, 36, 0]] },
+      { key: 'energy', role: 'animated', witness: [1000, 940] },
+      { key: 'instance', role: 'resource', witness: 'debris#0' },
+    ],
+  },
+  {
     name: 'water',
     summary: 'A reflective, moving water surface at a settable level.',
     statePath: 'surface.water',

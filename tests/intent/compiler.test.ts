@@ -93,6 +93,24 @@ describe('AC-17 · an impossible intent is explained, never silently attempted',
     expect(r.suggestion).toBe("did you mean 'rain-emitter'?");
   });
 
+  it('suggests a primitive for a typo, and nothing for a rhyme', async () => {
+    // Edit distance is inflated by shared suffixes, and a suggestion built on one is
+    // nonsense. "talking" and "falling" differ in two characters out of seven — score
+    // 0.71, over a bar of 0.7 — so "a talking dragon" was answered with "the closest
+    // thing the catalogue can do is debris". It surfaced only when the catalogue grew:
+    // more keywords, more chances at a spurious near-match, and nothing watching the
+    // quality of the suggestion as the vocabulary expanded.
+    //
+    // Both halves are asserted, because the cheap way to stop suggesting nonsense is to
+    // stop suggesting anything.
+    const compiler = new CatalogueIntentCompiler({ model: keywordModel });
+    const rhyme = expectRejection(await compiler.compile('give the world a talking dragon', world));
+    expect(rhyme.suggestion).toBeNull();
+
+    const typo = expectRejection(await compiler.compile('make it raning', world));
+    expect(typo.suggestion).toContain('rain-emitter');
+  });
+
   it('rejects a request the catalogue cannot express, with no invented suggestion', async () => {
     const compiler = new CatalogueIntentCompiler({ model: keywordModel });
     const r = expectRejection(await compiler.compile('give the world a talking dragon', world));

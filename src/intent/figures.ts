@@ -159,28 +159,47 @@ const LEASH_PARTS: readonly FigurePart[] = [
 ];
 
 const LEASH_POSE = `
-  // The hand end comes out of the arm chain rather than being guessed at, so the strap
-  // stays in the hand through the swing instead of drifting off it.
-  const hx = 8 + side * 5.0;
-  const hy = side > 0 ? handLy : handRy;
-  const hz = side > 0 ? handLz : handRz;
-  const cx = dx, cy = by + 2.4, cz = path + nose * 7.0;
+  // Both ends in the walker's frame, so the strap is aimed once and turned with
+  // everything else. The hand end comes out of the arm chain rather than being guessed
+  // at, so it stays in the hand through the swing instead of drifting off it.
+  const hx = -5.0, hy = handRy, hz = handRz;
+  const cx = -16, cy = by + 2.4, cz = 7.0;
   const ex = cx - hx, ey = cy - hy, ez = cz - hz;
   const len = Math.max(0.001, Math.sqrt(ex * ex + ey * ey + ez * ez));
-  p[0].x = (hx + cx) / 2; p[0].y = (hy + cy) / 2; p[0].z = (hz + cz) / 2;
+  put(0, (hx + cx) / 2, (hy + cy) / 2, (hz + cz) / 2);
   p[0].pitch = Math.acos(Math.max(-1, Math.min(1, ey / len)));
-  p[0].yaw = Math.atan2(ex, ez);
+  p[0].yaw = facing + Math.atan2(ex, ez);
 `;
 
 const WALK_PREAMBLE = `
-  const speed = 4.6;
-  const leg = ((t * speed) % 150) - 75;
-  const out = leg > 0;
-  const path = out ? 75 - leg * 2 : 75 + leg * 2;
-  const facing = out ? Math.PI : 0;
+  // A flat oval, not a line with a flip at each end.
+  //
+  // The walk used to pace a straight segment and reverse by setting \`facing\` from 0 to
+  // pi between one frame and the next: a person spinning 180 degrees instantly, and the
+  // dog teleporting to their other side. There is no smoothing that fixes that, because
+  // the path itself has a cusp — a body walking a line has to stop and turn, and a rig
+  // has no way to stop.
+  //
+  // An oval has no cusp. Heading is the direction of travel and is therefore defined,
+  // continuous and correct at every instant, and the turn happens because the walker is
+  // walking a curve, which is what someone pacing a plaza actually does.
+  const phase = t * 0.19;
+  const path = 75 * Math.sin(phase);
+  const cross = 26 * Math.cos(phase);
+  const facing = Math.atan2(-26 * Math.sin(phase), 75 * Math.cos(phase));
+  const cf = Math.cos(facing), sf = Math.sin(facing);
   const w = t * 3.1;
   const swing = Math.sin(w);
   const bob = Math.abs(Math.sin(w)) * 0.9;
+  // Every part is placed in the walker's own frame — x across, z along the direction of
+  // travel — and turned into the world here. Writing world coordinates directly is what
+  // made the old pose need a \`facing\` branch in every line.
+  const put = (i, lx, ly, lz) => {
+    p[i].x = cross + lx * cf + lz * sf;
+    p[i].y = ly;
+    p[i].z = path - lx * sf + lz * cf;
+    p[i].yaw = facing;
+  };
 `;
 
 /**
@@ -192,41 +211,41 @@ const WALK_PREAMBLE = `
 const PERSON_POSE = `
   // Forward kinematics, not absolute placement.
   //
-  // Every earlier version set each part's position AND its rotation independently, which
-  // is a contradiction: rotating a segment about its own centre moves both of its ends,
-  // so the elbow the upper arm actually reaches is not the elbow the forearm was told to
-  // sit at. The gaps opened and closed through the stride, which is why they read as the
-  // rig coming apart rather than as a constant offset.
+  // Setting a part's position AND its rotation independently is a contradiction:
+  // rotating a segment about its centre moves both of its ends, so the elbow the upper
+  // arm actually reaches is not the elbow the forearm was told to sit at. The gaps
+  // opened and closed through the stride, which is why they read as the rig coming
+  // apart rather than as a constant offset.
   //
   // Here a joint is computed once and the next segment is hung off it. A capsule's axis
-  // is +Y, and under the renderer's YXZ order a pitch of θ carries that axis to
-  // (0, cos θ, sin θ) — so a segment of half-length h whose top end is at J has its
-  // centre at J - h·(0, cos θ, sin θ) and its far end at J - 2h·(0, cos θ, sin θ). That
-  // one line is the whole rig: shoulder to elbow to hand, hip to knee to ankle.
+  // is +Y, and under the renderer's YXZ order a pitch of theta carries that axis to
+  // (0, cos theta, sin theta) — so a segment of half-length h whose top end is at J has
+  // its centre at J - h*(0, cos, sin) and its far end at J - 2h*(0, cos, sin). That one
+  // line is the whole rig: shoulder to elbow to hand, hip to knee to ankle.
   //
   // Both components take the minus. Writing the y term as a subtraction and the z term
-  // as an addition — which is the natural thing to type, since one reads as "downward"
-  // and the other as "forward" — hinges the joint the wrong way in z, and the limb
-  // below it swings out sideways on screen while staying connected in the arithmetic.
-  const px = 8, sh = 33.3, hipY = 19.3;
+  // as an addition — the natural thing to type, since one reads as "downward" and the
+  // other as "forward" — hinges the joint the wrong way and the limb below it swings
+  // out sideways on screen while staying connected in the arithmetic.
+  const sh = 33.3, hipY = 19.3;
   const ua = 3.75, fa = 4.5, th = 5.0, sn = 3.95;
 
-  p[0].x = px; p[0].y = 37.4 + bob; p[0].z = path; p[0].yaw = facing;
-  p[1].x = px; p[1].y = 34.4 + bob; p[1].z = path;
-  p[2].x = px; p[2].y = 29.6 + bob; p[2].z = path; p[2].roll = swing * 0.05;
-  p[3].x = px; p[3].y = 23.0 + bob; p[3].z = path; p[3].roll = swing * 0.03;
-  p[4].x = px; p[4].y = hipY + bob; p[4].z = path;
+  put(0, 0, 37.4 + bob, 0);
+  put(1, 0, 34.4 + bob, 0);
+  put(2, 0, 29.6 + bob, 0); p[2].roll = swing * 0.05;
+  put(3, 0, 23.0 + bob, 0); p[3].roll = swing * 0.03;
+  put(4, 0, hipY + bob, 0);
 
   // Arms. The elbow keeps a little bend at every phase, because a straight arm through
   // a whole stride is the single clearest sign of a puppet.
   const aL = swing * 0.42, aR = -swing * 0.42;
-  const eLy = sh + bob - 2 * ua * Math.cos(aL), eLz = path - 2 * ua * Math.sin(aL);
-  const eRy = sh + bob - 2 * ua * Math.cos(aR), eRz = path - 2 * ua * Math.sin(aR);
+  const eLy = sh + bob - 2 * ua * Math.cos(aL), eLz = -2 * ua * Math.sin(aL);
+  const eRy = sh + bob - 2 * ua * Math.cos(aR), eRz = -2 * ua * Math.sin(aR);
   const bL = aL + 0.34, bR = aR + 0.34;
-  p[5].x = px + 5.0; p[5].y = sh + bob - ua * Math.cos(aL); p[5].z = path - ua * Math.sin(aL); p[5].pitch = aL;
-  p[6].x = px - 5.0; p[6].y = sh + bob - ua * Math.cos(aR); p[6].z = path - ua * Math.sin(aR); p[6].pitch = aR;
-  p[7].x = px + 5.0; p[7].y = eLy - fa * Math.cos(bL); p[7].z = eLz - fa * Math.sin(bL); p[7].pitch = bL;
-  p[8].x = px - 5.0; p[8].y = eRy - fa * Math.cos(bR); p[8].z = eRz - fa * Math.sin(bR); p[8].pitch = bR;
+  put(5, 5.0, sh + bob - ua * Math.cos(aL), -ua * Math.sin(aL)); p[5].pitch = aL;
+  put(6, -5.0, sh + bob - ua * Math.cos(aR), -ua * Math.sin(aR)); p[6].pitch = aR;
+  put(7, 5.0, eLy - fa * Math.cos(bL), eLz - fa * Math.sin(bL)); p[7].pitch = bL;
+  put(8, -5.0, eRy - fa * Math.cos(bR), eRz - fa * Math.sin(bR)); p[8].pitch = bR;
   const handLy = eLy - 2 * fa * Math.cos(bL), handLz = eLz - 2 * fa * Math.sin(bL);
   const handRy = eRy - 2 * fa * Math.cos(bR), handRz = eRz - 2 * fa * Math.sin(bR);
 
@@ -235,15 +254,15 @@ const PERSON_POSE = `
   // weight — which is what stops the figure from walking on stilts.
   const tL = -swing * 0.52, tR = swing * 0.52;
   const kL = tL + 0.12 + Math.max(0, -swing) * 0.62, kR = tR + 0.12 + Math.max(0, swing) * 0.62;
-  const kLy = hipY - 2 * th * Math.cos(tL), kLz = path - 2 * th * Math.sin(tL);
-  const kRy = hipY - 2 * th * Math.cos(tR), kRz = path - 2 * th * Math.sin(tR);
-  p[9].x = px + 2.5; p[9].y = hipY - th * Math.cos(tL); p[9].z = path - th * Math.sin(tL); p[9].pitch = tL;
-  p[10].x = px - 2.5; p[10].y = hipY - th * Math.cos(tR); p[10].z = path - th * Math.sin(tR); p[10].pitch = tR;
-  p[11].x = px + 2.5; p[11].y = kLy - sn * Math.cos(kL); p[11].z = kLz - sn * Math.sin(kL); p[11].pitch = kL;
-  p[12].x = px - 2.5; p[12].y = kRy - sn * Math.cos(kR); p[12].z = kRz - sn * Math.sin(kR); p[12].pitch = kR;
+  const kLy = hipY - 2 * th * Math.cos(tL), kLz = -2 * th * Math.sin(tL);
+  const kRy = hipY - 2 * th * Math.cos(tR), kRz = -2 * th * Math.sin(tR);
+  put(9, 2.5, hipY - th * Math.cos(tL), -th * Math.sin(tL)); p[9].pitch = tL;
+  put(10, -2.5, hipY - th * Math.cos(tR), -th * Math.sin(tR)); p[10].pitch = tR;
+  put(11, 2.5, kLy - sn * Math.cos(kL), kLz - sn * Math.sin(kL)); p[11].pitch = kL;
+  put(12, -2.5, kRy - sn * Math.cos(kR), kRz - sn * Math.sin(kR)); p[12].pitch = kR;
   // Feet sit at the ankle and stay level with the ground, which is what a foot does.
-  p[13].x = px + 2.5; p[13].y = 0.55; p[13].z = kLz - 2 * sn * Math.sin(kL) + (out ? -1.1 : 1.1); p[13].yaw = facing;
-  p[14].x = px - 2.5; p[14].y = 0.55; p[14].z = kRz - 2 * sn * Math.sin(kR) + (out ? -1.1 : 1.1); p[14].yaw = facing;
+  put(13, 2.5, 0.55, kLz - 2 * sn * Math.sin(kL) + 1.1);
+  put(14, -2.5, 0.55, kRz - 2 * sn * Math.sin(kR) + 1.1);
 `;
 
 /**
@@ -251,30 +270,29 @@ const PERSON_POSE = `
  * actually does and what stops four legs moving like a pantomime horse.
  */
 const DOG_POSE = `
-  // Laid out along z from tail to nose, so every part's place is read off one line
-  // rather than guessed: body -6..+6, chest at the shoulder, neck rising to a head that
-  // is clear of both. The head used to sit inside the chest with the neck buried in
-  // between, which renders as a barrel with a snout growing out of its side.
+  // Laid out in the walker's frame, tail to nose along +z, always on their left. The
+  // dog used to pick its side from a boolean that flipped at each end of the walk,
+  // which teleported it across the leash twice a lap.
   const trot = w * 1.7;
   const lift = Math.abs(Math.sin(trot)) * 0.45;
-  const side = out ? -1 : 1;
-  const dx = 8 + side * 9.5;
-  const nose = out ? -1 : 1;
+  // 0.7 m off the walker's centre line — a leash's length, not a shoulder's. At 0.43 the
+  // dog was inside the swing of the near leg and the two silhouettes merged.
+  const dx = -16;
   const by = 8.2 + lift;
-  p[0].x = dx; p[0].y = by; p[0].z = path; p[0].pitch = Math.PI / 2; p[0].yaw = facing;
-  p[1].x = dx; p[1].y = by + 0.4; p[1].z = path + nose * 5.6; p[1].pitch = Math.PI / 2;
-  p[2].x = dx; p[2].y = by + 2.6; p[2].z = path + nose * 7.2; p[2].pitch = nose * 0.85;
-  p[3].x = dx; p[3].y = by + 4.6; p[3].z = path + nose * 8.9; p[3].yaw = facing; p[3].pitch = nose * 0.12;
-  p[4].x = dx; p[4].y = by + 3.9; p[4].z = path + nose * 11.0; p[4].yaw = facing;
-  p[5].x = dx + 1.0; p[5].y = by + 6.2; p[5].z = path + nose * 8.4; p[5].yaw = facing;
-  p[6].x = dx - 1.0; p[6].y = by + 6.2; p[6].z = path + nose * 8.4; p[6].yaw = facing;
+  put(0, dx, by, 0); p[0].pitch = Math.PI / 2;
+  put(1, dx, by + 0.4, 5.6); p[1].pitch = Math.PI / 2;
+  put(2, dx, by + 2.6, 7.2); p[2].pitch = 0.85;
+  put(3, dx, by + 4.6, 8.9); p[3].pitch = 0.12;
+  put(4, dx, by + 3.9, 11.0);
+  put(5, dx + 1.0, by + 6.2, 8.4);
+  put(6, dx - 1.0, by + 6.2, 8.4);
   // Legs under the body, not outboard of it: a dog is narrow, and splayed legs read as
   // a table. The diagonal pairs swing together, which is what a trot is.
-  p[7].x = dx + 1.15; p[7].y = 3.0; p[7].z = path + nose * 4.4; p[7].pitch = Math.sin(trot) * 0.62;
-  p[8].x = dx - 1.15; p[8].y = 3.0; p[8].z = path + nose * 4.4; p[8].pitch = -Math.sin(trot) * 0.62;
-  p[9].x = dx + 1.25; p[9].y = 3.0; p[9].z = path - nose * 4.4; p[9].pitch = -Math.sin(trot) * 0.62;
-  p[10].x = dx - 1.25; p[10].y = 3.0; p[10].z = path - nose * 4.4; p[10].pitch = Math.sin(trot) * 0.62;
-  p[11].x = dx; p[11].y = by + 2.2; p[11].z = path - nose * 7.2; p[11].pitch = nose * (1.05 + Math.sin(w * 5) * 0.4);
+  put(7, dx + 1.15, 3.0, 4.4); p[7].pitch = Math.sin(trot) * 0.62;
+  put(8, dx - 1.15, 3.0, 4.4); p[8].pitch = -Math.sin(trot) * 0.62;
+  put(9, dx + 1.25, 3.0, -4.4); p[9].pitch = -Math.sin(trot) * 0.62;
+  put(10, dx - 1.25, 3.0, -4.4); p[10].pitch = Math.sin(trot) * 0.62;
+  put(11, dx, by + 2.2, -7.2); p[11].pitch = 1.05 + Math.sin(w * 5) * 0.4;
 `;
 
 /**
@@ -302,9 +320,16 @@ function prefixed(parts: readonly FigurePart[], prefix: string): readonly Figure
  * The count now comes from the array, and the pattern takes `\d+` rather than `\d`,
  * because a one-digit pattern silently skips `p[10]` and leaves it pointing at whatever
  * part ten belongs to in the other rig.
+ *
+ * Both ways of addressing a part have to be renumbered. A pose places most parts through
+ * `put(i, …)` and reaches for `p[i]` only to add a rotation, so renumbering one and not
+ * the other puts the second rig's body on the first rig's indices while its pitches land
+ * correctly — the exact failure this function exists to prevent, wearing a new hat.
  */
 function shifted(pose: string, by: number): string {
-  return pose.replace(/p\[(\d+)\]/g, (_, d: string) => `p[${Number(d) + by}]`);
+  return pose
+    .replace(/p\[(\d+)\]/g, (_, d: string) => `p[${Number(d) + by}]`)
+    .replace(/\bput\((\d+),/g, (_, d: string) => `put(${Number(d) + by},`);
 }
 
 const STEEL: readonly [number, number, number] = [0.34, 0.09, 0.08];

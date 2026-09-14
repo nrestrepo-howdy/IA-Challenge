@@ -83,6 +83,14 @@ export interface FigureParams {
   /** Where the whole rig stands. */
   readonly origin?: readonly [number, number, number];
   /**
+   * Radians of yaw about the origin, applied to the whole rig.
+   *
+   * Poses are written along one axis — a walk paces in z, a car drives in z — because
+   * that is the only way a hand or a model can keep a rig's arithmetic legible. Turning
+   * them here is what stops every figure in the world from pacing the same line.
+   */
+  readonly heading?: number;
+  /**
    * The generated half. Called once per frame with the elapsed seconds and the array
    * of targets, already seeded with each part's rest pose.
    */
@@ -188,6 +196,11 @@ class FigureInstance implements PrimitiveInstance {
     this.params.pose(this.#elapsed, this.#targets);
 
     const origin = this.params.origin ?? [0, 0, 0];
+    // Rotate about the origin, then translate — never the other way round, which would
+    // swing the rig around the world's centre instead of turning it where it stands.
+    const heading = this.params.heading ?? 0;
+    const ch = Math.cos(heading);
+    const sh = Math.sin(heading);
     const flat = new Array<number>(this.#targets.length * 7);
     for (let i = 0; i < this.#targets.length; i++) {
       const t = this.#targets[i]!;
@@ -195,10 +208,10 @@ class FigureInstance implements PrimitiveInstance {
       // Clamped on the way out rather than trusted on the way in. A NaN here would
       // reach a Float32Array as zero and look deliberate; a part a thousand units away
       // would take the camera's whole frame with it.
-      flat[o] = clamp((origin[0] ?? 0) + t.x, MAX_REACH);
+      flat[o] = clamp((origin[0] ?? 0) + t.x * ch + t.z * sh, MAX_REACH);
       flat[o + 1] = clamp((origin[1] ?? 0) + t.y, MAX_REACH);
-      flat[o + 2] = clamp((origin[2] ?? 0) + t.z, MAX_REACH);
-      flat[o + 3] = clamp(t.yaw, Math.PI * 4);
+      flat[o + 2] = clamp((origin[2] ?? 0) - t.x * sh + t.z * ch, MAX_REACH);
+      flat[o + 3] = clamp(t.yaw + heading, Math.PI * 4);
       flat[o + 4] = clamp(t.pitch, Math.PI * 4);
       flat[o + 5] = clamp(t.roll, Math.PI * 4);
       flat[o + 6] = Math.max(0.01, Math.min(MAX_SCALE, isNum(t.scale) ? t.scale : 1));

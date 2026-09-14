@@ -677,11 +677,21 @@ addEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault();
     void undo();
   }
-  // Tab and Escape only when the prompt is not where the typing is going: a viewer
-  // mid-sentence pressing tab wants a tab, not a camera move.
+  // Tab only when the prompt is not where the typing is going: a viewer mid-sentence
+  // pressing tab wants a tab, not a camera move.
   const typing = document.activeElement === input || document.activeElement === keyInput;
   if (e.key === 'Tab' && !typing) { e.preventDefault(); cycleFocus(); }
-  if (e.key === 'Escape' && !typing) { e.preventDefault(); releaseFocus(); }
+  // Escape is guarded by nothing, because guarding it made it unreachable. The prompt
+  // holds focus after every utterance — that is the whole interaction — so "Escape
+  // returns to the wide shot" was advice that never once worked for anyone who had just
+  // said something. One key, one meaning: back out of whatever you are in. It steps out
+  // of the prompt and out of the close shot together, and typing loses nothing, since
+  // blurring a text field does not empty it.
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (typing) (document.activeElement as HTMLElement).blur();
+    releaseFocus();
+  }
 });
 
 /**

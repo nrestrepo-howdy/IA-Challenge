@@ -164,8 +164,13 @@ describe('matchFigure', () => {
  * places. The second is what makes a forgotten limb loud instead of invisible.
  */
 describe('every rig poses exactly the parts it declares (AC-21)', () => {
-  const indices = (pose: string): number[] =>
-    [...pose.matchAll(/p\[(\d+)\]/g)].map((m) => Number(m[1]));
+  // Both spellings. A pose places a part with `put(i, …)` and reaches for `p[i]` only to
+  // set a rotation, so a scanner that knows one of them reports most of a rig as unplaced
+  // — or, worse, misses a part that really is.
+  const indices = (pose: string): number[] => [
+    ...[...pose.matchAll(/p\[(\d+)\]/g)].map((m) => Number(m[1])),
+    ...[...pose.matchAll(/\bput\((\d+),/g)].map((m) => Number(m[1])),
+  ];
 
   for (const figure of FIGURES) {
     it(`"${figure.name}" writes no index past its ${figure.parts.length} parts`, () => {

@@ -30,6 +30,7 @@ import { matchFigure, type FigureSpec } from './figures.js';
 import type { FigureAuthor } from './figure-model.js';
 import { keywordModel, parseProposal, type LanguageModel, type ModelRequest } from './model.js';
 import { validateParams } from './schema.js';
+import { stationFor } from '../world/stations.js';
 
 /** One composition step: which primitive, imported how, parameterized with what. */
 export interface PrimitiveDirective {
@@ -355,11 +356,18 @@ function figureSelection(figure: FigureSpec): Selection {
       { key: 'instance', role: 'resource', witness: 'figure#0' },
     ],
   };
+  // Where it stands is decided here, not in the catalogue. Every rig was authored with
+  // the same origin — each was written and looked at alone — so a person and a car
+  // arrived on the same three square metres and walked through each other.
+  const station = stationFor(figure.name);
   return {
     spec,
     params: {
       name: figure.name,
-      origin: [...figure.origin],
+      // The rig keeps its own height: a plane's altitude is its business, and only the
+      // ground it stands over is the station's.
+      origin: [station.origin[0], figure.origin[1], station.origin[2]],
+      heading: station.heading,
       parts: figure.parts.map((p) => ({
         id: p.id, shape: p.shape,
         size: [...p.size], color: [...p.color],

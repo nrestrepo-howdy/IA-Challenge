@@ -1540,6 +1540,69 @@ opinion.
 
 ---
 
+## 13 Sep — Five complaints, two root causes, and the end of a bad habit
+
+A screenshot of a blob with a dog beside it, and a list: no proportion, collides with
+buildings, no streets, the floor is black, buildings badly placed, no trees, no colour.
+
+Seven symptoms. Two causes.
+
+### The buildings were never placed
+
+They were scattered through an annulus at random angles with random rotations. That is
+not a city, it is boxes thrown at a disc — and it caused four of the seven on its own:
+**there were no streets because there were no gaps for streets to be**; nothing was well
+placed because nothing was placed; a rig dropped into the world landed inside a tower;
+and trees had nowhere to stand.
+
+So there is a street plan, and everything reads from it. Avenues at irregular spacing,
+because even spacing is graph paper. Blocks are what is left between them. Buildings sit
+inside blocks, inset from the kerb, and **square to the street** — a random rotation was
+the other half of why the old city read as scattered, since buildings meet an avenue
+along their face, always.
+
+The street texture is drawn from the same array, which is the whole point: the previous
+grid was an independent set of lines at an unrelated spacing laid over buildings that
+were scattered, so it crossed through towers and stopped in the middle of blocks. It
+read as a texture because that is all it was.
+
+The open core had to be *wider than the camera's orbit*, which the first attempt was not:
+at 120 against an orbit of 165, the camera ended up inside the city looking down an
+avenue with two towers filling the frame. That was a fifteen-second lesson in the
+difference between a plan and a plan that has been looked at.
+
+### A part was not the size it said it was
+
+The radius of a capsule, cylinder or cone was `max(x, z)`. So a torso authored
+`[2.6, 3.4, 1.7]` became a sausage of radius 2.6 — and **at that radius it swallowed its
+own arms**, which the pose had placed 5.5 units off the centre line, inside a shape the
+renderer had decided was 5.2 units fat.
+
+Every rig in the project had been built against a renderer that quietly disagreed with
+the prompt about what `size` meant. The model was doing its part correctly and the
+result was a blob, which is the most demoralising kind of bug: everything upstream is
+right and the output is garbage.
+
+Unit radius, scaled by the declared extents. `size` now means in the renderer what the
+prompt promises: half-extents in x, y, z.
+
+### And the habit that had to stop
+
+`"a taller denser city"` failed afterwards, and the numbers had *swapped*. Silhouette
+area went from 1.23x to 2.30x; skyline height went from 1.76x to 1.35x — because density
+on a street grid fills blocks rather than scattering towers.
+
+This is the fourth time that threshold has moved. 1.8x against flat-shaded boxes, 1.25x
+after rim lighting, then a change of metric to height when setbacks dropped it to 1.23x,
+and now height itself has fallen while area has doubled.
+
+**Chasing whichever number happens to be highest is how a test becomes a formality.** The
+verb says two things. It gets two assertions: more area because it is *denser*, a higher
+skyline because it is *taller*, at 1.6x and 1.2x against 2.30x and 1.35x. A verb that did
+nothing lands at 1.0x on both, and neither half can be satisfied by the other.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

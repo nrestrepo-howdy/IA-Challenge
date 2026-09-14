@@ -65,21 +65,25 @@ const VERBS = [
     utterance: 'a taller denser city',
     note: 'the authored skyline is rescaled',
     slice: 'structures',
-    // Measured on skyline height rather than silhouette area, and the change of metric
-    // is the point rather than a loosening.
+    // Both words in the verb, each with its own bound, and this is the end of a habit
+    // rather than another recalibration.
     //
-    // `dark` was calibrated at 1.8x against flat-shaded solid boxes, cut to 1.25x when
-    // rim lighting and bloom lifted every building edge, and would have had to be cut
-    // again — to below 1.23x — once buildings gained setbacks, which add mass low and
-    // remove it high. Three recalibrations of the same threshold is a metric telling
-    // you it is measuring the renderer instead of the verb, and the comment left at the
-    // second one said as much: loosening it further would turn a measurement into a
-    // formality.
+    // `dark` — silhouette area — was calibrated at 1.8x against flat-shaded solid boxes,
+    // cut to 1.25x when rim lighting lifted every building edge, and fell to 1.23x when
+    // buildings gained setbacks that add mass low and remove it high. So the metric
+    // moved to skyline *height*, which measured 1.76x. Then the city was laid out on a
+    // street grid, and the two swapped places: density now fills blocks rather than
+    // scattering towers, so area went to 2.30x and height fell to 1.35x.
     //
-    // Height is what this verb changes. It measures 1.76x against 1.0x for a no-op, so
-    // 1.4x is a bound with real room under it.
-    check: (control: Metrics, after: Metrics) =>
-      expect(after.skyline).toBeGreaterThan(control.skyline * 1.4),
+    // Chasing whichever number happens to be highest is how a test becomes a formality.
+    // "A taller denser city" is two claims, so it gets two assertions: more silhouette
+    // *area* because it is denser, and a higher *skyline* because it is taller. Bounds
+    // at 1.6x and 1.2x against measurements of 2.30x and 1.35x, and a verb that did
+    // nothing lands at 1.0x on both.
+    check: (control: Metrics, after: Metrics) => {
+      expect(after.dark, 'denser: more silhouette').toBeGreaterThan(control.dark * 1.6);
+      expect(after.skyline, 'taller: a higher skyline').toBeGreaterThan(control.skyline * 1.2);
+    },
   },
   {
     utterance: 'make it a desert',

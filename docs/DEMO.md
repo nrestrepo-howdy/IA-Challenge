@@ -1,55 +1,139 @@
-# Demo — shot list
+# Demo — script
 
-Three minutes, hard cap.
+Three minutes. **Explain, demonstrate, prove, close.** The viewer knows what they are
+looking at inside the first fifteen seconds; everything after that is evidence.
 
-**The shape of it.** The first ninety seconds exist to make the viewer ask one question:
-*how is it safe to run that?* The second ninety answer it with something they cannot wave
-away. Nothing in the first half mentions architecture — not one diagram, not the word
-"oracle". A question the viewer is already asking is the only thing that makes an answer
-land.
+Narration is written to be read aloud: short sentences, no clauses to get lost in. The
+bracketed lines are what is on screen.
 
-**The line the whole video hangs on**, said once, at 1:38:
-
-> The model writes the code. The model does not decide whether it runs.
-
-**Record against the live URL with your own key pasted in.** Without a key the site
-answers from the built-in phrasebook in milliseconds — real, and the wrong half. The field
-is bottom-right; the status line reads `KEY ACTIVE` when it is set.
+**Record against the live URL with your own key pasted in.** Without a key the site answers
+from the built-in phrasebook in milliseconds — real, and the wrong half. The field is
+bottom-right; the status line reads `KEY ACTIVE` when it is set.
 
 ---
 
-## 0:00 – 1:35 · What it is
+## 1 · What it is — 0:00
 
-| Time | Shot | Say |
-|---|---|---|
-| 0:00 | Full screen. The world already alive — moon, city, slow orbit. Three seconds of nothing. | *(silence)* |
-| 0:06 | Type **`make it rain`**. Do not cut away. | "You tell the world what to become." |
-| 0:12 | It rains. The camera keeps orbiting. Nothing reloads, nothing blanks. | "It didn't reload. Your world is still your world." |
-| 0:22 | Type **`una noche de tormenta`** — Spanish, and the name of nothing. Talk over the wait. | "Nothing in that sentence is a feature. It's a mood. And it becomes night, heavy rain, wind driving the rain sideways, lightning — four things composed, because that's what the sentence meant." |
-| 0:42 | Point at the `import` lines in the panel. | "Every one of these is code that did not exist a second ago." |
-| 0:50 | Type **`un astronauta caminando por la plaza`**. Takes 10–60 s. **Start talking immediately.** | "That one isn't in the catalogue. There is no astronaut. No dog, no walk cycle either — so while it works: the agent has to design the body and write the gait itself." |
-| 1:05 | It lands. The camera drops to street level to meet it. | "And the camera came down, because the subject of the picture changed." |
-| 1:14 | Scroll the code view to the `pose` function. | "This is the only part the agent *writes* instead of selects. It's arithmetic. It cannot import anything, reach the scene, or name a shape outside eight." |
-| 1:24 | Type **`make it rain money`**. It rains; the log says *cannot express: "money"*. | "And when it can only do part of what you asked, it tells you which part." |
-| 1:32 | Hold on the world. | *(silence)* |
+> [The world, already alive. Moon, city, slow orbit.]
+>
+> "This is Verbo. It's a 3D city you change by talking to it.
+>
+> You type a sentence. An AI writes new code. That code is verified by four independent
+> layers. And if it passes, it's injected into the world while you're still looking at it.
+>
+> No reload. Nothing resets."
 
 ---
 
-## 1:35 – 3:00 · Why it is safe to run
+## 2 · What it does — 0:20
 
-| Time | Shot | Say |
-|---|---|---|
-| 1:35 | The **panel, top-right**. Three lanes, four cells each. | "Three different programs were written for that. They raced." |
-| 1:38 | Point at the accepted lane, then a rejected one, then its diagnosis. | "**The model writes the code. The model does not decide whether it runs.** One cleared every layer. The others were rejected — and the panel keeps them, because the failures are the evidence." |
-| 1:48 | Point at the **L3** cell and the dashed rule labelled *advise*. Then read its line in the log **out loud, including the criticism**. | "Three of those four decide. The fourth looks at the actual frame and only ever files an opinion — it cannot block. Listen to what it just said about the thing it approved." |
-| 1:58 | Let the criticism land. | "It approved it *and* told me what's wrong with it. A system that only ever congratulates itself isn't verification." |
-| 2:05 | **Cutaway, pre-recorded.** The debris primitive bouncing — it looks great. | "So what do the deciding layers catch that looking can't? Watch this. Falling bodies. Looks right." |
-| 2:12 | Same scene with the integrator changed to explicit Euler. Still beautiful. Then the terminal. | "Now I break the physics — the classic mistake, reading velocity before the acceleration instead of after. It renders *better*. Bouncier. Livelier." |
-| 2:20 | The test output: `energy rose on 39 frames, worst by 13.343` | "Total mechanical energy has to fall every frame. That's a law, not a preference. No eye catches this. The contract catches it by name." |
-| 2:30 | `tests/world/rig-integrity.test.ts` scrolling, then its three findings. | "Same idea on the figures. 'Does it look like a dog' is taste. 'Is it one connected body' is geometry — so it's checked, every frame of the animation. It found three defects in rigs I'd hand-tuned and stared at: the walker's feet stayed on the pavement while the leg lifted; the dog's legs left its body every stride; the leash didn't reach the hand." |
-| 2:42 | `docs/AI-DEV-LOG.md` — **the findings table**. Scroll the six rows slowly. | "And this is the part I'd actually read. Six findings, and every one is a time the verification system was wrong about *itself*. The mutation engine that mutated nothing. The telemetry blind to ninety-five percent of its own test runs." |
-| 2:52 | Stop on finding 5. | "That one's a citation the whole architecture was built on — and when I went and read the paper, the numbers weren't in it. It's in the log because a submission you can only trust where it flatters itself isn't evidence." |
-| 2:57 | Back to the world. | "One person, fourteen days. The hard part was never the generation." |
+> [Type **`make it rain`**. Let it land.]
+>
+> "Make it rain. Five seconds. And notice what didn't happen — the page didn't reload, the
+> camera didn't cut, the city is still the city you were looking at."
+
+> [Type **`una noche de tormenta`**. Talk over the wait.]
+>
+> "Now something harder. That's Spanish, and it isn't the name of any feature in this
+> system. It's a mood.
+>
+> And it becomes four things at once. Night. Heavy rain. Wind pushing the rain sideways.
+> Lightning. Composed together, because that's what the sentence meant."
+
+> [Point at the `import` lines in the panel.]
+>
+> "Every one of those imports is code that did not exist a second ago."
+
+> [Type **`un astronauta caminando por la plaza`**. Start talking immediately — it takes
+> between ten and sixty seconds.]
+>
+> "And this is the part that isn't a catalogue lookup. There's no astronaut in this system.
+> There's no walk cycle either. So the agent has to design the body and write the motion
+> itself.
+>
+> While that works, here's the problem this project is actually about."
+
+---
+
+## 3 · Why it is hard — 1:10
+
+> [The astronaut lands. The camera drops to street level to meet it.]
+>
+> "When an AI writes code today, a person reads it before it runs. There's always a stop.
+>
+> Here there is no stop. Code goes from not existing to running inside your live session,
+> in seconds.
+>
+> So the only question that matters is: what makes that safe?"
+
+---
+
+## 4 · How it is verified — 1:30
+
+> [The verification panel, top right. Three lanes, four cells each.]
+>
+> "The model writes the code. The model does not decide whether it runs.
+>
+> Every request produces three different candidate programs, and they race through four
+> layers. One cleared all of them. The others were rejected — and the panel keeps them,
+> because the failures are the evidence."
+
+> [Point at the L3 cell and the dashed rule labelled *advise*.]
+>
+> "Three of those layers decide. The fourth one looks at the actual picture, and it only
+> ever files an opinion. It cannot block anything. That isn't a convention — the type
+> system won't let you inject a verdict that failed the deciding layers."
+
+> [Read L3's line from the log out loud, including the criticism.]
+>
+> "Here's what it just said about the result it approved. It approved it, and it told me
+> what's wrong with it."
+
+---
+
+## 5 · The proof — 2:05
+
+*Pre-recorded cutaway. This is the fifteen seconds the video is for.*
+
+> [Debris falling and settling. It looks correct.]
+>
+> "So what do the deciding layers catch that looking can't?
+>
+> This is falling bodies under gravity. Looks right."
+
+> [Same scene, integrator changed to explicit Euler. Still beautiful.]
+>
+> "Now I break the physics. The classic mistake — reading velocity before the acceleration
+> instead of after.
+>
+> It renders better. Bouncier. Livelier. No eye catches this."
+
+> [Terminal: `energy rose on 39 frames, worst by 13.343`]
+>
+> "Total mechanical energy has to fall every frame. That's a law, not a preference.
+>
+> The contract catches it by name."
+
+---
+
+## 6 · The evidence — 2:35
+
+> [`docs/AI-DEV-LOG.md`, the findings table. Scroll the six rows.]
+>
+> "The engineering log opens with six findings. Every one of them is a time this
+> verification system turned out to be wrong about itself.
+>
+> A mutation engine that mutated nothing. Telemetry blind to ninety-five percent of its own
+> test runs. And a citation the whole architecture was built on — which, when I went and
+> read the paper, wasn't in it."
+
+---
+
+## 7 · Close — 2:55
+
+> [Back to the world.]
+>
+> "One person. Fourteen days. The generation was never the hard part."
 
 ---
 
@@ -59,27 +143,23 @@ Two takes, thirty seconds of footage, cut to fifteen.
 
 1. `npm run dev`, say **`drop some debris`**, record ten seconds of it settling. It looks
    correct because it *is* correct.
-2. In `src/world/debris.ts`, move the velocity read to before the acceleration is applied
-   — explicit Euler. Record ten seconds. **It looks better.** That is the entire point.
+2. In `src/world/debris.ts`, move the velocity read to before the acceleration is applied —
+   explicit Euler. Record ten seconds. **It looks better.** That is the entire point.
 3. `npx vitest run tests/world/debris.test.ts`. Capture the failure line verbatim.
-4. **Revert the change.** Confirm `npx vitest run` is green before you record anything else.
+4. **Revert the change.** Confirm `npx vitest run` is green before recording anything else.
 
 ---
 
 ## Rehearse against these
 
-- **Latency is the only thing that can ruin a take.** Measured on the live site with a
-  key: `make it rain` ≈ 5 s, `una noche de tormenta` ≈ 16 s, a model-authored figure
-  **11 s to 67 s**. The variance is the rig author. Never open with the slow one, and
-  narrate *over* it rather than pausing.
+- **Latency is the only thing that can ruin a take.** Measured on the live site with a key:
+  `make it rain` ≈ 5 s, `una noche de tormenta` ≈ 16 s, a model-authored figure **11 s to
+  67 s**. Never open with the slow one, and narrate *over* it rather than pausing.
 - **Check L3's line before committing to read it aloud.** It is a live judgement and will
-  not say the same thing twice. If it approves with no criticism, say another verb — the
-  beat at 1:48 only works when the critique is real.
+  not say the same thing twice. If it approves with no criticism, say another verb — that
+  beat only works when the critique is real.
 - **Warm the app.** First load compiles shaders and can hitch. Load once, reload, record.
 - **Type slowly enough to read.** Fast typing resolves the panel before anyone sees it.
-- **Don't narrate over the silences at 0:00 and 1:32.** Both are doing work.
-- **The astronaut answers the objection everyone is privately holding** — that this only
-  does weather. Ask it out loud, then answer it.
 
 ## Fallbacks
 

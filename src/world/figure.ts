@@ -36,6 +36,22 @@ import type { Primitive, PrimitiveInstance, WorldHandle } from '../contracts.js'
  * wheel or a ring. Between them a fuselage with a nose and swept wings becomes
  * expressible, which it simply was not before.
  */
+/**
+ * Authored figure units per world unit.
+ *
+ * The city is metric — a street tree's trunk is 9 units, a road is 11 across, the
+ * shortest building is 26 — so one world unit is about a metre. Rigs are authored at
+ * roughly twenty-two times that ("a walking figure is around 40 units tall", which is
+ * the only scale a model can hold in its head alongside a thousand-unit city), and the
+ * result was a pedestrian who stood taller than an eight-storey block.
+ *
+ * Rather than rewrite every pose body — hand-written and model-authored alike — the
+ * conversion happens once, on the rig's root transform. Rigs keep authoring in the
+ * units the prompt promises; the world stays metric; and 40 × 0.045 is a person 1.8
+ * units tall, which is a person.
+ */
+export const FIGURE_SCALE = 0.045;
+
 export const SHAPES = ['box', 'sphere', 'capsule', 'cylinder', 'cone', 'wedge', 'pyramid', 'torus'] as const;
 export type Shape = (typeof SHAPES)[number];
 

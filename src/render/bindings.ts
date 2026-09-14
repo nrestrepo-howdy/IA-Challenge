@@ -20,6 +20,7 @@ import {
   RGBAFormat, Scene, SphereGeometry, TorusGeometry, Vector3,
 } from 'three/webgpu';
 import { sceneHandles, type SkyState } from './scene.js';
+import { FIGURE_SCALE } from '../world/figure.js';
 
 export interface Binding {
   readonly statePath: string;
@@ -1198,6 +1199,8 @@ export const figureBinding: BindingFactory = (scene, statePath) => {
   function build(name: string, parts: readonly Record<string, unknown>[]): Rig {
     const root = new Object3D();
     root.frustumCulled = false;
+    // Authored units to metres, once, for every rig (see FIGURE_SCALE).
+    root.scale.setScalar(FIGURE_SCALE);
     const meshes: Mesh[] = [];
     const geometries: BufferGeometry[] = [];
     const materials: MeshStandardMaterial[] = [];

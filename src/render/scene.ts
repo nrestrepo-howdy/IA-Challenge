@@ -21,8 +21,8 @@ import {
   SphereGeometry, Vector3,
 } from 'three/webgpu';
 import {
-  abs, float, mix, mx_cell_noise_float, normalView, normalWorld, positionViewDirection,
-  positionWorld, smoothstep, uniform, vec2, vec3,
+  abs, cameraPosition, float, materialColor, mix, mx_cell_noise_float, normalView,
+  normalWorld, positionViewDirection, positionWorld, smoothstep, uniform, vec2, vec3,
 } from 'three/tsl';
 
 export interface BaseScene {
@@ -80,7 +80,13 @@ export interface SkylineHandle {
 
 /** The handle `ground-tint` needs: the material, and what it was before anyone touched it. */
 export interface GroundHandle {
-  readonly material: MeshStandardMaterial;
+  /**
+   * A node material, because the near ground is paved in the shader (see below). It is
+   * still a standard material in every way `ground-tint` cares about — the binding sets
+   * `color` and `roughness`, and the paving node reads that same colour uniform, so the
+   * tint applies to the paved ground exactly as it did to the flat one.
+   */
+  readonly material: MeshStandardNodeMaterial;
   readonly baseColor: Color;
   readonly baseRoughness: number;
   reset(): void;
@@ -335,12 +341,44 @@ export function createBaseScene(): BaseScene {
   scene.add(halo);
 
   // ── Ground ─────────────────────────────────────────────────────────────────
-  const groundMaterial = new MeshStandardMaterial({
+  const groundMaterial = new MeshStandardNodeMaterial({
     // Wet-looking, not mirrored. metalness 0.62 against a 2.1 key clipped a
     // specular lobe to pure white right in front of the camera — the brightest
     // thing in frame was an artifact.
     color: new Color(0.026, 0.033, 0.048), roughness: 0.72, metalness: 0.18,
   });
+
+  /**
+   * Paving, in the shader, because no texture can reach this scale.
+   *
+   * The street map is drawn once across 2,460 units. That is under one texel per metre,
+   * which is fine for a skyline and useless the moment the camera comes down to a
+   * pedestrian: a figure 1.8 units tall stands on a single texel, and the ground under
+   * it renders as an untextured milky plane. It read as a void, and a figure standing on
+   * a void reads as a figure that has not been placed in the world at all.
+   *
+   * So the near ground gets its detail procedurally: 2.4-unit slabs with darker joints
+   * and a per-slab tonal jitter from cell noise, which has no resolution to run out of.
+   * It is mixed in by camera distance rather than applied everywhere — past about eighty
+   * units the slabs are smaller than a pixel and would alias into a shimmering grid, and
+   * the drawn street map is the right answer at that range anyway.
+   */
+  {
+    const slab = positionWorld.xz.mul(1 / 2.4);
+    const inCell = slab.fract().sub(0.5).abs();
+    // 1 along a joint, 0 in the middle of a slab.
+    const joint = smoothstep(0.41, 0.5, inCell.x.max(inCell.y));
+    // Enough variation to read as laid stone rather than a printed grid, not enough to
+    // read as damage.
+    const tone = mx_cell_noise_float(vec3(slab.x.floor(), 0, slab.y.floor())).mul(0.22).add(0.89);
+    const near = smoothstep(80, 14, positionWorld.sub(cameraPosition).length());
+    // Derived from the authored colour rather than written as a literal, so `ground-tint`
+    // still reaches the near ground: a verb that turns the world amber has to turn the
+    // paving amber too, or the figure ends up standing on a patch the weather missed.
+    const stone = materialColor.mul(2.2).add(vec3(0.05, 0.048, 0.052));
+    const paved = stone.mul(tone).mul(float(1).sub(joint.mul(0.45)));
+    groundMaterial.colorNode = mix(materialColor, paved, near);
+  }
   const groundMesh = new Mesh(new PlaneGeometry(4000, 4000), groundMaterial);
   groundMesh.rotation.x = -Math.PI / 2;
   // Receives only. A ground plane that casts would shadow the world from underneath.
@@ -1262,7 +1300,10 @@ export function createBaseScene(): BaseScene {
         // 2.4x the exact-fit distance rather than 3.2x: the subject fills about half the
         // frame height instead of a third, which is the difference between a figure you
         // can see and one you have to be told is there.
-        ? Math.max(58, Math.min(300, (focus[3] / Math.tan((camera.fov * Math.PI) / 360)) * 2.4))
+        //
+        // The floor is 4, not 58. Rigs are metric now — a pedestrian is 1.8 units, not
+        // 40 — and a 58-unit floor framed a person the way one frames a tower block.
+        ? Math.max(4, Math.min(300, (focus[3] / Math.tan((camera.fov * Math.PI) / 360)) * 2.4))
         : 150 + framing * 130;
       dolly += (want - dolly) * 0.02;
       // Low, and looking up. 12 units is street level against 300-unit towers, which
@@ -1277,11 +1318,27 @@ export function createBaseScene(): BaseScene {
       }
       const r = dolly * view.zoom;
       const ay = a + view.yaw;
-      camera.position.set(
-        Math.sin(ay) * r,
-        15 + r * 0.06 + Math.sin(elapsed * 0.09) * 2.5 + view.pitch * r * 0.9,
-        Math.cos(ay) * r,
-      );
+      if (focus) {
+        // Orbit the subject, not the world origin.
+        //
+        // The wide shot circles the origin because the city is the subject and the city
+        // is centred there. A rig is not: once the dolly can come down to a few units,
+        // an origin-centred orbit puts the camera four units from the plaza centre and
+        // fifteen above it — which frames a pedestrian's scalp from a stepladder, and
+        // frames it from wherever the rig happens not to be standing.
+        subject.set(focus[0], focus[1], focus[2]);
+        camera.position.set(
+          subject.x + Math.sin(ay) * r,
+          subject.y + r * 0.26 + Math.sin(elapsed * 0.09) * r * 0.02 + view.pitch * r * 0.9,
+          subject.z + Math.cos(ay) * r,
+        );
+      } else {
+        camera.position.set(
+          Math.sin(ay) * r,
+          15 + r * 0.06 + Math.sin(elapsed * 0.09) * 2.5 + view.pitch * r * 0.9,
+          Math.cos(ay) * r,
+        );
+      }
       // Biased off-centre, and lowered from 78 so the horizon is inside the frame.
       //
       // At 78 the camera pitched up about 32 degrees with a 54-degree field, so the
@@ -1297,16 +1354,19 @@ export function createBaseScene(): BaseScene {
       // the thing that makes the figure worth looking at.
       aim.set(Math.sin(ay + 0.42) * 70, 50 + framing * 60, Math.cos(ay + 0.42) * 70);
       if (focus) {
-        // No extra lift here: `focusPoint()` already returns a point above the rig's
-        // centroid. Adding a second one put the subject a third of the way down the
-        // frame and pointed the camera at the skyline behind it.
+        // Composed relative to the framing distance, not to the city.
+        //
+        // The old line lerped toward the subject from a point seventy units out and
+        // fifty up, which read as an off-centre subject only because the dolly was
+        // also in the hundreds. At a six-unit dolly the same weights aim the camera
+        // several metres over the subject's head — the bias has to scale with the
+        // shot, so it is a tenth of the distance, sideways, and nothing vertical.
         subject.set(focus[0], focus[1], focus[2]);
-        // 0.88, not 0.72. At 0.72 the subject sits a third of the way in from the edge
-        // and the frame is mostly the skyline behind it — L3 called it "jammed against
-        // the left frame edge", which is what a weighted average of two points looks
-        // like when the other point is a city. Never 1.0: at 1.0 the city stops being in
-        // the shot, and the city is what makes the figure worth looking at.
-        aim.lerp(subject, 0.88);
+        aim.set(
+          subject.x + Math.sin(ay + 1.57) * r * 0.1,
+          subject.y,
+          subject.z + Math.cos(ay + 1.57) * r * 0.1,
+        );
       }
       camera.lookAt(aim);
       winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;

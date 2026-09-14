@@ -25,6 +25,7 @@ import { VerificationPanel } from './verification-panel.js';
 import { WorldHistory } from './history.js';
 import { Inventory } from './inventory.js';
 import { SuggestionRow, deriveSuggestions } from './suggestions.js';
+import { FIGURE_SCALE } from '../world/figure.js';
 
 /** What one utterance produced. Shaped for the nightly evaluation, not for the UI. */
 export interface SayResult {
@@ -129,7 +130,11 @@ function subjectOf(pose: readonly unknown[]): readonly [number, number, number, 
     if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
     radius = Math.max(radius, Math.hypot(px - cx, py - cy, pz - cz));
   }
-  return [cx, cy + Math.max(14, radius * 0.5), cz, Math.max(12, radius)];
+  // Returned in world units: a pose is authored at roughly twenty-two metres to the
+  // metre (FIGURE_SCALE) and the camera works in metres, so a subject reported in
+  // authored units asks to be framed as something the size of an office block.
+  const S = FIGURE_SCALE;
+  return [cx * S, cy * S + Math.max(0.55, radius * S * 0.5), cz * S, Math.max(0.9, radius * S)];
 }
 
 /** Every rig in the world, in the order they were added. */
@@ -155,22 +160,25 @@ function subjects(): { readonly name: string; readonly at: readonly [number, num
  * and an end, and this one had no end.
  *
  * So the wide shot is the default and focus is a state you enter and leave. A new rig
- * takes the frame for a few seconds because the thing you just asked for is worth
- * looking at; then it gives it back. Tab cycles through the rigs by hand and Escape
- * returns to the wide shot, for the times when a few seconds is not enough.
+ * takes the frame and keeps it: the wide shot is what the city looked like *before* you
+ * spoke, and handing it back after a few seconds tells the viewer their sentence was a
+ * passing event rather than the point. Tab cycles through the rigs and Escape returns
+ * to the wide shot, which is the release the timer used to be doing on its own.
+ *
+ * The timer also broke the measurement. L3 captures its frame after the world settles,
+ * so a seven-second hold meant the critic photographed the skyline and reported, quite
+ * correctly, that it could see no person and no dog — a camera fault scored as a rig
+ * fault, on every figure utterance.
+ *
+ * Dragging is deliberately *not* a release: the viewer's offsets ride on top of the
+ * focus shot, so a drag orbits the figure instead of abandoning it.
  */
-const FOCUS_HOLD_S = 7;
 let focusIndex: number | null = null;
-let focusUntil = 0;
 
 function focusPoint(): readonly [number, number, number, number] | null {
   const all = subjects();
   if (all.length === 0) { focusIndex = null; return null; }
 
-  // A manual pick holds until it is changed or released; an automatic one expires.
-  if (focusIndex !== null && focusUntil !== Infinity && world.clock.elapsed > focusUntil) {
-    focusIndex = null;
-  }
   if (focusIndex === null) return null;
   return all[focusIndex % all.length]?.at ?? null;
 }
@@ -180,15 +188,12 @@ function glanceAtNewest(): void {
   const all = subjects();
   if (all.length === 0) return;
   focusIndex = all.length - 1;
-  focusUntil = world.clock.elapsed + FOCUS_HOLD_S;
 }
 
 function cycleFocus(): void {
   const all = subjects();
   if (all.length === 0) return;
   focusIndex = focusIndex === null ? 0 : (focusIndex + 1) % all.length;
-  // Held, not timed: the viewer asked for this one.
-  focusUntil = Infinity;
   line(`framing “${all[focusIndex]!.name}” — tab for the next, esc for the whole city`, 'info');
 }
 

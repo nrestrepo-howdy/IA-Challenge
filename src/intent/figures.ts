@@ -57,6 +57,9 @@ export interface FigureSpec {
 const FUR: readonly [number, number, number] = [0.38, 0.26, 0.16];
 const COAT: readonly [number, number, number] = [0.16, 0.19, 0.28];
 const SKIN: readonly [number, number, number] = [0.72, 0.56, 0.44];
+const TROUSER: readonly [number, number, number] = [0.11, 0.12, 0.17];
+const MUZZLE: readonly [number, number, number] = [0.26, 0.18, 0.11];
+const STRAP: readonly [number, number, number] = [0.5, 0.13, 0.1];
 
 /**
  * A walking person, at eight heads.
@@ -78,20 +81,30 @@ const SKIN: readonly [number, number, number] = [0.72, 0.56, 0.44];
  */
 const HEAD = 5;                   // one head-length; the figure is eight of them
 const PERSON_PARTS: readonly FigurePart[] = [
-  // Hips to shoulders. Shoulders are two head-lengths across, so half-width is one.
-  { id: 'torso', shape: 'capsule', size: [HEAD * 0.98, HEAD * 1.35, HEAD * 0.5], color: COAT, emissive: 0.16 },
-  { id: 'hips', shape: 'capsule', size: [HEAD * 0.72, HEAD * 0.42, HEAD * 0.46], color: [0.12, 0.13, 0.18], emissive: 0.12 },
+  // Eight heads, laid out against the canon rather than by eye: crotch at the halfway
+  // line, knee at a fifth, shoulders two heads across, fingertips at mid-thigh.
   { id: 'head', shape: 'sphere', size: [HEAD * 0.4, HEAD * 0.5, HEAD * 0.42], color: SKIN, emissive: 0.2 },
-  { id: 'neck', shape: 'cylinder', size: [HEAD * 0.16, HEAD * 0.16, HEAD * 0.16], color: SKIN, emissive: 0.16 },
-  // Arms outboard of the shoulder, not inside it: x sits beyond the torso's half-width.
-  { id: 'arm-l', shape: 'capsule', size: [HEAD * 0.16, HEAD * 0.62, HEAD * 0.16], color: COAT, emissive: 0.16 },
-  { id: 'arm-r', shape: 'capsule', size: [HEAD * 0.16, HEAD * 0.62, HEAD * 0.16], color: COAT, emissive: 0.16 },
-  { id: 'forearm-l', shape: 'capsule', size: [HEAD * 0.14, HEAD * 0.58, HEAD * 0.14], color: SKIN, emissive: 0.16 },
-  { id: 'forearm-r', shape: 'capsule', size: [HEAD * 0.14, HEAD * 0.58, HEAD * 0.14], color: SKIN, emissive: 0.16 },
-  { id: 'thigh-l', shape: 'capsule', size: [HEAD * 0.22, HEAD * 0.92, HEAD * 0.22], color: [0.12, 0.13, 0.18], emissive: 0.12 },
-  { id: 'thigh-r', shape: 'capsule', size: [HEAD * 0.22, HEAD * 0.92, HEAD * 0.22], color: [0.12, 0.13, 0.18], emissive: 0.12 },
-  { id: 'shin-l', shape: 'capsule', size: [HEAD * 0.18, HEAD * 0.88, HEAD * 0.18], color: [0.1, 0.11, 0.15], emissive: 0.12 },
-  { id: 'shin-r', shape: 'capsule', size: [HEAD * 0.18, HEAD * 0.88, HEAD * 0.18], color: [0.1, 0.11, 0.15], emissive: 0.12 },
+  { id: 'neck', shape: 'cylinder', size: [HEAD * 0.15, HEAD * 0.22, HEAD * 0.15], color: SKIN, emissive: 0.16 },
+  // Chest and waist rather than one capsule. A single torso is a fridge: it has no
+  // shoulder line and no waist, so the silhouette carries nothing and the eye reads a
+  // container instead of a body. Two segments is the cheapest taper there is.
+  { id: 'chest', shape: 'capsule', size: [HEAD * 0.86, HEAD * 0.75, HEAD * 0.46], color: COAT, emissive: 0.16 },
+  { id: 'waist', shape: 'capsule', size: [HEAD * 0.64, HEAD * 0.66, HEAD * 0.4], color: COAT, emissive: 0.16 },
+  { id: 'hips', shape: 'capsule', size: [HEAD * 0.72, HEAD * 0.4, HEAD * 0.44], color: TROUSER, emissive: 0.12 },
+  // Outboard of the chest by a clear margin: at the chest's own half-width the arm is
+  // tangent to it and reads as a seam, not a limb.
+  { id: 'arm-l', shape: 'capsule', size: [HEAD * 0.17, HEAD * 0.75, HEAD * 0.17], color: COAT, emissive: 0.16 },
+  { id: 'arm-r', shape: 'capsule', size: [HEAD * 0.17, HEAD * 0.75, HEAD * 0.17], color: COAT, emissive: 0.16 },
+  { id: 'forearm-l', shape: 'capsule', size: [HEAD * 0.14, HEAD * 0.9, HEAD * 0.14], color: SKIN, emissive: 0.16 },
+  { id: 'forearm-r', shape: 'capsule', size: [HEAD * 0.14, HEAD * 0.9, HEAD * 0.14], color: SKIN, emissive: 0.16 },
+  { id: 'thigh-l', shape: 'capsule', size: [HEAD * 0.23, HEAD, HEAD * 0.23], color: TROUSER, emissive: 0.12 },
+  { id: 'thigh-r', shape: 'capsule', size: [HEAD * 0.23, HEAD, HEAD * 0.23], color: TROUSER, emissive: 0.12 },
+  { id: 'shin-l', shape: 'capsule', size: [HEAD * 0.18, HEAD * 0.79, HEAD * 0.18], color: TROUSER, emissive: 0.12 },
+  { id: 'shin-r', shape: 'capsule', size: [HEAD * 0.18, HEAD * 0.79, HEAD * 0.18], color: TROUSER, emissive: 0.12 },
+  // Feet, because a leg that ends in a rounded tip reads as a peg and nothing stands
+  // on a peg. They also give the ground contact a shadow with an edge.
+  { id: 'foot-l', shape: 'box', size: [HEAD * 0.2, HEAD * 0.11, HEAD * 0.48], color: [0.08, 0.08, 0.1], emissive: 0.1 },
+  { id: 'foot-r', shape: 'box', size: [HEAD * 0.2, HEAD * 0.11, HEAD * 0.48], color: [0.08, 0.08, 0.1], emissive: 0.1 },
 ];
 
 /**
@@ -100,18 +113,20 @@ const PERSON_PARTS: readonly FigurePart[] = [
  * as a rat on a lead.
  */
 const DOG_PARTS: readonly FigurePart[] = [
-  { id: 'body', shape: 'capsule', size: [2.1, 5.0, 2.4], color: FUR, emissive: 0.24 },
-  { id: 'chest', shape: 'capsule', size: [2.4, 2.2, 2.6], color: FUR, emissive: 0.24 },
-  { id: 'neck', shape: 'cylinder', size: [1.1, 1.6, 1.1], color: FUR, emissive: 0.24 },
-  { id: 'head', shape: 'box', size: [1.5, 1.4, 1.7], color: FUR, emissive: 0.26 },
-  { id: 'muzzle', shape: 'box', size: [0.75, 0.62, 1.25], color: [0.26, 0.18, 0.11], emissive: 0.3 },
-  { id: 'ear-l', shape: 'wedge', size: [0.3, 0.9, 0.7], color: [0.26, 0.18, 0.11], emissive: 0.24 },
-  { id: 'ear-r', shape: 'wedge', size: [0.3, 0.9, 0.7], color: [0.26, 0.18, 0.11], emissive: 0.24 },
-  { id: 'leg-fl', shape: 'cylinder', size: [0.5, 3.1, 0.5], color: FUR, emissive: 0.22 },
-  { id: 'leg-fr', shape: 'cylinder', size: [0.5, 3.1, 0.5], color: FUR, emissive: 0.22 },
-  { id: 'leg-bl', shape: 'cylinder', size: [0.55, 3.1, 0.55], color: FUR, emissive: 0.22 },
-  { id: 'leg-br', shape: 'cylinder', size: [0.55, 3.1, 0.55], color: FUR, emissive: 0.22 },
-  { id: 'tail', shape: 'capsule', size: [0.38, 1.7, 0.38], color: FUR, emissive: 0.24 },
+  { id: 'body', shape: 'capsule', size: [2.2, 6.4, 2.2], color: FUR, emissive: 0.24 },
+  { id: 'chest', shape: 'capsule', size: [2.4, 2.2, 2.5], color: FUR, emissive: 0.24 },
+  { id: 'neck', shape: 'cylinder', size: [1.1, 1.7, 1.1], color: FUR, emissive: 0.24 },
+  { id: 'head', shape: 'box', size: [1.45, 1.3, 1.6], color: FUR, emissive: 0.26 },
+  { id: 'muzzle', shape: 'box', size: [0.7, 0.55, 1.3], color: MUZZLE, emissive: 0.3 },
+  // Laid back along the skull rather than stood upright. Two vertical wedges on a box
+  // head are antlers, and the rig read as a goat.
+  { id: 'ear-l', shape: 'wedge', size: [0.22, 0.62, 0.95], color: MUZZLE, emissive: 0.24 },
+  { id: 'ear-r', shape: 'wedge', size: [0.22, 0.62, 0.95], color: MUZZLE, emissive: 0.24 },
+  { id: 'leg-fl', shape: 'cylinder', size: [0.48, 3.1, 0.48], color: FUR, emissive: 0.22 },
+  { id: 'leg-fr', shape: 'cylinder', size: [0.48, 3.1, 0.48], color: FUR, emissive: 0.22 },
+  { id: 'leg-bl', shape: 'cylinder', size: [0.52, 3.1, 0.52], color: FUR, emissive: 0.22 },
+  { id: 'leg-br', shape: 'cylinder', size: [0.52, 3.1, 0.52], color: FUR, emissive: 0.22 },
+  { id: 'tail', shape: 'capsule', size: [0.34, 1.9, 0.34], color: FUR, emissive: 0.24 },
 ];
 
 /**
@@ -121,6 +136,39 @@ const DOG_PARTS: readonly FigurePart[] = [
  * placed at joints rather than at fixed offsets, so the elbow and the knee land where
  * the segment above them ends — which is the whole reason the arms were split in two.
  */
+/**
+ * The leash — one cylinder, and the reason the pair rig reads as what it is.
+ *
+ * A figure and an animal standing near each other is a figure and an animal; the strap
+ * between them is what makes it a person walking a dog, and it is the detail the
+ * perceptual critic kept asking for by name. It is also the cheapest possible: the dog
+ * holds a fixed station beside the walker, so the hand-to-collar distance never changes
+ * and the part can be authored at that length and merely aimed.
+ *
+ * Aiming it is the only arithmetic here. A cylinder's axis is +Y; under the YXZ order
+ * the renderer uses, a pitch of `acos(dy/L)` tilts that axis down by the right amount
+ * and a yaw of `atan2(dx, dz)` swings it onto the bearing. Uniform scale is all a pose
+ * can set, so the length has to be authored rather than computed — which is exactly why
+ * the station is fixed.
+ */
+const LEASH_PARTS: readonly FigurePart[] = [
+  { id: 'leash', shape: 'cylinder', size: [0.16, 6.6, 0.16], color: STRAP, emissive: 0.3 },
+];
+
+const LEASH_POSE = `
+  // The hand end comes out of the arm chain rather than being guessed at, so the strap
+  // stays in the hand through the swing instead of drifting off it.
+  const hx = 8 + side * 5.0;
+  const hy = side > 0 ? handLy : handRy;
+  const hz = side > 0 ? handLz : handRz;
+  const cx = dx, cy = 11.6 + lift, cz = path + nose * 5.2;
+  const ex = cx - hx, ey = cy - hy, ez = cz - hz;
+  const len = Math.max(0.001, Math.sqrt(ex * ex + ey * ey + ez * ez));
+  p[0].x = (hx + cx) / 2; p[0].y = (hy + cy) / 2; p[0].z = (hz + cz) / 2;
+  p[0].pitch = Math.acos(Math.max(-1, Math.min(1, ey / len)));
+  p[0].yaw = Math.atan2(ex, ez);
+`;
+
 const WALK_PREAMBLE = `
   const speed = 4.6;
   const leg = ((t * speed) % 150) - 75;
@@ -139,21 +187,60 @@ const WALK_PREAMBLE = `
  * a bulge in a capsule.
  */
 const PERSON_POSE = `
-  const px = 8, sh = 32;
-  const kneeL = -swing * 3.4, kneeR = swing * 3.4;
-  p[0].x = px; p[0].y = 26.8 + bob; p[0].z = path; p[0].yaw = facing;
-  p[1].x = px; p[1].y = 19.6 + bob; p[1].z = path; p[1].yaw = facing;
-  p[2].x = px; p[2].y = 36.6 + bob; p[2].z = path + Math.sin(w * 2) * 0.2;
-  p[3].x = px; p[3].y = 34.2 + bob; p[3].z = path;
-  // Arms counter-swing against the legs, which is most of what makes a walk read.
-  p[4].x = px + 5.6; p[4].y = 28.9 + bob; p[4].z = path + swing * 1.6; p[4].pitch = swing * 0.5;
-  p[5].x = px - 5.6; p[5].y = 28.9 + bob; p[5].z = path - swing * 1.6; p[5].pitch = -swing * 0.5;
-  p[6].x = px + 5.6; p[6].y = 23.1 + bob; p[6].z = path + swing * 3.0; p[6].pitch = swing * 0.72;
-  p[7].x = px - 5.6; p[7].y = 23.1 + bob; p[7].z = path - swing * 3.0; p[7].pitch = -swing * 0.72;
-  p[8].x = px + 2.4; p[8].y = 13.4; p[8].z = path - swing * 2.6; p[8].pitch = -swing * 0.46;
-  p[9].x = px - 2.4; p[9].y = 13.4; p[9].z = path + swing * 2.6; p[9].pitch = swing * 0.46;
-  p[10].x = px + 2.4; p[10].y = 4.4; p[10].z = path - swing * 4.6 + kneeL * 0.3; p[10].pitch = -swing * 0.2;
-  p[11].x = px - 2.4; p[11].y = 4.4; p[11].z = path + swing * 4.6 + kneeR * 0.3; p[11].pitch = swing * 0.2;
+  // Forward kinematics, not absolute placement.
+  //
+  // Every earlier version set each part's position AND its rotation independently, which
+  // is a contradiction: rotating a segment about its own centre moves both of its ends,
+  // so the elbow the upper arm actually reaches is not the elbow the forearm was told to
+  // sit at. The gaps opened and closed through the stride, which is why they read as the
+  // rig coming apart rather than as a constant offset.
+  //
+  // Here a joint is computed once and the next segment is hung off it. A capsule's axis
+  // is +Y, and under the renderer's YXZ order a pitch of θ carries that axis to
+  // (0, cos θ, sin θ) — so a segment of half-length h whose top end is at J has its
+  // centre at J - h·(0, cos θ, sin θ) and its far end at J - 2h·(0, cos θ, sin θ). That
+  // one line is the whole rig: shoulder to elbow to hand, hip to knee to ankle.
+  //
+  // Both components take the minus. Writing the y term as a subtraction and the z term
+  // as an addition — which is the natural thing to type, since one reads as "downward"
+  // and the other as "forward" — hinges the joint the wrong way in z, and the limb
+  // below it swings out sideways on screen while staying connected in the arithmetic.
+  const px = 8, sh = 33.3, hipY = 19.3;
+  const ua = 3.75, fa = 4.5, th = 5.0, sn = 3.95;
+
+  p[0].x = px; p[0].y = 37.4 + bob; p[0].z = path; p[0].yaw = facing;
+  p[1].x = px; p[1].y = 34.4 + bob; p[1].z = path;
+  p[2].x = px; p[2].y = 29.6 + bob; p[2].z = path; p[2].roll = swing * 0.05;
+  p[3].x = px; p[3].y = 23.0 + bob; p[3].z = path; p[3].roll = swing * 0.03;
+  p[4].x = px; p[4].y = hipY + bob; p[4].z = path;
+
+  // Arms. The elbow keeps a little bend at every phase, because a straight arm through
+  // a whole stride is the single clearest sign of a puppet.
+  const aL = swing * 0.42, aR = -swing * 0.42;
+  const eLy = sh + bob - 2 * ua * Math.cos(aL), eLz = path - 2 * ua * Math.sin(aL);
+  const eRy = sh + bob - 2 * ua * Math.cos(aR), eRz = path - 2 * ua * Math.sin(aR);
+  const bL = aL + 0.34, bR = aR + 0.34;
+  p[5].x = px + 5.0; p[5].y = sh + bob - ua * Math.cos(aL); p[5].z = path - ua * Math.sin(aL); p[5].pitch = aL;
+  p[6].x = px - 5.0; p[6].y = sh + bob - ua * Math.cos(aR); p[6].z = path - ua * Math.sin(aR); p[6].pitch = aR;
+  p[7].x = px + 5.0; p[7].y = eLy - fa * Math.cos(bL); p[7].z = eLz - fa * Math.sin(bL); p[7].pitch = bL;
+  p[8].x = px - 5.0; p[8].y = eRy - fa * Math.cos(bR); p[8].z = eRz - fa * Math.sin(bR); p[8].pitch = bR;
+  const handLy = eLy - 2 * fa * Math.cos(bL), handLz = eLz - 2 * fa * Math.sin(bL);
+  const handRy = eRy - 2 * fa * Math.cos(bR), handRz = eRz - 2 * fa * Math.sin(bR);
+
+  // Legs. The knee only ever bends one way, so the shin angle is the thigh's plus a
+  // bend that is largest as the leg swings through and nearly nothing as it takes
+  // weight — which is what stops the figure from walking on stilts.
+  const tL = -swing * 0.52, tR = swing * 0.52;
+  const kL = tL + 0.12 + Math.max(0, -swing) * 0.62, kR = tR + 0.12 + Math.max(0, swing) * 0.62;
+  const kLy = hipY - 2 * th * Math.cos(tL), kLz = path - 2 * th * Math.sin(tL);
+  const kRy = hipY - 2 * th * Math.cos(tR), kRz = path - 2 * th * Math.sin(tR);
+  p[9].x = px + 2.5; p[9].y = hipY - th * Math.cos(tL); p[9].z = path - th * Math.sin(tL); p[9].pitch = tL;
+  p[10].x = px - 2.5; p[10].y = hipY - th * Math.cos(tR); p[10].z = path - th * Math.sin(tR); p[10].pitch = tR;
+  p[11].x = px + 2.5; p[11].y = kLy - sn * Math.cos(kL); p[11].z = kLz - sn * Math.sin(kL); p[11].pitch = kL;
+  p[12].x = px - 2.5; p[12].y = kRy - sn * Math.cos(kR); p[12].z = kRz - sn * Math.sin(kR); p[12].pitch = kR;
+  // Feet sit at the ankle and stay level with the ground, which is what a foot does.
+  p[13].x = px + 2.5; p[13].y = 0.55; p[13].z = kLz - 2 * sn * Math.sin(kL) + (out ? -1.1 : 1.1); p[13].yaw = facing;
+  p[14].x = px - 2.5; p[14].y = 0.55; p[14].z = kRz - 2 * sn * Math.sin(kR) + (out ? -1.1 : 1.1); p[14].yaw = facing;
 `;
 
 /**
@@ -163,19 +250,21 @@ const PERSON_POSE = `
 const DOG_POSE = `
   const trot = w * 1.7;
   const lift = Math.abs(Math.sin(trot)) * 0.5;
-  const dx = -6, dz = -9;
-  p[0].x = dx; p[0].y = 8.6 + lift; p[0].z = path + dz; p[0].pitch = Math.PI / 2; p[0].yaw = facing;
-  p[1].x = dx; p[1].y = 9.0 + lift; p[1].z = path + dz + 4.6; p[1].pitch = Math.PI / 2;
-  p[2].x = dx; p[2].y = 11.2 + lift; p[2].z = path + dz + 6.4; p[2].pitch = 0.7;
-  p[3].x = dx; p[3].y = 13.0 + lift; p[3].z = path + dz + 7.6;
-  p[4].x = dx; p[4].y = 12.3 + lift; p[4].z = path + dz + 9.2;
-  p[5].x = dx + 1.1; p[5].y = 14.4 + lift; p[5].z = path + dz + 7.3;
-  p[6].x = dx - 1.1; p[6].y = 14.4 + lift; p[6].z = path + dz + 7.3;
-  p[7].x = dx + 1.5; p[7].y = 3.1; p[7].z = path + dz + 4.2; p[7].pitch = Math.sin(trot) * 0.7;
-  p[8].x = dx - 1.5; p[8].y = 3.1; p[8].z = path + dz + 4.2; p[8].pitch = -Math.sin(trot) * 0.7;
-  p[9].x = dx + 1.6; p[9].y = 3.1; p[9].z = path + dz - 3.4; p[9].pitch = -Math.sin(trot) * 0.7;
-  p[10].x = dx - 1.6; p[10].y = 3.1; p[10].z = path + dz - 3.4; p[10].pitch = Math.sin(trot) * 0.7;
-  p[11].x = dx; p[11].y = 10.4 + lift; p[11].z = path + dz - 5.4; p[11].pitch = 0.9 + Math.sin(w * 5) * 0.45;
+  const side = out ? -1 : 1;
+  const dx = 8 + side * 9.5;
+  const nose = out ? -1 : 1;
+  p[0].x = dx; p[0].y = 8.4 + lift; p[0].z = path + nose * -1.5; p[0].pitch = Math.PI / 2; p[0].yaw = facing;
+  p[1].x = dx; p[1].y = 8.8 + lift; p[1].z = path + nose * 4.0; p[1].pitch = Math.PI / 2;
+  p[2].x = dx; p[2].y = 10.9 + lift; p[2].z = path + nose * 5.8; p[2].pitch = nose * 0.75;
+  p[3].x = dx; p[3].y = 12.7 + lift; p[3].z = path + nose * 7.0; p[3].yaw = facing;
+  p[4].x = dx; p[4].y = 12.1 + lift; p[4].z = path + nose * 8.6; p[4].yaw = facing;
+  p[5].x = dx + 0.95; p[5].y = 13.7 + lift; p[5].z = path + nose * 6.3; p[5].pitch = nose * -0.5; p[5].yaw = facing;
+  p[6].x = dx - 0.95; p[6].y = 13.7 + lift; p[6].z = path + nose * 6.3; p[6].pitch = nose * -0.5; p[6].yaw = facing;
+  p[7].x = dx + 1.4; p[7].y = 3.1; p[7].z = path + nose * 3.6; p[7].pitch = Math.sin(trot) * 0.7;
+  p[8].x = dx - 1.4; p[8].y = 3.1; p[8].z = path + nose * 3.6; p[8].pitch = -Math.sin(trot) * 0.7;
+  p[9].x = dx + 1.5; p[9].y = 3.1; p[9].z = path + nose * -4.0; p[9].pitch = -Math.sin(trot) * 0.7;
+  p[10].x = dx - 1.5; p[10].y = 3.1; p[10].z = path + nose * -4.0; p[10].pitch = Math.sin(trot) * 0.7;
+  p[11].x = dx; p[11].y = 10.2 + lift; p[11].z = path + nose * -6.0; p[11].pitch = nose * (0.9 + Math.sin(w * 5) * 0.45);
 `;
 
 /**
@@ -189,6 +278,23 @@ const DOG_POSE = `
  */
 function prefixed(parts: readonly FigurePart[], prefix: string): readonly FigurePart[] {
   return parts.map((part) => ({ ...part, id: `${prefix}-${part.id}` }));
+}
+
+/**
+ * Renumber a pose body so it can be concatenated after another rig's.
+ *
+ * `p` is one flat array across both rigs, so the second rig's `p[0]` is really
+ * `p[<parts in the first rig>]`. Writing that offset as a literal is how the pair rig
+ * broke: the person grew from six parts to twelve and the offset stayed at six, so the
+ * dog was writing its legs into the person's — which renders as a person with no legs
+ * standing over a pile of loose sticks, with nothing in state to suggest a fault.
+ *
+ * The count now comes from the array, and the pattern takes `\d+` rather than `\d`,
+ * because a one-digit pattern silently skips `p[10]` and leaves it pointing at whatever
+ * part ten belongs to in the other rig.
+ */
+function shifted(pose: string, by: number): string {
+  return pose.replace(/p\[(\d+)\]/g, (_, d: string) => `p[${Number(d) + by}]`);
 }
 
 const STEEL: readonly [number, number, number] = [0.34, 0.09, 0.08];
@@ -280,8 +386,8 @@ export const FIGURES: readonly FigureSpec[] = [
     // It drifts as the camera orbits, which is correct. A figure pinned to the frame
     // would be a sprite; this one is standing somewhere.
     origin: [-65, 0, 2],
-    parts: [...prefixed(PERSON_PARTS, 'walker'), ...prefixed(DOG_PARTS, 'dog')],
-    pose: `${WALK_PREAMBLE}${PERSON_POSE}${DOG_POSE.replace(/p\[(\d)\]/g, (_, d) => `p[${Number(d) + 6}]`)}`,
+    parts: [...prefixed(PERSON_PARTS, 'walker'), ...prefixed(DOG_PARTS, 'dog'), ...LEASH_PARTS],
+    pose: `${WALK_PREAMBLE}${PERSON_POSE}${shifted(DOG_POSE, PERSON_PARTS.length)}${shifted(LEASH_POSE, PERSON_PARTS.length + DOG_PARTS.length)}`,
     rationale: 'una persona paseando a un perro por la explanada, al paso',
     triggers: ['dog walk', 'walking the dog', 'walk the dog', 'person walking a dog', 'dog and a person', 'person and a dog', 'dog with a person', 'perro pase', 'pasear', 'paseando'],
     covers: ['dog', 'person', 'walking', 'walk', 'perro', 'persona', 'gente', 'someone'],

@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import { CATALOGUE } from '../../src/intent/catalogue.js';
 import { CatalogueIntentCompiler } from '../../src/intent/compiler.js';
-import { matchFigure } from '../../src/intent/figures.js';
+import { FIGURES, matchFigure } from '../../src/intent/figures.js';
 import { evaluateContract } from '../../src/harness/l2-contract.js';
 import type { WorldHandle } from '../../src/contracts.js';
 
@@ -149,4 +149,37 @@ describe('matchFigure', () => {
   it('matches nothing in a request about the weather', () => {
     expect(matchFigure('heavy rain and wind')).toBeNull();
   });
+});
+
+/**
+ * The pair rig concatenates two pose bodies over one flat `p` array, which means the
+ * second rig's indices are offset by the first rig's part count. That offset was a
+ * literal, and when the person grew from six parts to twelve it stayed at six: the dog
+ * wrote its legs into the person's, and the result rendered as a legless figure over a
+ * pile of loose sticks. Nothing in state looked wrong — every index written was a real
+ * part, just the wrong one — so no oracle could have caught it.
+ *
+ * These two hold the whole class shut rather than the one instance: a pose may not
+ * address a part the rig does not have, and a rig may not carry a part its pose never
+ * places. The second is what makes a forgotten limb loud instead of invisible.
+ */
+describe('every rig poses exactly the parts it declares (AC-21)', () => {
+  const indices = (pose: string): number[] =>
+    [...pose.matchAll(/p\[(\d+)\]/g)].map((m) => Number(m[1]));
+
+  for (const figure of FIGURES) {
+    it(`"${figure.name}" writes no index past its ${figure.parts.length} parts`, () => {
+      const written = indices(figure.pose);
+      expect(written.length).toBeGreaterThan(0);
+      expect(Math.max(...written)).toBeLessThan(figure.parts.length);
+    });
+
+    it(`"${figure.name}" leaves no declared part unplaced`, () => {
+      const written = new Set(indices(figure.pose));
+      const orphans = figure.parts
+        .map((part, i) => (written.has(i) ? null : `${i}:${part.id}`))
+        .filter((x): x is string => x !== null);
+      expect(orphans).toEqual([]);
+    });
+  }
 });

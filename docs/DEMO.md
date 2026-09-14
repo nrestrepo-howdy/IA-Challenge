@@ -12,6 +12,27 @@ answers from the built-in phrasebook, which is real and is the wrong half — an
 Spanish beat will fail outright, because the phrasebook has no Spanish in it. The field is
 bottom-right; the status line reads `KEY ACTIVE` when it is set.
 
+**Part 1 has to be edited. Plan for it.** With a key every request goes through the model,
+and the four requests below took **146 seconds** of real waiting when this was rehearsed
+against the live site:
+
+| Request | Measured |
+|---|---|
+| `make it rain` | 11.3 s |
+| `a stormy night` | 21.7 s |
+| `una noche de tormenta` | 15.5 s |
+| `an astronaut walking through the plaza` | **82.2 s** |
+| `bouncing debris` | 15.7 s |
+
+That is more than the whole video. So record Part 1 in one continuous take, narrating
+across the waits, and **cut the dead time afterwards** — the narration is written to run
+longer than the pauses it covers, so the audio carries the joins. The astronaut is the one
+that needs the hardest cut, and it is also the least predictable: it ran 11 s once and 82 s
+another time, because the rig author's effort varies with what it is asked to build.
+
+If a take runs long, the beat to drop is `make it rain` — `a stormy night` makes the same
+point and also shows composition.
+
 ---
 
 # Part 1 — What we built · 0:00 – 1:30
@@ -29,14 +50,14 @@ bottom-right; the status line reads `KEY ACTIVE` when it is set.
 
 ## 0:18 · It works
 
-> [Type **`make it rain`**. Five seconds.]
+> [Type **`make it rain`**. ~11 s; cut to about four.]
 >
 > "Make it rain. And notice what didn't happen — the page didn't reload, the camera didn't
 > cut, the city is still the city you were looking at."
 
 ## 0:32 · It composes
 
-> [Type **`a stormy night`**. About nineteen seconds. Talk over it.]
+> [Type **`a stormy night`**. ~22 s. Talk across it, then cut.]
 >
 > "Now something harder. That isn't the name of any feature in this system. It's a mood.
 >
@@ -59,8 +80,8 @@ bottom-right; the status line reads `KEY ACTIVE` when it is set.
 
 ## 1:06 · It builds what isn't in the catalogue
 
-> [Type **`an astronaut walking through the plaza`**. Ten to eighty seconds. Start talking
-> immediately and have a spare sentence ready.]
+> [Type **`an astronaut walking through the plaza`**. 11–82 s. Start talking immediately,
+> have a spare sentence ready, and cut hard.]
 >
 > "This last one isn't a lookup at all. There's no astronaut in this system. No walk cycle
 > either. So the agent designs the body and writes the motion itself."
@@ -180,10 +201,12 @@ stills, that works too — the shot is the same.
 
 ## Rehearse against these
 
-- **Latency is the only thing that can ruin a take.** Measured on the live site with a key:
-  `make it rain` ≈ 5 s, a mood sentence ≈ 19 s in either language, a model-authored figure
-  **11 s to 79 s**. Never open with the slow one. Narrate *over* it, and have a spare
-  sentence for the astronaut.
+- **Latency is the only thing that can ruin a take**, and the table at the top is the
+  measured truth. Narrate *over* every wait and cut afterwards. Never open with the slow
+  one.
+- **Rehearsed end to end against the live URL** with a key: all five requests accepted,
+  backend WebGPU, and the critic returned a real judgement on each — including two with a
+  criticism attached, which is the beat at 2:30 and cannot be faked.
 - **Warm the app.** First load compiles shaders and can hitch. Load once, reload, record.
 - **Type slowly enough to read.** Fast typing resolves the panel before anyone sees it.
 - **`npm run audit` and `npm run attack` are the two best terminal shots.** Both print

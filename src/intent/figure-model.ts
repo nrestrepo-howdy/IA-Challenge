@@ -156,10 +156,29 @@ capsule body, a cone beak, two wedge wings.
    y and short in z. A cone points up its own y unless you pitch or roll it: a nose on
    the front of a fuselage is a cone with \`pitch = Math.PI/2\`.
 
-8. STAND SOMEWHERE. y = 0 is the ground. Things that stand should sit above it; things
-   that fly should be well clear of it and the caller will place the rig's origin.
+8. STAND SOMEWHERE, AND LET THE WORLD PLACE YOU. y = 0 is the ground. Things that stand
+   sit above it; things that fly are well clear of it. Build the rig around x = 0, z = 0
+   and facing +z — the world gives it a spot of its own and turns it to suit, and a rig
+   that picks its own corner of the city ends up standing in someone else's.
 
-9. WRITE PLAIN ARITHMETIC. Assignments and Math calls. No loops, no function
+9. IF IT TRAVELS, TRAVEL IN A CURVE. The tempting way to make something pace back and
+   forth is a straight run with the heading flipped at each end — "facing = out ? PI : 0"
+   — and it is wrong every time, because a body walking a line has to stop to turn and a
+   rig cannot stop. What renders is a figure spinning 180 degrees in a single frame.
+
+   A closed curve has no such point. Something like
+
+     const phase = t * 0.19;
+     const z = 75 * Math.sin(phase);
+     const x = 26 * Math.cos(phase);
+     const facing = Math.atan2(-26 * Math.sin(phase), 75 * Math.cos(phase));
+
+   paces a flat oval, and the heading is the direction of travel — defined, continuous
+   and correct at every instant, turning because the thing is walking a curve. Use it
+   for anything that walks, drives, swims or circles. Something in level flight can go
+   straight, but give it a wide arc rather than a reversal.
+
+10. WRITE PLAIN ARITHMETIC. Assignments and Math calls. No loops, no function
    declarations, no \`const\` shadowing \`t\` or \`p\`. Every value is clamped on the way out,
    so a number that escapes is contained — but a pose that throws costs the candidate.
 

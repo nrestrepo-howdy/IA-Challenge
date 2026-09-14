@@ -1,1645 +1,850 @@
-# Verbo — AI Development Log
+# Verbo — Engineering Log
 
-> Not a transcript. This records the iterations, failures, corrections and human
-> decisions that actually shaped the product. Entries are written when they happen.
-> Sections marked ⏳ do not exist yet and are not claimed to.
+> A curated record of the decisions, failures and corrections that shaped this system —
+> not a transcript. Entries were written as the work happened. Items marked ⏳ do not
+> exist and are not claimed to.
+>
+> The findings below are the ones worth a reviewer's time. Each links to its entry.
 
----
+## Key findings
 
-## 1 Sep — Six concepts, five rejected
-
-The project did not start with Verbo. It started with five other ideas, and the
-rejections are more instructive than the survivor.
-
-| # | Concept | Why it died |
+| # | Finding | Consequence |
 |---|---------|-------------|
-| 1 | **Foreman** — spec fan-out to N worktrees, judge picks a winner | Sound engineering, but best-of-N over worktrees already has prior art. Nothing new |
-| 2 | **Hydra** — self-healing CI that leaves behind a regression defense | Stripped of staging, it is "a bot that fixes broken tests." Worse, the sabotage premise is invented: nobody deletes guard clauses in production |
-| 3 | **Polygraph** — detects when a coding agent's patch passes tests but is semantically wrong | Real problem, genuinely documented (~20% of leaderboard "solved" patches are semantically incorrect). But the output is a table of findings. Nobody *feels* a table |
-| 4 | Verified migration with equivalence proofs | Direct prior art appeared in July 2026 (Locksmith Loop, COBOL→Java with a deterministic oracle) |
-| 5 | Vericoding with machine-checked proofs (Dafny/Verus) | The highest "how did they do that" ceiling available, and unusable here: no way for a judge without formal-methods background to feel it in 90 seconds |
-| 6 | **Verbo** | Survived |
-
-**The pattern behind the first five.** All were developer tools *about the process of
-building software*. Meta, every one. A developer admires them intellectually and feels
-nothing. The rubric pulls hard in that direction — agentic engineering suggests tooling
-— and following that pull produced five variations on a single idea.
-
-**Human decision.** Reject the entire category. Require a project that is understood
-in fifteen seconds without explanation *and* has real depth underneath. Only one
-candidate satisfied both.
+| 1 | [Research invalidated the planned architecture on day two](#f1) | The centrepiece oracle was measured as insufficient before it was built. Rewritten around hidden-state contracts |
+| 2 | [The mutation engine mutated nothing](#f2) | The component that proves L2 is not a rubber stamp was itself a no-op. Caught on its first run |
+| 3 | [The capability check was a spell-checker](#f3) | Twelve hostile modules, twelve passes. The boundary moved from detection to removal |
+| 4 | [Telemetry was blind to 95% of its own verifications](#f4) | 121 of 127 verification runs were piped through `tail`, discarding the exit code |
+| 5 | [A citation did not support the claim built on it](#f5) | The project's most load-bearing constraint cited numbers that were not in the paper |
+| 6 | [The perceptual critic was judging the wrong frame](#f6) | L3 reported "no human figure" about frames containing one, on every figure request ever run |
 
 ---
 
-## 2 Sep — The correction that reshaped the architecture
+## 1 Sep — Concept selection: five rejected, one kept
 
-**What was planned.** Three verification oracles, with a multimodal visual critic as
-the centerpiece: the agent renders its work, *looks at it*, judges it against the
-request, and iterates. It demos beautifully and reads as frontier work.
+The project began with six candidates. The rejections are more instructive than the
+survivor.
 
-**What research found.** WorldCoder-Bench (arXiv 2606.01869; 2,026 curated Three.js
-tasks) measures whether generated 3D worlds *work*, not whether they *look right*. Two
-results:
+| # | Concept | Why it was rejected |
+|---|---------|---------------------|
+| 1 | **Foreman** — spec fan-out to N worktrees, judge picks a winner | Sound, but best-of-N over worktrees has prior art |
+| 2 | **Hydra** — self-healing CI leaving a regression defence | Stripped of staging it is "a bot that fixes broken tests", and the sabotage premise is invented |
+| 3 | **Polygraph** — detects patches that pass tests but are semantically wrong | Real problem (~20% of leaderboard "solved" patches are semantically incorrect). Output is a table of findings; nobody *feels* a table |
+| 4 | Verified migration with equivalence proofs | Direct prior art published July 2026 |
+| 5 | Vericoding with machine-checked proofs (Dafny/Verus) | Highest technical ceiling available, and unusable: no reviewer without formal-methods background can feel it in 90 seconds |
+| 6 | **Verbo** | Kept |
 
-1. External/DOM-based scoring is **uncorrelated** with hidden-state correctness —
-   Kendall τb = −0.02 across 1,434 pairs.
-2. An agentic visual evaluator costing **~400× more** still grants passing marks to
-   **45.6% of severely defective outputs**.
+**The pattern.** All five rejects were developer tools *about the process of building
+software*. A developer admires them and feels nothing. The brief pulls in that direction,
+and following the pull produced five variations on one idea.
 
-**The consequence.** The centerpiece oracle approves roughly half of everything broken.
-The plan was to build a harness the literature had already measured as insufficient —
-and to present it as the project's strongest contribution.
-
-**The correction.** Adopt StateProbe, the alternative the same paper proposes. A
-runtime state interface (`window.__VERBO_STATE__`), scripted actions, before/after
-snapshots, and machine-checkable behavioural contracts. `"make it rain"` no longer
-compiles to code alone; it compiles to **code plus a contract**. The visual critic is
-demoted to L3 — a judge of taste, never of truth — and the type system enforces it:
-`inject(c, v)` refuses any verdict that failed L0–L2, regardless of what L3 concluded.
-
-**Second-order effect.** The same benchmark reports the ceiling: the best model reaches
-**27.8% Verification Coverage; no system exceeds 30%.** Roughly three in four attempts
-at open-ended Three.js generation are behaviourally wrong. So the agent must not
-generate freely — it composes and parameterizes a closed, typed primitive library.
-Three parallel candidates and bounded retries stop being decoration and become the
-engineering response to a *measured* 28% hit rate.
-
-**Why this is logged.** Finding this on day 2 costs a rewrite of the architecture
-section. Finding it on day 9 costs the project.
+**Decision.** Reject the category. Require a project understood in fifteen seconds
+without explanation *and* with real depth underneath. One candidate satisfied both.
 
 ---
 
-## 2 Sep — Five more constraints, from verification rather than assumption
+<a id="f1"></a>
 
-Every load-bearing technical claim was checked before being built on. Two changed the
-design; the rest set hard requirements.
+## 2 Sep — Research invalidated the planned architecture
 
-- **Headless WebGPU never reaches the compositor on Windows/Linux.** Canvas capture
-  simply does not work. Forces offscreen-texture rendering with
-  `copyTextureToBuffer` + `mapAsync`. Not a design preference — the only path that works.
+**Planned.** Three verification oracles with a multimodal visual critic as the
+centrepiece: the agent renders its work, looks at it, judges it against the request, and
+iterates. It demonstrates well and reads as frontier work.
+
+**Found.** WorldCoder-Bench (arXiv 2606.01869; 2,026 curated Three.js tasks) measures
+whether generated 3D worlds *work*. Its reported failures are **dominated by
+state-schema drift and broken interaction chains rather than missing scene elements.**
+
+That is a sharper argument against a visual centrepiece than unreliability would be.
+Missing scene elements are precisely what looking is good at, and the measurement says
+that is not the common failure. The common failure is state that has drifted out of
+agreement with what the controls believe — invisible to a critic by construction. A world
+can look exactly like rain while its hidden state says nothing is falling.
+
+**Correction.** Adopt StateProbe, the protocol the same paper proposes: a runtime state
+interface (`__VERBO_STATE__`), scripted actions, before/after snapshots, and
+machine-checkable behavioural contracts hardened against mutation. An utterance no longer
+compiles to code; it compiles to **code plus a contract**. The visual critic is demoted to
+L3 — a judge of taste, never of truth — and the type system enforces it: `inject(c, v)`
+will not accept a verdict that failed L0–L2, whatever L3 concluded.
+
+**Second-order effect.** The same benchmark reports the ceiling: **27.8% verification
+coverage on WorldCoder-Core, 19.9% on WorldCoder-Robust; no system exceeds 30%.** Roughly
+three in four attempts at open-ended Three.js generation are behaviourally wrong. So the
+agent does not generate freely — it composes and parameterises a closed, typed primitive
+library. Three parallel candidates and bounded retries stop being decoration and become
+the engineering response to a measured hit rate.
+
+**Why this is logged.** Finding it on day 2 costs an architecture rewrite. Finding it on
+day 9 costs the project.
+
+### Five further constraints, verified rather than assumed
+
+- **Headless WebGPU never reaches the compositor on Windows/Linux.** Canvas capture does
+  not work; forces offscreen rendering with `copyTextureToBuffer` + `mapAsync`.
 - **Blob-URL ES modules can never be freed.** The module namespace cache cannot be
-  cleared. The leak is structural, so injections are budgeted per session and every
-  primitive must implement `dispose()`. Denying it would have surfaced as a mystery
-  crash mid-demo.
-- **`WebGPURenderer` needs `await renderer.init()`** or the first frame is black —
-  which is precisely what L1 detects, so the documented footgun became a test.
-- **Web Worker + OffscreenCanvas** for candidate isolation: an infinite loop cannot be
-  caught on the main thread, only killed. The worker is killable; `try/catch` is not.
-- **Visual critic latency is 4–16 s.** Survivable only because L3 runs last, on
-  candidates that already cleared three cheaper layers.
+  cleared, so the leak is structural: injections are budgeted per session and every
+  primitive implements `dispose()`.
+- **`WebGPURenderer` requires `await renderer.init()`** or the first frame is black —
+  which is what L1 detects, so a documented footgun became a test.
+- **Worker + OffscreenCanvas for candidate isolation.** An infinite loop cannot be caught
+  on the main thread, only killed. A worker is killable; `try/catch` is not.
+- **Visual critic latency is 4–16 s.** Survivable only because L3 runs last, on candidates
+  that already cleared three cheaper layers.
 
 ---
 
 ## 2 Sep — Evidence layer before product code
 
-**Decision.** Build the event-capture layer before writing a line of the product.
+**Decision.** Build event capture before writing any product code. Every other artifact
+can be reconstructed later; development evidence cannot. An hour of work that was not
+recorded is gone.
 
-**Reasoning.** Every other artifact can be reconstructed later. Development evidence
-cannot: an hour of work that was not recorded is gone. `SYSTEM.md`, the parallelism
-evidence and this log's later sections are all meant to be *generated* from
-`.verbo/events.jsonl` rather than remembered.
+Both hooks were tested with synthetic payloads before being trusted: the logger appended
+a well-formed record, and the guard returned exit code 2 on a write to `docs/SPEC.md`. A
+control that has not been observed working is a hope. The guard blocks the author too —
+creating the protected documents requires `VERBO_SPEC_UNLOCK=1`, and every unlock is in
+the log.
 
-**Verified, not assumed.** Both hooks were tested with synthetic payloads before being
-trusted: the logger appended a well-formed record, and the guard returned exit code 2
-on a write to `docs/SPEC.md`. A control that has not been observed working is a hope.
+### The instrumentation blocked what it was measuring
 
-**Consequence worth noting.** The guard blocks the author too. Creating these documents
-required `VERBO_SPEC_UNLOCK=1`, and that unlock is in the log. That is the intended
-behaviour: the escape hatch is explicit, human, and audited.
+The first parallel run failed immediately: all three worktrees aborted with *"WorktreeCreate
+hook succeeded but returned no worktree path."*
+
+The logger had been registered on thirteen lifecycle events. One of them is not
+observational — the harness reads that hook's **stdout as the worktree path**. The logger
+writes to a file and prints nothing, so every parallel workstream was blocked by the
+mechanism whose only purpose was to record that they ran.
+
+Worktree spans are reconstructed from `SubagentStart`/`SubagentStop` instead, which carry
+everything the parallelism evidence needs. A textbook observer effect: blanket
+instrumentation does not distinguish events with out-of-band semantics, and **a hook that
+can block is not a listener.** It failed in the most useful way available — loudly, on
+first use, before anything depended on it.
 
 ---
 
-## 2 Sep — First closed loop: the mutation engine mutated nothing
+<a id="f2"></a>
 
-**Context.** The harness landed as three pure modules — L0 static analysis, L2 contract
-evaluation, and the mutation hardener — deliberately chosen because they need no
-browser and no GPU, which is what makes the oracle that decides correctness testable
-in plain Node.
+## 2 Sep — The mutation engine mutated nothing
+
+The harness landed as three pure modules — L0 static analysis, L2 contract evaluation,
+and the mutation hardener — deliberately chosen because they need no browser and no GPU,
+which is what makes the oracle that decides correctness testable in plain Node.
 
 **The loop, with no human instruction between the steps:**
 
-1. **Act.** Wrote the three modules and 27 tests bound to AC-04, AC-05, AC-09, AC-10.
-2. **Verify.** `npm test` — 26 passed, 1 failed. `hardenContract` reported a sound
-   contract as unsound.
-3. **Observe.** The failing case was the `dropStateUpdate` mutant. `applyMutant` was
-   implementing it as `node[leaf] = structuredClone(node[leaf])` — cloning the value
-   in place. For a number, that is a no-op. The mutant changed nothing, so the
-   `changesOverTime` assertion still passed, so the mutant "escaped".
-4. **Fix.** A dropped state update is only meaningful *relative to the prior frame*:
-   it means the value never moved off where it started. `applyMutant` needed the
-   before-snapshot, which it did not receive. Signature changed to
-   `applyMutant(before, after, mutant, path)`, and the mutation now rewinds the value
-   to its pre-action state.
-5. **Verify again.** 27/27, typecheck clean.
+1. **Act.** Three modules, 27 tests bound to AC-04, AC-05, AC-09, AC-10.
+2. **Verify.** 26 passed, 1 failed: `hardenContract` reported a sound contract as unsound.
+3. **Observe.** The failing case was the `dropStateUpdate` mutant. `applyMutant` implemented
+   it as `node[leaf] = structuredClone(node[leaf])` — cloning the value in place, which for
+   a number is a no-op. The mutant changed nothing, so the assertion still passed, so the
+   mutant "escaped".
+4. **Fix.** A dropped state update is only meaningful *relative to the prior frame*: the
+   value never moved off where it started. The signature became
+   `applyMutant(before, after, mutant, path)`, rewinding the value to its pre-action state.
+5. **Verify.** 27/27, typecheck clean.
 
-**Why this one is worth recording.** The bug was in the component whose entire job is
-to prove the primary oracle is not a rubber stamp. A mutation engine that mutates
-nothing reports every contract as sound — including contracts that assert nothing. It
-would have silently disabled L2, the layer the whole architecture was reorganized
-around on the same day, and the harness would have looked green while verifying
-nothing at all.
+**Why it matters.** The bug was in the component whose entire job is to prove the primary
+oracle is not a rubber stamp. A mutation engine that mutates nothing reports every
+contract as sound — including contracts that assert nothing. It would have silently
+disabled L2, the layer the architecture had been reorganised around that same day, and the
+harness would have looked green while verifying nothing.
 
 It was caught in the first minute of the first test run because the hardener is tested
-against a deliberately weak contract that it *must* reject. Testing the verifier
-against known-bad input is the same principle the verifier applies to candidates,
-turned on itself.
+against a deliberately weak contract it *must* reject. Testing the verifier against
+known-bad input is the principle the verifier applies to candidates, turned on itself.
 
 ---
 
-## 2 Sep — The instrumentation layer blocked the thing it was measuring
+### A second closed loop: the scene was rendering and the test was reading an empty buffer
 
-**What happened.** The first attempt to run the five workstreams in parallel failed
-immediately. All three worktrees aborted with the same error: *"WorktreeCreate hook
-succeeded but returned no worktree path."*
+Again with no human instruction between the steps — `npm run evidence:loop` reconstructs the
+window from the event log, where every step shares one prompt id.
 
-**Cause.** The evidence layer had been registered on thirteen lifecycle events,
-`WorktreeCreate` among them. But that event is not merely observational: the harness
-reads the hook's **stdout as the worktree path**. The logger writes to a file and
-prints nothing, so the harness received an empty path and refused to create the
-worktree. Every parallel workstream was blocked by the mechanism whose only purpose is
-to record that they ran.
+1. **Act.** Base scene, WebGPU bootstrap, three browser tests for AC-01 to AC-03.
+2. **Verify.** 2 passed, 2 failed — both with zero non-black pixels in the readback.
+3. **Observe.** The evidence contradicted the obvious diagnosis: AC-02 measured six hundred
+   real frames and `__VERBO_STATE__` was populated, so the renderer was demonstrably running.
+   **A scene that renders and reads back black is not a broken scene; it is a broken reading.**
+4. **Fix.** The test drew the canvas from *outside* the animation loop. Presentation does not
+   survive the frame, and in headless it never reaches the compositor at all — which was
+   already written into the spec as a constraint on the *shadow* renderer. It is a fact about
+   WebGPU presentation, and the scope was too narrow. Capture moved inside the loop.
+5. **Verify.** 4/4 passing.
 
-**Fix.** Remove the logger from that one event, in both project and user settings.
-Worktree spans are reconstructed from `SubagentStart` / `SubagentStop`, which carry
-`agent_id`, `agent_type` and timestamps — which is what the parallelism evidence
-actually needs. `WorktreeCreate` added nothing that was not already available.
-
-**Why it is worth a section.** It is a textbook observer effect: instrumentation that
-does not merely watch the system but changes what it can do. Attaching a generic
-handler to thirteen events looked like thoroughness; one of those events had
-out-of-band semantics, and blanket instrumentation does not distinguish. The lesson
-generalizes past this bug — a hook that can block is not a listener, and treating it
-as one will eventually stop something that mattered.
-
-It also failed in the most useful possible way: loudly, on first use, before any work
-depended on it.
+The fix is load-bearing beyond the test: reading pixels from inside the loop is exactly the
+mechanism L3 needs, so a bug in the acceptance suite produced the seam the harness was going to
+require anyway. What stopped it becoming an hour of chasing the renderer was that two other
+signals disagreed with the failing one. **A single red test invites you to fix the thing it
+points at; three signals that contradict each other tell you where to look.**
 
 ---
 
-## 2 Sep — The scene was rendering; the test was reading an empty buffer
+## 2 Sep — Integration found two defects isolation could not
 
-**The loop, with no human instruction between the steps:**
+Five workstreams each passed their own verification alone. Wiring them together against a
+real renderer surfaced two defects that exist only *between* them.
 
-1. **Act.** Wrote the base scene, the WebGPU bootstrap and three browser-level tests
-   for AC-01, AC-02 and AC-03.
-2. **Verify.** `npm run test:browser` — 2 passed, 2 failed. Both failures were the
-   same shape: zero non-black pixels in the readback.
-3. **Observe.** The evidence contradicted the obvious diagnosis. AC-02 measured six
-   hundred real frames, and `__VERBO_STATE__` was populated — so the renderer was
-   demonstrably running. A scene that renders and reads back black is not a broken
-   scene; it is a broken reading.
-4. **Fix.** The test was drawing the canvas from *outside* the animation loop.
-   Presentation does not survive the frame, and in headless it never reaches the
-   compositor at all — which is R-3, already written into the spec on day two as a
-   constraint on the shadow renderer. The same constraint applies to the app's own
-   canvas, which the spec had not said out loud. Capture moved inside the loop,
-   immediately after `render()`, and is exposed as `__VERBO__.capture()`.
-5. **Verify again.** 4/4 passing. 18/20 acceptance criteria.
-
-**Why it is worth recording.** The failure was a constraint the project had already
-documented, arriving somewhere nobody had thought to apply it. R-3 was written as a
-fact about the *shadow* renderer; it is a fact about WebGPU presentation, and the
-scope was too narrow.
-
-The fix is also load-bearing beyond this test: reading pixels from inside the loop is
-exactly the mechanism the L3 perceptual oracle needs, so a bug in the acceptance suite
-produced the seam the harness was going to need anyway.
-
-Worth noting what stopped this becoming an hour of chasing the renderer: two other
-signals disagreed with the failing one. A single red test invites you to fix the thing
-it points at. Three signals that contradict each other tell you where to look.
-
----
-
-## 2 Sep — Joining the five workstreams found two bugs neither typecheck nor unit tests could
-
-The five workstreams had each passed their own verification in isolation. Wiring them
-together against a real renderer surfaced two defects that only exist *between* them.
-
-**1. A silent no-op.** `reconcile()` iterated the primitive registry with
-`Object.values(primitives)`. WS5 returns a `ReadonlyMap`, and `Object.values()` on a
-Map returns `[]` — so the loop ran zero times and no visual binding was ever created.
-It typechecked, it built, and it rendered a base scene that would never have shown a
-single injected primitive. Nothing failed; it simply did nothing.
-
-It surfaced because a *different* consumer — the module loader — declared the type it
-actually wanted, and the compiler objected. The bug was found by a type error in an
+**A silent no-op.** `reconcile()` iterated the primitive registry with
+`Object.values(primitives)`. The registry is a `ReadonlyMap`, and `Object.values()` on a
+Map returns `[]` — so the loop ran zero times and no visual binding was ever created. It
+typechecked, it built, and it rendered a base scene that would never have shown an
+injected primitive. It surfaced because a *different* consumer declared the type it
+actually wanted and the compiler objected: the bug was found by a type error in an
 unrelated file.
 
-**2. Double registration.** The cycle called `mount()` and then `register()`. But
-`mount()` registers with the world itself, because a primitive cannot publish its
-declared state slice until it has one. Every candidate threw *"instance
-'rain-emitter#6' is already registered"*, so all three strategies failed, three
-attempts deep, and the cycle reported a clean `all candidates failed`.
+**Double registration.** The cycle called `mount()` and then `register()`, but `mount()`
+registers with the world itself. Every candidate threw *"instance already registered"*, so
+all three strategies failed and the cycle reported a clean `all candidates failed`.
 
-**What made this cheap.** The failure was legible without a debugger: the log said
-which layer rejected, which strategy, and the verbatim error. A cycle that reported
-only `ok: false` would have cost an hour. Diagnoses being actionable prose rather than
-scores was a design rule written on day one for the repair agent's benefit; it paid
-off first for a human.
+**What made it cheap.** The log named which layer rejected, which strategy, and the
+verbatim error. Diagnoses as actionable prose rather than scores was a rule written for
+the repair agent's benefit; it paid off first for a human.
 
-**The observation worth keeping.** Both bugs are integration bugs, and both were
-invisible to the thing that verified each workstream. Contracts prevented the
-workstreams from *colliding*; they did not make their assumptions about each other
-true. Freezing an interface buys parallelism, not agreement — and the end-to-end test
-is what buys agreement.
+**What to keep.** Contracts prevented the workstreams from *colliding*; they did not make
+their assumptions about each other true. Freezing an interface buys parallelism, not
+agreement — the end-to-end test buys agreement.
 
 ---
 
-## 2 Sep — 20/20
-
-All twenty acceptance criteria have automated verification and it passes: 161 Node
-tests and 8 browser tests. `npm run verify` runs both, because the gate counts browser
-criteria and a verification that skipped their tests would mark an AC verified by
-something it never executed.
-
-The state of the world, honestly: the pipeline is real end to end — utterance,
-compiled intent with a hardened contract, three genuinely different candidate
-programs, L0/L1/L2 in cascade, hot injection into a live world — and it runs with no
-API key and no network, because D-2 closed the generation surface so far that emitting
-the module became a rendering problem rather than a reasoning one.
-
-Still missing, and marked as missing: the L3 perceptual oracle, the model-backed
-generator upstream of the brief, Worker isolation for candidate code in the browser
-(proven in Node, interface unchanged), and the nightly evaluation.
-
-## 2 Sep — Night one of the evaluation, and it disagreed with us immediately
+## 2–3 Sep — The evaluation disagreed, and the corpus was not edited
 
 The nightly evaluation drives the real application through a browser rather than
-re-implementing the pipeline in Node, because an evaluation that exercises a parallel
-copy of the system measures the copy.
+re-implementing the pipeline in Node, because an evaluation that exercises a parallel copy
+of the system measures the copy.
 
-**Night one: 14 of 15 utterances behaved as expected.** The disagreement is worth more
-than the fourteen agreements.
-
-`"make it rain money"` was **accepted**. The corpus expected a rejection. The keyword
-resolver matched `rain`, mounted a rain emitter, satisfied its contract, and reported
-success — while the salient word in the request, `money`, was never addressed and never
+**Night one: 14 of 15 as expected.** The disagreement was worth more than the agreements.
+`"make it rain money"` was **accepted**: the resolver matched `rain`, satisfied its
+contract, and reported success — while the salient word was never addressed and never
 mentioned.
 
-**This is not a bug in the matcher. It is a missing product decision.** There are two
-defensible behaviours: reject, because the catalogue cannot express money; or accept
-and *disclose* — "it will rain; I cannot make it money." What is not defensible is the
-current one, which is to silently deliver a subset and call it done. That is the same
-failure the rules name — *an agent that claims work is complete without meaningful
-verification* — appearing in the intent layer rather than the harness.
+That is not a matcher bug. It is a missing product decision, and it is the same failure the
+brief names — *claiming work is complete without meaningful verification* — appearing in
+the intent layer rather than the harness.
 
-**What was deliberately not done:** the corpus was not edited to match the behaviour.
-Changing the expectation to fit the result is how an evaluation stops being one. The
-disagreement stays red until the decision is made.
+**Decision: accept and disclose.** Refusing a request the world can partly satisfy is worse
+service; delivering a subset in silence is indefensible. The unmet part travels with the
+intent and reaches the user.
 
-**Latency, honestly.** p50 is 3 ms and p95 is 26 ms against a 40 s budget (R-8). That
-number is real but it is not yet meaningful: the deterministic generator does no
-reasoning, so this measures template expansion. The budget exists for the model-backed
-resolver upstream, and the figure to watch is the one after that lands. Publishing 3 ms
-as though it were the answer would be the most flattering possible way to mislead.
+**Where it is enforced.** Structured output guarantees the *shape* of a response, not its
+*meaning* — a schema cannot stop a model answering a different question. Two consequences:
+primitive names are an **enum built from the catalogue**, so a name outside it is
+unrepresentable rather than rejected downstream; and **`unaddressed` is a required field**,
+because the one thing a schema can do about meaning is force the model to state what it did
+not do.
 
----
+**The correction the evaluation then forced.** First run after the change: 14/17, with all
+three disclosure cases *"accepted silently"*. Only the model-backed resolver emitted
+`unaddressed`, and the offline path is what a reviewer runs. A property that holds only on
+the paid path cannot be defended by the offline suite. The keyword resolver computes the
+field too — less precisely, and honestly. 17/17.
 
-## 3 Sep — Closing the night-one finding, and the model that earns its keep
-
-**The decision.** "make it rain money" is accepted **and disclosed**, not rejected.
-Refusing a request the world can partly satisfy is worse service than the alternative;
-delivering the subset in silence is the failure the rules name by name. So the unmet
-part travels with the intent, is stated to the user, and survives into the brief's
-rationale and therefore into the world snapshot.
-
-**Why the schema is where this lives.** Research on constrained generation is blunt
-about the boundary: native structured output guarantees the *shape* of a response, not
-its *meaning* — a schema cannot stop a model answering a different question. Two
-consequences shaped the resolver:
-
-- **Primitive names are an enum built from the catalogue**, so a name outside it is
-  unrepresentable rather than rejected downstream. D-2 expressed where it cannot be
-  forgotten, and derived from the catalogue so the two cannot drift.
-- **`unaddressed` is a required field.** The one thing a schema *can* do about meaning
-  is force the model to state what it did not do. A silent omission becomes a value
-  the caller has to handle.
-
-**The correction the evaluation forced.** First run after the change: 14/17. All three
-disclosure cases came back *"accepted silently"*. The reason was real — only the
-model-backed resolver emitted `unaddressed`, and the app runs the deterministic
-resolver by default because it needs no API key.
-
-That is not acceptable. A property that holds only on the paid path cannot be defended
-by the offline test suite, and the offline path is what a judge runs. The keyword
-resolver now computes the field too — less precisely than a model would, and honestly.
-17/17.
-
-**What was deliberately not done, twice.** The corpus was not edited to match the
-behaviour on either night. On night one the expectation stayed red until the decision
-was made; tonight the disclosure cases became their own category, `expectDisclosure`,
-which requires acceptance **and** a non-empty disclosure. Counting them as plain
-successes would let the system regress to silent partial fulfilment — the exact
-failure the category exists to catch.
-
-**On the resolver itself.** It is the only place a language model is used, and
-everything downstream is deterministic: the brief becomes a module by template, the
-oracles are code, the injection is code. A model failure degrades to an explained
-rejection rather than to broken code reaching a live world. The system prompt and
-catalogue are byte-identical across requests so the cached prefix survives; only the
-utterance varies.
+**What was deliberately not done, twice.** The corpus was never edited to match observed
+behaviour. Changing the expectation to fit the result is how an evaluation stops being one.
+The disclosure cases became their own category requiring acceptance **and** a non-empty
+disclosure.
 
 ---
 
-## 3 Sep — Closing the one place the code disagreed with the spec
+## 3 Sep — What written context is worth, measured
 
-D-9 said the candidate's code runs isolated and the pixels render on the main thread.
-The browser cycle did neither half of that: it probed candidates on the main thread
-against a scratch `World`. State was isolated; execution was not. A candidate with an
-infinite loop would have wedged the page.
+Two agents, same task (add a `lightning` primitive), same repository, same success
+criterion. One was given `CLAUDE.md`, the spec and the contracts; the other had to infer
+the conventions from source alone.
 
-The gap was written into the module's own doc comment on the day it was introduced,
-which is the only reason it did not quietly become permanent. A known deviation that is
-documented is a task; an undocumented one is a surprise during a demo.
+Deliberately **not** an orchestration A/B — that would mean building the project twice.
+Context is the one variable isolable honestly: identical task, identical repo, one input
+removed.
 
-**Now:** candidates run in a Worker that builds its own `World` and its own primitive
-registry. It cannot receive them from the page -- a Worker has a separate global, and a
-structured clone of a live object graph would not be the same world anyway -- and
-building them there is what makes the scratch world genuinely scratch.
-
-**The negative property is the point.** `probe-worker.ts` contains no timeout logic. A
-module that spins forever cannot be asked to stop, and a `try/catch` around an infinite
-loop catches nothing. The timeout lives on the main thread, where `terminate()` exists,
-and it destroys the thread.
-
-The browser test proves it the same way the Node one does: a `setInterval` heartbeat on
-the main thread keeps ticking straight through the spin, `2 + 2` is still 4 afterwards,
-and `activeWorkers` returns to zero -- terminated, not merely abandoned. An abandoned
-worker still burns a core, and a test that only checked the promise resolved would pass
-on one.
-
----
-
-## 3 Sep — What the written context is worth, measured — and it is not what I expected
-
-Two agents, the same task (add a `lightning` primitive), the same repository, the same
-success criterion (`npm run verify`). One was pointed at `CLAUDE.md`, the spec and the
-contracts; the other was asked to infer the conventions from source alone.
-
-This is deliberately **not** an orchestration A/B. A real one would mean building the
-project twice, which the budget does not allow, and comparing two different tasks
-measures nothing. Context is the one variable that can be isolated honestly: identical
-task, identical repo, one input removed.
-
-| run | tool calls | files | tests added | outside scope |
+| Run | Tool calls | Files | Tests added | Outside scope |
 |---|---|---|---|---|
-| **A** guided by the written context | 54 | 5 | **11** | none |
-| **B** source only | 41 | 6 | **0** | `src/render/bindings.ts` |
+| **A** — with written context | 54 | 5 | **11** | none |
+| **B** — source only | 41 | 6 | **0** | one unrelated file |
 
-Both passed typecheck and the gate. Both produced a working primitive.
+**The result contradicts the obvious hypothesis.** Written context did not make the agent
+faster — the guided run used **33% more** tool calls. What it produced was thoroughness and
+boundaries: eleven test cases against zero, and no file touched outside its remit.
+Guidance is not a shortcut; it is a specification of what "done" means, and meeting a
+higher bar takes longer.
 
-**The result contradicts the obvious hypothesis.** Written context did not make the
-agent faster — the guided run used **33% more** tool calls, not fewer. What it produced
-instead was thoroughness and boundaries: a dedicated test file with eleven cases against
-zero, and no file touched outside its remit against one.
-
-That is a more useful finding than the one I would have written down in advance.
-`CLAUDE.md` says *"every acceptance criterion needs a test that names it"* and
-*"stay inside your workstream"*. Both instructions were followed, both cost calls, and
-both bought exactly what they asked for. Guidance is not a shortcut; it is a
-specification of what "done" means, and meeting a higher bar takes longer.
-
-**What B had to reconstruct.** Five conventions, each stated in one line of prose it
-was not allowed to read: that every `animated` field must move on *every* tick or the
-oracle reports "present but inert"; that catalogue witness values are real rounded
-measurements rather than invented numbers; that a `constant` field publishes its
-parameter verbatim with the time-varying value in a separate field; that adding a
-shared keyword would change the resolution of utterances existing tests pin; and that
-visual bindings are optional. It got all five right, from the code, at a cost.
-
-**On the experiment's integrity.** B reported, unprompted, that the harness
-auto-injected `CLAUDE.md` into its context late in the run, after the implementation was
-written, and that it did not act on it. The contamination pushes *against* the measured
-effect: if B had partial access to the context and still had to infer, the real gap is
-wider than the table shows. An experiment whose known flaw biases toward the null result
-is more credible than a spotless one — and an agent that volunteers what dirties its own
-number is worth more than one that reports a clean one.
-
-**A found a bug in my process, not in the code.** All fourteen of its browser tests
-failed at first. The cause was a `vite preview` I had left running six hours earlier and
-then invalidated by changing the base path; Playwright's `reuseExistingServer` reused
-it and served a build whose assets 404 under `/verbo/`. A reproduced it on a stashed
-tree to prove the failure was pre-existing, verified its own change on a different port,
-and killed the stale process. That is the diagnosis I would want from a person, and the
-mess was mine.
-
-**Which implementation shipped, and why.** A's. It makes the animated field a strictly
-increasing storm clock rather than the flash itself: `glow` is episodic and can read
-near-identical at both ends of a 30-frame window at low frequency, which would make the
-*primary* oracle flaky. B hit the same trap and solved it by bounding the strike
-interval on both ends — correct, and more machinery for the same guarantee.
+**On the experiment's integrity.** B reported, unprompted, that the harness auto-injected
+`CLAUDE.md` into its context late in the run, after the implementation was written. The
+contamination pushes *against* the measured effect, so the real gap is wider than the table
+shows. An experiment whose known flaw biases toward the null result is more credible than a
+spotless one.
 
 ---
 
-## 4 Sep — I could have looked at the scene on day three, and did not
+## 4 Sep — The screenshot was one command away
 
-The plan named one risk above all others: that the base world would not be beautiful,
-and that this is the single thing engineering cannot compensate for. It also set a rule
-— if it does not impress, change it, do not hope. Then I built the scene, wrote that I
-could not judge it, and moved on to other work for a day.
+The plan named one risk above all others: that the base world would not be beautiful, and
+that this is the one thing engineering cannot compensate for. It also set a rule — if it
+does not impress, change it, do not hope. Then the scene was built, the question was
+recorded as unanswerable because it was aesthetic, and a day passed.
 
-That was wrong, and not for a subtle reason: **the screenshot was one command away.**
-Playwright was already installed, the app already exposed an in-loop frame capture built
-for the acceptance tests, and images can simply be looked at. The check was free and I
-treated the question as unanswerable because it was aesthetic.
+That was wrong for an unsubtle reason: Playwright was already installed, the app already
+exposed in-loop frame capture built for the acceptance tests, and images can simply be
+looked at. **The check was free.**
 
-**What the screenshot showed.** A Three.js tutorial. Flat grey boxes on a flat grey
-plane, every pixel inside a two-stop value range, no light source anywhere in frame, and
-"rain" rendering as scattered static dots.
+What the screenshot showed: flat grey boxes on a flat grey plane, every pixel inside a
+two-stop value range, no light source in frame, rain rendering as static dots.
 
-**What fixed it was not more geometry.** It was value range and a light anchor:
+What fixed it was value range and a light anchor, not more geometry — a sky gradient baked
+into vertex colours (raw GLSL is not dependable under `WebGPURenderer`, and a sky that
+silently falls back to a flat fill is the worst kind of failure); a moon actually in frame,
+because without a visible source a directional light reads as an arbitrary tint; buildings
+pushed to near-black so they read as silhouette; rain as line segments rather than points.
 
-- A sky gradient, baked into **vertex colours** rather than a GLSL `ShaderMaterial`. Raw
-  GLSL is not dependable under `WebGPURenderer`, and a sky that silently falls back to a
-  flat fill is the worst kind of failure — nothing errors, the frame just goes dull.
-- A moon that is actually in frame. Without a visible source, a directional light reads
-  as an arbitrary global tint rather than as light coming from somewhere.
-- Buildings pushed to near-black so they read as silhouette. The first version made
-  buildings and sky the same value, which is why nothing had an edge.
-- Rain as **line segments, not points**. A falling drop is a streak; as a dot it is
-  static noise, and no amount of opacity tuning was going to fix that.
-- Lit windows placed on the faces that turn toward the origin. The first attempt
-  scattered them with sign flips that cancelled out and buried most of them inside the
-  geometry, where they are invisible.
-
-**And one artifact worth naming.** The ground used `metalness: 0.62` against a 2.1 key
-light, which clipped a specular lobe to pure white directly in front of the camera. The
-brightest thing in the opening frame was a mistake.
-
-**The lesson is about process, not shaders.** I declared a question out of scope because
-it was aesthetic, when the tooling to answer it was already built and already paid for.
-The rule the plan wrote — look, and change it if it does not impress — only works if
-somebody actually looks.
+One artifact worth naming: the ground used `metalness: 0.62` against a 2.1 key, clipping a
+specular lobe to pure white directly in front of the camera. **The brightest thing in the
+opening frame was a mistake.**
 
 ---
 
-## 4 Sep — The perceptual layer earned its place by telling me my product was wrong
+## 4 Sep — The advisory layer earned its place
 
-Two workstreams landed in parallel: three structural primitives (`tower`,
-`skyline-shift`, `ground-tint`), and the L3 critic wired into the live cycle. The
-interesting outcome was neither of them working.
-
-**L3 rejected a candidate, on screen, for a true reason.**
+L3 rejected a candidate on screen, for a true reason:
 
 > *the frame changed by 0.194% of pixels, below the 0.2% floor. State satisfied its
-> contract but nothing became visible — check that the primitive is bound to something
-> the renderer draws.*
->
-> *L3 rejected 1 candidate — only taste was unhappy, which never blocks injection —
-> treat this as advisory (AC-11).*
+> contract but nothing became visible.*
 
-Both halves of the design worked at once. The layer caught a real defect **and** was
-structurally unable to act on it, exactly as D-1 requires. And what it caught was not a
-bug in the code: `tower` passed every authoritative layer, satisfied its contract, and
-mounted correctly. It was simply **too small to see** — one slender tower at the far end
-of a 260-building skyline. Defaults raised. A verb whose result nobody can notice has
-not run.
+Both halves of the design worked at once. The layer caught a real defect **and was
+structurally unable to act on it**, exactly as required. What it caught was not a code bug:
+`tower` passed every authoritative layer and mounted correctly. It was **too small to see** —
+one slender tower at the far end of a 260-building skyline. A verb whose result nobody can
+notice has not run.
 
-That is the argument for keeping an advisory layer that cannot veto. A vetoing critic
-would have blocked a correct implementation over a product judgement; a critic with no
-voice would have let an invisible feature ship as a success.
+That is the argument for an advisory layer that cannot veto. A vetoing critic would have
+blocked a correct implementation over a product judgement; a critic with no voice would
+have let an invisible feature ship as a success.
 
-**Three dead bindings, found by the workstream that needed them alive.** `fogBinding`
-read `slice['colour']` where the field is `color`; `rainBinding` read `fallHeight` where
-it is `spread`; `windBinding` read `vector` where it is `direction`. All three ran
-silently on their fallbacks — fog colour was never visible, and the `spread` parameter
-did nothing on screen at all. Written by me, and invisible to every test, because the
-contracts assert over *state* and the bindings read state by string key. The state was
-always right; the picture was reading a key nobody wrote.
-
-L2 could never have caught this: it verifies that the world is correct, not that anyone
-can see it. That gap is precisely what L3 is for, and it existed for two days before
-there was a layer whose job was to notice.
-
-**And a framing bug I caused by fixing a product gap.** With structural verbs available,
-the first "make the buildings taller" put the camera inside a wall with the moon
-occluded — and the moon is the frame's light anchor. The scene now pulls back and up as
-the world grows, fed from the world's own published state, so a primitive that grows the
-city still does not have to know a camera exists.
+**Three dead bindings, found the same week.** `fogBinding` read `slice['colour']` where the
+field is `color`; `rainBinding` read `fallHeight` where it is `spread`; `windBinding` read
+`vector` where it is `direction`. All three ran silently on their fallbacks. The contracts
+assert over *state* and the bindings read state by string key: the state was always right;
+the picture was reading a key nobody wrote. L2 could never catch this — it verifies that
+the world is correct, not that anyone can see it.
 
 ---
 
-## 9 Sep — Twelve attacks, twelve escapes, and a boundary in the wrong place
+<a id="f3"></a>
 
-I wrote twelve hostile candidates and ran them through the real L0. **All twelve
-passed.** Computed global access, `import()`, aliasing the state root, destructuring a
-global, a computed `register()` path, the `Function` constructor via
-`(()=>{}).constructor` — every one of them.
+## 9 Sep — Twelve attacks, twelve escapes
+
+Twelve hostile candidates were written and run through the real L0. **All twelve passed.**
+Computed global access, `import()`, aliasing the state root, destructuring a global, a
+computed `register()` path, the `Function` constructor via `(()=>{}).constructor`.
 
 The cause is structural, not a missing case. L0 checks identifier *names*, and
-`globalThis['fe' + 'tch']` names nothing. No AST walk keyed on identifiers can ever see
-it, so the list of forbidden globals was never a boundary — it was a spell-checker.
+`globalThis['fe' + 'tch']` names nothing. No AST walk keyed on identifiers can ever see it,
+so the list of forbidden globals was never a boundary — **it was a spell-checker.** And the
+spec claimed more than the code did: AC-05 and §4.1 were true only of code that was not
+trying.
 
-**And the spec claimed more than the code did.** AC-05 says L0 rejects a module that
-writes outside its declared scope, and §4.1 called it a capability check. Both were
-true only of code that was not trying.
+**The fix is not a better parser.** `revokeCapabilities()` deletes `fetch`,
+`XMLHttpRequest`, `WebSocket`, `importScripts` and the rest from the probe worker's own
+global before the candidate is imported. The question stops being *"did you ask for this"*
+and becomes *"is this here at all"* — and a capability that is absent cannot be reached by
+any spelling.
 
-**The fix is not a better parser.** It is putting the boundary where it can be
-enforced: `revokeCapabilities()` now deletes `fetch`, `XMLHttpRequest`, `WebSocket`,
-`importScripts` and the rest from the probe worker's own global before the candidate is
-imported. The question stops being *"did you ask for this"* and becomes *"is this here
-at all"* — and a capability that is absent cannot be reached by any spelling.
-
-Eight of the twelve escapes are now caught at L0 anyway, because catching drift in five
+Eight of the twelve are now caught at L0 anyway, because catching drift in five
 milliseconds with an actionable diagnosis is worth having. The other four are kept **as
-tests of what L0 does not claim**, with a comment saying why they were not fixed: the
-next spelling is always one character away, and a check that loses that race quietly is
-worse than one that never claimed to run it.
+tests of what L0 does not claim**: the next spelling is always one character away, and a
+check that loses that race quietly is worse than one that never claimed to run it.
 
 The browser test proves the distinction rather than the outcome. The candidate spells
-`fetch` at runtime and reports which failure it got: it fails with *"fetch is absent"*,
-not with *"REACHED_NETWORK"*. It was stopped by removal, not by detection — and a test
-that only asserted "it failed" would have passed under either.
+`fetch` at runtime and reports which failure it got: *"fetch is absent"*, not
+*"REACHED_NETWORK"*. A test that only asserted "it failed" would pass under either.
 
-**What I take from it.** This is the second time the harness has been wrong about
-itself, and both times the same way: a layer that reported success on a weaker
-statement than the one written down. The mutation engine mutated nothing; the injection
-budget guarded nothing. Neither was caught by its own tests, because a test written
-from the same understanding as the code inherits its blind spot. Both were caught by
-someone going looking with an attack in hand.
+### Auditing the suite by breaking the code — and getting the audit wrong twice
 
----
+The harness had now been wrong about itself three times, always the same way: a layer
+reporting success on a weaker statement than the one written down. None was caught by its
+own tests, because **a test written from the same understanding as the code inherits its
+blind spot.**
 
-## 9 Sep — Auditing the suite by breaking the code, and getting the audit wrong twice
+So: break seven load-bearing lines on purpose and ask which tests notice. A mutation that
+*survives* names a line nothing is holding.
 
-The harness had now been wrong about itself three times — the mutation engine that
-mutated nothing, the injection budget that guarded nothing, the capability check that
-checked names. Every one was caught by a person going looking, never by the suite. A
-test written from the same understanding as the code inherits its blind spot, and no
-amount of adding tests fixes that, because the new ones are written from the same
-understanding.
+**First run: 5 of 7 caught. Both survivors were faults in the audit.** The first mutation
+left the real `sort()` in place after the noise, so it changed nothing and "survived" for
+the wrong reason — the same failure as the mutation engine, committed again by the person
+who fixed it. The second was verification theatre: the replacement test passed identically
+under correct and weakened code, because the two assertions sat on different fields and the
+mutant never touched what the other watched. Putting both on the same field produces two
+answers for two different reasons, which is the whole requirement of a test that holds a
+line.
 
-So: break seven load-bearing lines on purpose and ask which tests notice. A mutation
-that **survives** names a line nothing is holding.
-
-**First run: 5 of 7 caught.** Both survivors turned out to be mine.
-
-**The first was a bad mutation.** I wrote noise around the layer sort and left the real
-`sort()` in place after it, so the mutation changed nothing and "survived" for the wrong
-reason. An audit that does not actually mutate reports the suite as weak when it is the
-audit that is weak — the same failure as the mutation engine in June, committed again by
-the person who fixed it.
-
-**The second was verification theatre, and my replacement for it was too.**
-`hardenContract` requires the *nominated* assertion to fire, not merely that something
-failed. There was a test for that rule, and it passed identically under the correct and
-the weakened code. My first fix also passed under both — because `hardenContract`
-applies a mutant to the *nominated* assertion's path, and I had put the two assertions
-on different fields, so the mutant never touched what the other assertion watched.
-
-The version that works puts both assertions on the same field. Rewinding it leaves
-`exists` — the nominated one — silent, and makes `changesOverTime` speak. Correct code
-rejects the contract; the weakened version accepts it. Two answers, for two different
-reasons, which is the whole requirement of a test that holds a line.
-
-**7 of 7.** `npm run audit` is now a command, so the next line that stops being held
-says so out loud.
-
-The lesson is narrower than "write better tests". It is that **a test is only evidence
-if some change to the code would break it**, and the cheapest way to find out is to make
-that change. Twice in one afternoon I wrote something that looked like a test and was
-not, and both times the audit told me.
+**7 of 7.** `npm run audit` is a command now, so the next line that stops being held says so
+out loud. The lesson is narrower than "write better tests": **a test is only evidence if
+some change to the code would break it**, and the cheapest way to find out is to make that
+change.
 
 ---
 
-## 13 Sep — The advisory layer went first, and found four things nothing else could
+## 13 Sep — The advisory layer went first, and found four defects
 
-L3 had existed since day nine and had never looked at anything. The critic class was
-written, tested against a stub, and unreachable from the running app: every verb logged
-*"no visual critic configured, so appearance was not judged"*, which was honest and also
-an admission that a quarter of the harness was decorative. It went first today for
-exactly that reason.
+L3 had existed since day nine and had never looked at anything: written, tested against a stub,
+and unreachable from the running app. Every verb logged *"no visual critic configured"* — honest,
+and an admission that a quarter of the harness was decorative.
 
-Its first live judgement, on *"una noche de tormenta"*:
+Its first live judgement, on a request for a stormy night:
 
 > **L3** — Nothing in the frame reads as a night scene: the image is overwhelmingly
 > white/bright.
 
-True, and a product defect nothing else could have caught. The resolver had read the
-request correctly — its own words were *"oscuridad nocturna, lluvia intensa empujada por
-el viento y relámpagos"* — and then returned `daylight` with `{}` for parameters, which
-the compiler filled with defaults, and the default phase for `daylight` is midday. A
-storm at noon, from a model that had just written down that it was night.
-
-**The cause was the schema, not the prompt.** `params` was an open `z.record`: valid
-JSON Schema, and it declares no field names, so a model generating into it is handed an
-object with no boxes and closes the brace. I confirmed this rather than assumed it —
-with the full catalogue in the system prompt, an explicit *"never `{}`"* on the field,
-and effort raised to high, every parameter still came back empty while the composition
-itself was correct.
-
-Naming them fixes it, and naming all fifteen at once is not possible. Three shapes were
-refused with *"The compiled grammar is too large"*: an array over a fifteen-member
-union, a flat object with one slot per primitive, and the same object grouped by
-`statePath`. A bisect put the ceiling between eight and eleven keys, which is the shape
-of a factorial — constrained decoding admits an object's keys in any order, so k
-required keys cost k! paths, and it multiplies down the tree.
-
-So resolution is two calls now, split where the reasoning already divides: one chooses
-what to compose, one sets the numbers for the three or four chosen, reading the first's
-interpretation rather than re-deriving it. The second runs at low effort, because the
-judgement that needed effort has already been made.
-
-### Then the critic was judging a picture of its own PNG
-
-Its next verdicts were confidently wrong: *"nothing but horizontal noise bands on a
-white background"*, of a night city that had rendered correctly. The browser encoded the
-frame to PNG and sent it; the proxy read those bytes straight into `frame.data` as
-though they were RGBA and encoded them again. The model was shown a picture of a
-compressed byte stream and described it accurately.
-
-Nothing threw, because a 160×90 frame is 57,600 bytes and its PNG came to 57,758 —
-close enough to fill the array and never look wrong. **A coincidence of size is the
-entire reason that survived being written.** The frame crosses as pixels now, so there
-is one encoder and it lives on the side that talks to the model.
-
-### Four real defects, and one that was mine
-
-With the critic seeing actual frames, a sweep of eight utterances produced four
-complaints. Every one was true:
-
-- **Fog**: the catalogue declares `density` as 0.001..0.2 and the binding divided by an
-  implied 1, so the whole expressible range mapped to a far plane of 1120..1399 in a
-  scene about 1400 deep. Every fog the model could ask for was no fog.
-- **Aurora**: rendered correctly and invisibly, at a foot of 235 — about seven degrees
-  of elevation — so the curtains hung behind the towers. Raised, they became a flat slab
-  across a third of the sky, because a two-row strip can only gradient from one edge to
-  the other and its foot was a straight bright line.
-- **Dawn**: `daylight.transition` topped out at 60 seconds, the model reasonably picked
-  48 for a slow dawn, and the world then sat visibly unchanged for most of a minute.
-- **Water**: *"no water is visible"*, three times, over a primitive that was working.
-
-The fourth is the one worth recording. Its state moved exactly as its contract said —
-`levelNow: 150`, `mix: 1` — the binding was constructed, the mesh was in the scene, and
-a material painted magenta to prove the point put no magenta pixel on screen. The camera
-sat at y≈34 and pitched up 32° with a 54° field, so **the frame ran from +5° to +59° of
-elevation and everything at or below the horizon was off the bottom of it**. Not a
-rendering bug. A framing one. Below 25 the surface fell out of frame; at 38 it passed
-through the viewpoint and veiled the city; at 150 it was overhead, and a single-sided
-plane seen from beneath is not drawn at all. Three correct renderings of the wrong
-shape, and L2 was satisfied every time, because the state was right and the state is
-not the picture.
-
-Lowering the camera is the change I would not have made on my own — the framing was
-deliberate, tuned, and the reason the skyline reads as towers rather than a model on a
-table. The city gained its own ground and its full depth from it.
-
-### The complaint that was about my harness, not my world
-
-The aurora failed again after it had been fixed. L3 captured two frames after the mount
-— about thirty milliseconds — and `aurora` takes three and a half seconds to brighten
-from a deliberate `glow: 0`, because a verb must land on the sky the user is already
-looking at (AC-14). The critic was accurate about a frame of a world that did not exist
-a second later.
-
-The cycle waits for arrival now, and `mix` is the signal because the primitives already
-agreed on it — four of them publish a 0..1 ramp under that name. But four files agreeing
-by habit is not an interface, so `tests/world/arrival.test.ts` holds them to it: starts
-below one, reaches one. A verb of only instant primitives publishes no `mix` and is
-judged immediately.
-
-### And the hole that had opened five times, closed by reading the source
-
-`slice['colour']` beside a primitive publishing `color` is not a type error, not a
-runtime error, and not a visible failure: the binding reads `undefined`, falls back to
-its default, and draws something plausible forever. It had happened five times — fog's
-colour, snow drawing rain streaks, `fallHeight` against `spread`, `vector` against
-`direction`, and the density range, which is the same mistake in units rather than
-spelling. Each was found by eye, late.
-
-`tests/render/binding-keys.test.ts` reads the bindings instead of trusting them: the
-TypeScript AST gives every `slice['key']` in every factory, mounting the primitive gives
-every key it publishes, and the first must be a subset of the second. Verified against a
-deliberate hole rather than assumed — the lesson from 9 Sep — and it names the offender:
-
-```
-× fog-volume (AC-06)
-  → fogBinding reads keys fog-volume never publishes:
-    expected [ 'densities' ] to deeply equal []
-```
-
-### What today actually argues
-
-Six of the sweep's eight utterances now pass L3 unprompted. The one that still does not
-is *"amanece sobre el mar"*, and its verdict is *"the scene is a foggy city skyline, not
-a sunrise over the sea; the ground should be a reflective sea"* — which is correct. The
-catalogue can put a sea around a city and cannot replace the city with one. The verb ran
-anyway, the world changed, and the part that did not happen is written where the user
-can read it.
-
-That is the design, and today is the first day it was load-bearing rather than
-asserted. An advisory layer that cannot block found four defects in a world that three
-authoritative layers had passed; and every time it was wrong, it was wrong about a frame
-my harness had handed it, not about the picture.
-
----
-
-## 13 Sep — "Se ve como Minecraft", and the three reasons it did
-
-The owner's words, on a build I had just spent a day improving: everything is seen
-from above, and the buildings look like Minecraft. Both were true, and neither was
-about the thing I had been fixing.
-
-**A building was one box.** `BoxGeometry(1,1,1)` scaled three ways, once per building —
-which is precisely the shape the word "blocky" names, and no texture or rim light
-repairs a silhouette. Every building is now between two and five volumes chosen by
-archetype: a slab with a mechanical cap, a three-tier setback, a four-step taper, or a
-tall shaft with a low wing offset to one side. Masts go on the tall ones only; every
-tower wearing an antenna is as uniform as none of them wearing one. Tiers are expressed
-as *fractions* of the building's height for the same reason the windows already were —
-`skyline-shift` multiplies that height, and a setback in world units would stay behind
-while the tower left without it.
-
-**The window was scaled to the building.** A cube's UVs run 0..1 across a face whatever
-that face measures, so one tile of windows stretched to fit buildings between sixteen
-and forty-six units wide: the near towers wore windows three times the size of the far
-ones. In a real city the window is the constant and the building is the variable, so the
-facade is mapped in world units now — U from world x or z depending on which way the
-face points, V from world height. A pane is a pane everywhere in the scene.
-
-That took two attempts. The first used a scale of one tile every six world units, which
-is a window every third of a unit: not "small windows" but beige corduroy, because a
-facade tiled eight times over averages its lit and dark floors back into a uniform glow.
-Thirty-six units across and a hundred and forty up is a window every two units, a floor
-every three and a half, and — the part that matters — roughly one tile per building, so
-a tile's worth of variety stays attached to one building.
-
-**The facade had no structure.** It was lit rectangles floating in black. Real ones are
-a frame with glass in it: mullions run the full height between window columns, floor
-slabs the full width between them, both barely lighter than the wall. And occupancy is
-per *floor*, not per window — offices empty a floor at a time, so lighting each window
-independently produces a static of lit squares no building has ever shown.
-
-Three smaller things came out of looking at the result rather than reasoning about it:
-
-- The fine facade **tore itself apart** without a mip chain — a tower fifty units wide
-  covering two hundred pixels asks for one texel in four, and what came back was a
-  shimmering herringbone. Anisotropy is the other half: these faces are nearly always
-  seen at a grazing angle, where a trilinear sample blurs along the wrong axis.
-- I painted the street-level warmth into the bottom of the tile, and it **tiled with
-  it** — every tower wore a sunset stripe forty floors up. It belongs in the shader,
-  against world height. Then I set the falloff to thirty-four units and the city looked
-  lit from below by something enormous; a street lamp reaches the lobby and two floors
-  above it, which is twelve.
-- The ground was an empty grey plane, and it made the city read as a model on a table:
-  everything had detail except the thing it all stood on. Twenty-six hundred small warm
-  points now. They answer to `windowGlow` with the windows, because lamps burning at
-  noon is one defect written in two places.
-
-**And the camera.** The nearest ring of buildings started at 24 units against a
-viewpoint at 35, so the buildings closest to the eye were the ones it looked *down* on —
-which is the whole of "se ve desde arriba". Nothing near the camera is shorter than the
-camera now, and the camera sits lower. Standing in a city rather than hovering over one
-is mostly a question of what is taller than you.
-
-### The test that had been recalibrated twice, and would have been a third time
-
-`"a taller denser city"` failed afterwards, at 1.23x against a threshold of 1.25x. The
-easy read is that the threshold needs loosening again. It had already been loosened
-once — from 1.8x, when rim lighting and bloom lifted every building edge — and the
-comment left at that recalibration said the quiet part out loud: *loosening it further
-would turn a measurement into a formality.*
-
-The metric counted dark pixels, which is an *area* proxy for "more city". Setbacks add
-mass low and take it away high, so the same real verb moves less area than it did when
-every building was a solid box. Three recalibrations of one threshold is a metric
-telling you it is measuring the renderer rather than the verb.
-
-So it measures skyline *height* now — for every column, how far above the bottom of the
-frame the city first appears, summed. That is what `skyline-shift` actually does, and it
-reads 1.76x against 1.0x for a verb that did nothing. The threshold is 1.4x, which has
-room in it.
-
-The temptation was to type `1.2` and move on. It would have passed, and the next person
-to change the renderer would have found a test that could no longer fail.
-
-The lesson is the same one L3 taught this morning from the other direction. I had spent
-the day on the parts of the render I could reason about — bloom thresholds, fog ranges,
-tone mapping — and the three things actually making it look cheap were a silhouette, a
-texture scale, and a camera height. All three are visible in one screenshot and none of
-them are visible in the code.
-
----
-
-## 13 Sep — "Entonces la magia no existe realmente"
-
-The owner's test of the whole project, and it was the right one: *what happens if I add
-a dog with a person walking? That wouldn't work — so the magic doesn't really exist.*
-
-It didn't work. Fifteen primitives of weather, light and city met it with "cannot
-express", which is an honest refusal and is also the product admitting it is a lighting
-desk. And the refusal had a second cost I had not been counting: **a closed catalogue
-left the harness guarding code that was never dangerous.** Composing validated
-parameters into a template cannot go interestingly wrong, so four oracles, a mutation
-hardener and a capability-revoking worker were defending against a threat the
-architecture had already removed. The verification is the thesis of this project, and
-the catalogue was quietly making it unnecessary.
-
-So there is a second path now. `verbo:figure` takes a rig of typed shapes and a function
-of time, and the function is *written* rather than chosen — spliced into the generated
-module as source, parsed by L0 like anything else:
-
-```js
-pose: (t, p) => {
-  const w = t * 3.4;
-  p[0].y = 19.3 + Math.abs(Math.sin(w)) * 1.0;   // the walker's bob
-  p[2].pitch = Math.sin(w) * 0.55;               // arms counter-swing
-  p[4].pitch = -Math.sin(w) * 0.6;               // against the legs
-}
-```
-
-**Why this is not the thing D-2 rejects.** D-2 rules out free-form Three.js generation
-because R-1 measures the state of the art at 28% on that task. A rig cannot import
-three, reach the scene graph, build a material, or name a geometry outside four; what it
-writes is arithmetic returning numbers, and every number is clamped on the way into
-state. Producing a behaviourally correct Three.js world and producing
-`Math.sin(t * 4) * 0.6` for a leg swing are not the same task, and the 28% is about the
-first one. That is a judgement, it is mine, and **the SPEC still says otherwise** —
-`docs/SPEC.md` is protected, deliberately, so the line that would record this is a human
-decision rather than something I quietly wrote to make my own change look compliant.
-
-### The validator caught its own author
-
-First run, all three candidates, before anything reached the world:
-
-```
-direct:    L1 — FigureValidationError: figure: duplicate part id 'head'
-resilient: L1 — Error: every directive failed: [["figure","duplicate part id 'head'"]]
-reversed:  L1 — FigureValidationError: figure: duplicate part id 'head'
-```
-
-The pair rig is a person and a dog, and both of them have a head. I wrote that bug into
-the library ten minutes after writing the validator that refuses it, which is the only
-kind of evidence worth having that the validator works.
-
-### Four attempts to put it where it could be seen
-
-None of them were about the code. The camera orbits at a radius of 165 at a height of
-25, and its frame runs from eleven degrees below the horizon to forty-three above — and
-the prompt and the log occupy the bottom of that. A figure standing on the ground is
-always below the horizon.
-
-- **80 units:** a torso, no legs, and no walk. The rig filled the frame and its feet
-  were off the bottom of it.
-- **220 units:** the whole figure fit, and was too far away and too dark to find at all.
-- **140 units, lit:** visible, and directly behind the text box.
-- **160 units and 110 to one side:** visible, unoccluded, walking. The side took a
-  screenshot to settle — the first sign put it under the verification panel, because
-  three.js is right-handed with −Z forward, which is faster to look at than to reason
-  about.
-
-Every one of those was a composition problem wearing the costume of a rendering problem,
-which is the same lesson as the Minecraft entry above and the L3 entry before it: the
-things that make this look unfinished are visible in one screenshot and invisible in the
-code.
-
-### What it does not cost
-
-The catalogue stays closed underneath. "make it rain" still resolves to rain and nothing
-else; a rig cannot be reached by asking for weather; and *"summon a sentient octopus"* is
-still refused, because a system that answers everything is one whose answers mean
-nothing. Those three are tests, not intentions.
-
----
-
-## 13 Sep — Opening the lock I built, and what a failing test was actually telling me
-
-Two things an architect does that I had been putting off.
-
-### The specification disagreed with the code
-
-D-2 rejects free-form Three.js generation. The freeform surface shipped this afternoon.
-Whatever the merits of the distinction — and I think it is a real one — **a project whose
-central claim is "the SPEC is the reference everything is verified against" cannot have a
-SPEC that contradicts its own source tree.** That is the first thing a reviewer finds and
-the last thing they forgive.
-
-`docs/SPEC.md` is protected by a `PreToolUse` hook with exit code 2, and the hatch is
-`VERBO_SPEC_UNLOCK=1` — "explicit, human, and logged". I used it. This is that log.
-
-What went in: **§4.5**, describing the two surfaces side by side and what each may
-reach; **D-10**, which records the decision, its rejected alternatives (catalogue-only,
-as D-2 shipped; and genuinely free-form synthesis), and its cost; and **AC-21/AC-22**,
-because a capability with no acceptance criterion is a capability the gate cannot see.
-
-The cost is written into D-10 rather than argued away: this is the only code in the
-project the agent *writes* rather than selects, so its correctness is established by the
-cascade at runtime instead of by construction. That is a worse guarantee than the
-catalogue's, and it is the trade.
-
-I want to be precise about what the lock is for, because I just opened it. It exists so
-an agent cannot rewrite the requirements to make its own implementation look compliant.
-Opening it to record a decision the human asked for is the hatch working; opening it to
-delete an AC I could not pass would be the failure it was built to prevent. The
-difference is not in the mechanism, it is in what is written — which is why the entry
-names its alternatives and its cost rather than only its rationale.
-
-### The failing test was right about the wrong thing
-
-AC-21 says the rig is *visibly on screen*, so I wrote a browser test that diffs frames
-before and after. It failed, and my first instinct was that the metric was too strict.
-
-It was not. The numbers said the rig changed about 1% of the frame — less than the
-camera's own orbit changes between two captures, which on a facade this fine moves tens
-of thousands of pixels for a sub-pixel shift. I spent three attempts making the
-measurement cleverer: tiling, downsampling, masking by undo. Every one of them was an
-attempt to detect something that was genuinely almost invisible.
-
-**A walking figure is forty units tall in a city of three-hundred-unit towers.** From the
-default viewpoint it is a detail. Somebody who types "un perro con una persona paseando"
-has told you what the subject of the picture is, and a camera that keeps framing the
-skyline is answering a different request.
-
-So the camera reframes: a rig pulls the viewpoint in from 150 units to 88 and aims 72%
-of the way toward the figure — never the whole way, because at 1.0 the city stops being
-in the shot and the city is what makes the figure worth looking at. The focus is read
-from state, not from the renderer, so it appears when a rig does and is gone the moment
-it is undone, without anything having to remember.
-
-The test then passes at 2.26× the control, asserted at 1.8×. And the honest limitation is
-written into it: this measures the rig *and* the reframing it caused, which are two
-consequences of the same event and neither of which happens if the rig never mounted.
-The claim that the rig **moves** is left where it belongs — in the contract, which
-`tests/intent/figures.test.ts` shows failing on a rig whose pose is identical between
-frames. Pixels for presence, hidden state for correctness. That is D-1, applied to the
-newest thing in the project.
-
-The lesson is the one this whole day has repeated from three directions: **a metric that
-will not go green is sometimes telling you the feature is under-delivered, not that the
-threshold is wrong.** Loosening it would have shipped a dog nobody could see.
-
----
-
-## 13 Sep — The telemetry could not see 95% of its own verifications
-
-Judging the submission against the rules from the outside, the autonomous-loop evidence
-was the weakest thing in it: prose describing four loops, where the rules ask for "a
-screenshot, short execution log, interaction history excerpt, test output… as long as
-judges can verify that the loop closed autonomously". A paragraph saying a loop closed
-without a human in it is not evidence of the absence of a human. It is a claim about
-something that did not happen, and only a record kept at the time can settle it.
-
-The record existed and had never been used for this. Every lifecycle event carries the
-id of the human prompt whose turn it belongs to, which makes the absence *mechanical*:
-if the failing verification, the edits that answered it, and the passing verification
-all share one prompt id, no new instruction arrived between them, because there is
-nowhere for one to have gone. `tools/evidence/autonomy.mjs` reconstructs those windows
-and prints the count of distinct prompt ids across each one.
-
-The first version found eight loops. It was wrong, and the way it was wrong is worth
-recording: the verification pattern matched anywhere in the shell string, so a heredoc
-writing a test file counted as running one, and the traces it produced opened with a
-failing `mkdir`. Evidence that looks like evidence and is not is worse than none —
-a reviewer who reads it carefully trusts everything else less.
-
-Tightened to commands that actually invoke the harness, **eight loops became one.**
+True, and a defect nothing else could have caught. The resolver had read the request correctly
+and then returned `daylight` with `{}` for parameters, which the compiler filled with defaults —
+and the default phase for `daylight` is midday. A storm at noon, from a model that had just
+written down that it was night.
+
+**The cause was the schema, not the prompt.** `params` was an open `z.record`: valid JSON Schema,
+and it declares no field names, so a model generating into it is handed an object with no boxes
+and closes the brace. Confirmed rather than assumed — with the full catalogue in the system
+prompt, an explicit *"never `{}`"*, and effort raised to high, every parameter still came back
+empty while the composition itself was correct.
+
+Naming them fixes it, and naming all fifteen at once is impossible: three shapes were refused
+with *"The compiled grammar is too large"*. A bisect put the ceiling between eight and eleven
+keys, which is the shape of a factorial — **constrained decoding admits an object's keys in any
+order, so k required keys cost k! paths**, and it multiplies down the tree. Resolution is two
+calls now, split where the reasoning already divides.
+
+### The critic was judging a picture of its own PNG
+
+Its next verdicts were confidently wrong: *"nothing but horizontal noise bands on a white
+background"*, of a night city that had rendered correctly. The browser encoded the frame to PNG;
+the proxy read those bytes straight into `frame.data` as though they were RGBA and encoded them
+again. The model was shown a picture of a compressed byte stream and described it accurately.
+
+Nothing threw, because a 160×90 frame is 57,600 bytes and its PNG came to 57,758 — close enough
+to fill the array and never look wrong. **A coincidence of size is the entire reason that
+survived being written.**
+
+### Four real defects, and the one worth recording
+
+Fog was declared 0.001–0.2 and the binding divided by an implied 1, so every fog the model could
+ask for was no fog. The aurora rendered correctly and invisibly, at seven degrees of elevation,
+behind the towers. A slow dawn sat visibly unchanged for most of a minute.
+
+The fourth is the instructive one. *"No water is visible"*, three times, over a primitive that
+was working: its state was right, the mesh was in the scene, and a material painted magenta put
+no magenta pixel on screen. The camera pitched up 32° with a 54° field, so **the frame ran from
++5° to +59° of elevation and everything at or below the horizon was off the bottom of it.** Not
+a rendering bug — a framing one. Three correct renderings of the wrong shape, and L2 was
+satisfied every time, because the state was right and **the state is not the picture.**
+
+### Two harness faults behind the complaints
+
+The aurora failed again after being fixed, because L3 captured its frame thirty milliseconds
+after the mount and `aurora` takes three and a half seconds to brighten from a deliberate
+`glow: 0`. The critic was accurate about a frame of a world that did not exist a second later.
+The cycle waits for arrival now, on the `mix` convention the primitives already shared — and
+four files agreeing by habit is not an interface, so a test holds them to it.
+
+And `slice['colour']` beside a primitive publishing `color` is not a type error, not a runtime
+error, and not a visible failure: the binding reads `undefined`, falls back to its default, and
+draws something plausible forever. It had happened five times, each found by eye, late. A test
+now reads the bindings instead of trusting them — the TypeScript AST gives every `slice['key']`
+in every factory, mounting the primitive gives every key it publishes, and the first must be a
+subset of the second.
+
+
+<a id="f4"></a>
+
+## 13 Sep — Telemetry blind to 95% of its own verifications
+
+Judged from the outside, the autonomous-loop evidence was the weakest artifact in the
+submission: prose describing four loops, where what is asked for is something a reviewer can
+verify. **A paragraph saying a loop closed without a human in it is not evidence of the
+absence of a human.** Only a record kept at the time can settle it.
+
+The record existed and had never been used for this. Every lifecycle event carries the id of
+the human prompt whose turn it belongs to, which makes the absence *mechanical*: if the
+failing verification, the edits that answered it, and the passing verification all share one
+prompt id, no new instruction arrived between them, because there is nowhere for one to have
+gone.
+
+**The first version found eight loops. It was wrong.** The verification pattern matched
+anywhere in the shell string, so a heredoc writing a test file counted as running one.
+Evidence that looks like evidence and is not is worse than none — a reviewer who reads it
+carefully trusts everything else less. Tightened to commands that actually invoke the
+harness, **eight loops became one.**
 
 ### Why, and it is the finding
 
-`npm run verify` exits non-zero when it fails. 127 verification invocations are in the
-log. **121 of them — 95% — were piped through `tail` or `grep`**, because that is how
-you read the output of a command that prints four hundred lines. A shell pipeline exits
-with the status of its *last* command, so every one of those reported success.
+`npm run verify` exits non-zero when it fails. 127 verification invocations are in the log.
+**121 of them — 95% — were piped through `tail` or `grep`**, because that is how you read
+the output of a command that prints four hundred lines. A shell pipeline exits with the
+status of its *last* command, so every one of those reported success.
 
-The event log recorded 2 failures out of 127. Not because the suite was green 125 times
-out of 127, but because the exit code was being discarded by the habit of trimming
-output in order to read it.
+The log recorded 2 failures out of 127 — not because the suite was green 125 times, but
+because the exit code was being discarded by the habit of trimming output in order to read
+it.
 
-**A record that can be silenced by how a command was invoked is not back pressure.** This
-is the component whose entire purpose is machine-readable feedback, and it had been
-blind for twelve days, in a project whose central argument is that agents need feedback
-they cannot talk their way around.
+**A record that can be silenced by how a command was invoked is not back pressure.** This is
+the component whose entire purpose is machine-readable feedback, and it had been blind for
+twelve days, in a project whose central argument is that agents need feedback they cannot
+talk their way around.
 
-The two available fixes were "remember not to pipe" and "make the record not depend on
-it". This repository's own rule decides that: *if you find yourself writing "the agent
-should remember to…", make it impossible instead.* The verify chain now writes its own
-outcome to `.verbo/verify.jsonl` — exit status, criteria verified, session — from inside
-`npm run verify`, where nothing downstream can hide it.
+The repository's own rule decides the fix: *if you find yourself writing "the agent should
+remember to…", make it impossible instead.* The verify chain now writes its own outcome to
+`.verbo/verify.jsonl` from inside `npm run verify`, where nothing downstream can hide it.
 
-The honest state of the evidence, today: one loop provable from the event log with the
-prompt-id argument, and a recorder that makes every subsequent one provable without it.
-Reporting one loop with a mechanical proof is worth more than four with a narrative, and
+One loop provable with a mechanical argument is worth more than four with a narrative, and
 the reason there is only one is now a fixed defect rather than an unexamined number.
 
 ---
 
-## 13 Sep — The evidence was not in the repository, and committing it would have leaked a key
+## 13 Sep — The evidence was not in the repository, and shipping it would have leaked a key
 
-Working through the rubric category by category, Reproducibility turned up something
-worse than a low score.
+Working through the submission requirements, reproducibility turned up something worse than
+a low score. `.verbo/events.jsonl` and the nightly evaluation results were in `.gitignore` —
+and those two files are the parallelisation and autonomous-loop evidence the submission
+requires. Every tool that reads them would have run on a reviewer's clone against nothing.
+**Evidence that exists only on the machine that produced it is not evidence; it is a claim
+with a script attached.**
 
-`.verbo/events.jsonl` was in `.gitignore`. So were the nightly evaluation results. Those
-two files are the **Parallelization Evidence** and the **Autonomous Loop Evidence** the
-submission requires, and every tool that reads them — the swimlanes, the delegation
-counts, the loop reconstruction — would have run on a judge's clone against nothing at
-all. Evidence that exists only on the machine that produced it is not evidence; it is a
-claim with a script attached.
+Then the second thing: **58 lines of that log contained a live API key in plaintext.** The
+evidence layer records every command, and a command is exactly where a key ends up. The leak
+was not hypothetical — it was scheduled, two files away from being pushed, in the one
+artifact the submission is required to include.
 
-So: un-ignore them. And then the second thing.
+The available fixes were "redact before publishing" and "never write it down". A redaction
+step at publish time is a step somebody has to remember, and this project's argument is that
+the things somebody has to remember become defects. The stripping happens in `log-event.sh`
+**at write time**, where the raw value never reaches the file — key-shaped strings for
+Anthropic, GitHub and AWS. The existing 3,954 lines were redacted in place and re-validated.
 
-**58 lines of that log contained a live API key in plaintext.** The evidence layer
-records every command, and a command is exactly where a key ends up — `ANTHROPIC_API_KEY=
-sk-ant-… npm run dev` is the shape of the fix for a server that needs one, and I had
-typed it a dozen times today. The rules say it plainly: *never commit API keys, tokens,
-passwords, or other secrets to source control.* The leak was not hypothetical. It was
-scheduled: two files away from being pushed, in the one artifact the submission is
-required to include.
-
-The two fixes available were "redact before publishing" and "never write it down". A
-redaction step that runs at publish time is a step somebody has to remember, and this
-project's entire argument is that the things somebody has to remember become defects. So
-the stripping happens in `log-event.sh`, at write time, where the raw value never reaches
-the file — key-shaped strings for Anthropic, GitHub and AWS, one `sed` before the payload
-is parsed. The existing 3,954 lines were redacted in place and re-validated as JSON.
-
-Two things are worth keeping from this.
-
-The first is that the failure was *structural and invisible*. Nothing was wrong with the
-hook, the log, or the gitignore taken one at a time. The defect only existed at the
-intersection of three correct decisions — record everything, keep the big file out of
-git, and ship the evidence — and it would have surfaced as a leaked credential in a
-public repository rather than as a failing test.
-
-The second is what it says about the shape of this whole project. The harness is very
-good at catching what it was pointed at. Every real defect found today — the storm at
-noon, the fog that was never fog, the water that could not be framed, the metric that had
-been recalibrated twice, the telemetry blind to 95% of its own verifications, and this —
-was found by *pointing it somewhere new*. The layers do not find what nobody thought to
-check. They make it cheap to check once you have thought of it, which is a different and
-more honest claim than the one I would have made this morning.
+**The failure was structural and invisible.** Nothing was wrong with the hook, the log, or
+the gitignore taken one at a time. The defect existed only at the intersection of three
+correct decisions — record everything, keep the big file out of git, ship the evidence — and
+it would have surfaced as a leaked credential in a public repository rather than as a
+failing test.
 
 ---
 
-## 13 Sep — I checked my own citation and it did not say what I said it said
+<a id="f5"></a>
 
-The most load-bearing sentence in this project is R-2. Every argument for the
-architecture runs through it: L2 decides correctness, L3 is advisory, `inject()` will not
-compile with a verdict that failed the authoritative layers — all of it because external
-visual scoring was supposed to have been *measured* as insufficient.
+## 13 Sep — A citation that did not support the claim built on it
 
-R-2 claimed three numbers from WorldCoder-Bench: a Kendall τb of −0.02 over 1,434 pairs,
-an agentic visual evaluator costing ~400× more, and that evaluator passing 45.6% of
-severely defective outputs.
+The most load-bearing sentence in this project is R-2. Every argument for the architecture
+runs through it: L2 decides correctness, L3 is advisory, `inject()` will not compile with a
+verdict that failed the authoritative layers — all of it because external visual scoring was
+supposed to have been *measured* as insufficient.
 
-I fetched the paper. **None of the three is in it.** Not in the abstract, not in the full
-text. The benchmark is real (arXiv 2606.01869), and R-1's figures check out exactly —
-27.8% verification coverage on WorldCoder-Core, 19.9% on WorldCoder-Robust. R-2's did
-not exist.
+R-2 claimed three figures from WorldCoder-Bench: a Kendall τb of −0.02 over 1,434 pairs, an
+agentic visual evaluator costing ~400× more, and that evaluator passing 45.6% of severely
+defective outputs.
 
-This is the worst class of defect a submission can carry. A reviewer who checks one
-citation and finds it unsupported does not check the second; they discount everything.
-And it would have been reasonable of them: a sourced constraint is a promise that
-somebody looked, and I had put a citation next to a number I had not verified.
+The paper was fetched. **None of the three is in it.** The benchmark is real and R-1's
+figures check out exactly — 27.8% and 19.9%. R-2's did not exist.
 
-**The correction makes the argument better, which is the part worth sitting with.** What
-the paper does say is:
+This is the worst class of defect a submission can carry. A reviewer who checks one citation
+and finds it unsupported does not check the second; they discount everything. And they would
+be right to: **a sourced constraint is a promise that somebody looked.**
 
-> failures dominated by state-schema drift and broken interaction chains rather than
-> missing scene elements
+**The correction makes the argument better, which is the part worth sitting with.** What the
+paper does say is that failures are dominated by state-schema drift rather than missing scene
+elements. The fabricated version argued *the judge is unreliable*. The real finding argues
+something sharper: *the failures are not where a picture can show them.* And the paper's own
+protocol verifies hidden runtime state with mutation-hardened contracts — the same design
+this project arrived at independently, which is convergence with the benchmark's method
+rather than an inference from a statistic.
 
-That is a stronger reason to demote the visual critic than the one I invented. The
-fabricated version argued *the judge is unreliable*. The real finding argues something
-sharper: **the failures are not where a picture can show them.** Missing scene elements
-are exactly what looking is good at, and the measurement says that is not the common
-failure. The common failure is state that has drifted out of agreement with what the
-controls believe, and it is invisible to a critic by construction — a world can look
-perfectly like rain while its hidden state says nothing is falling.
+R-2 was rewritten in the SPEC, along with D-1's rationale, the README, `SYSTEM.md` and four
+source files whose docstrings repeated the numbers. Nothing in the code changed: the
+architecture was right for a reason that had been stated wrongly.
 
-And the paper's own protocol, StateProbe, verifies hidden runtime state with
-*mutation-hardened contracts*. That is the same design this project arrived at for L2 and
-`hardenContract`, which I had been presenting as an inference from the numbers rather
-than as convergence with the benchmark's own method. The honest version is the better
-story and I had papered over it with a statistic.
-
-R-2 is rewritten in the SPEC, and with it D-1's rationale, the README, SYSTEM.md and the
-four source files whose docstrings repeated the numbers. Nothing in the code changed:
-the architecture was right for a reason I had stated wrongly.
-
-The lesson is narrow and expensive: **a number with a citation next to it is not a
-sourced number.** The harness in this project exists because generated work asserts
-things confidently; it never occurred to me to point it at my own prose.
+**The lesson is narrow and expensive: a number with a citation next to it is not a sourced
+number.** This harness exists because generated work asserts things confidently. It had never
+been pointed at the project's own prose.
 
 ---
 
-## 13 Sep — Asked why Product Quality was not full marks, and two of three reasons were excuses
+## 13 Sep — Opening the lock, deliberately and on the record
 
-I had scored the product 17/20 and attributed the gap to two blocked things: no live URL
-until the repository is pushed, and a headline capability that needs API credit to
-demonstrate. Both are true. The third point I had written off as "remaining product gaps"
-without going to look, which is the difference between an assessment and an excuse.
+A second surface shipped: `verbo:figure` takes a rig of typed shapes and a pose function of
+time, and the function is *written* rather than chosen — spliced into the generated module as
+source and parsed by L0 like anything else. It answers the question the catalogue could not:
+a request for a person walking a dog previously met "cannot express", which is an honest
+refusal and also the product admitting it is a lighting desk.
 
-So I went to look, with a stress pass rather than a demo pass. Fourteen consecutive verbs:
-all accepted, no page errors. Three simultaneous: one runs, two return `busy`. Empty
-input, six hundred characters, emoji, `<script>alert(1)</script>`, `DROP TABLE worlds`:
-all refused with a reason a person can read. Three viewports down to 390×844: no
-horizontal overflow, nothing off-screen. The product is sturdier than I had assumed.
+That refusal had a second cost: **a closed catalogue left the harness guarding code that was
+never dangerous.** Composing validated parameters into a template cannot go interestingly
+wrong, so four oracles, a mutation hardener and a capability-revoking worker were defending
+against a threat the architecture had already removed.
 
-What the pass did find was two things worth fixing.
+**Why this is not what D-2 rejects.** D-2 rules out free-form Three.js generation because the
+state of the art is measured at 28% on that task. A rig cannot import three, reach the scene
+graph, build a material, or name a geometry outside the allowed set; what it writes is
+arithmetic returning numbers, and every number is clamped on the way into state.
 
-**The floor was three rigs.** A judge without a key types "a car" and gets a refusal, and
-concludes the freeform surface is three canned tricks. The model writing rigs is the
-point of that surface, but the floor is what most people will see, so the floor is the
-product. There are five now — a car with lit lamps and tail lights, and a tree, which had
-to sway because a rig that does not move is rejected by its own contract and rightly.
+`docs/SPEC.md` is protected by a `PreToolUse` hook with exit code 2, and the hatch is
+`VERBO_SPEC_UNLOCK=1` — explicit, human, and logged. It was used, and this is that log. What
+went in: §4.5 describing both surfaces and what each may reach; D-10 recording the decision,
+its rejected alternatives and its cost; and AC-21/AC-22, because a capability with no
+acceptance criterion is a capability the gate cannot see.
 
-Adding the car found a framing bug that the dog had hidden. `focusPoint()` aimed at the
-rig's *first part*, which is a torso at eye height for a walker and a chassis three units
-off the ground for a car: the camera came in to 88 units and pointed at the pavement,
-with a tower filling the frame. It is a centroid now, which is the same number for a
-walker and does not have to know what it is looking at. And the car's first drive ran 150
-units either way from an origin already 65 out — straight into the building ring at 150,
-with the camera following it in.
+**The lock exists so an agent cannot rewrite the requirements to make its own implementation
+look compliant.** Opening it to record a decision is the hatch working; opening it to delete
+an AC that could not be passed would be the failure it was built to prevent. The difference
+is not in the mechanism, it is in what is written — which is why the entry names its
+alternatives and its cost rather than only its rationale.
 
-**And the log sits where the subject does.** The verification trace runs across the
-middle-bottom of the frame, which is exactly where a figure walks the near plaza. For the
-ten seconds after a verb they compete, and opaque text beats a dark rig every time. It
-recedes to a third opacity once the cycle has nothing left to report, and comes straight
-back on hover. Nothing is lost: the panel top-right keeps the full record.
-
-That last one took two attempts, and the first one failed for a reason worth writing
-down: I settled the log at `panel.end()`, and the final `done in 0.1s` line came *after*
-it — and `line()` wakes the log back up. The fade was correct and unreachable.
+**The validator caught its own author.** First run, all three candidates, before anything
+reached the world: `FigureValidationError: duplicate part id 'head'`. The pair rig is a person
+and a dog, and both have a head — a bug written into the library ten minutes after writing the
+validator that refuses it, which is the only kind of evidence worth having that the validator
+works.
 
 ---
 
-## 13 Sep — An effect I removed, and an attack corpus that corrected me on its first run
+## 13 Sep — What actually made the render look cheap
 
-Asked to make the project remarkable rather than merely compliant, I went looking in two
-places: the picture, and the claim.
+Three review passes converged on the same shape of finding: the defects were never in the
+parts of the renderer that can be reasoned about.
 
-### The picture: anamorphic streaks, tried three times and removed
+**Silhouette, texture scale, camera height.** A building was one `BoxGeometry` scaled three
+ways — precisely the shape the word "blocky" names, and no texture or rim light repairs a
+silhouette. Buildings became two to five volumes by archetype, with tiers expressed as
+*fractions* of height so `skyline-shift` carries them. The window was scaled to the building,
+because a cube's UVs run 0–1 across a face whatever it measures: near towers wore windows three
+times the size of far ones. In a real city the window is the constant, so the facade is mapped
+in world units. And the nearest buildings started at 24 units against a viewpoint at 35, so the
+ones closest to the eye were the ones it looked *down* on — **standing in a city rather than
+hovering over one is mostly a question of what is taller than you.**
 
-`three/addons/tsl/display/` ships SSR, GTAO, motion blur, and anamorphic lens streaks —
-the horizontal smear a wide lens puts on a point of light, and the single most
-recognisable signature of a photographed night city. This world is several thousand
-points of light against near-black, which is exactly the input the effect is for.
+**No shadows, one material, and a fill light half as bright as the key.** `castShadow` appeared
+nowhere: a bright moon over eighteen hundred volumes and not one threw anything. All of them
+shared one colour and one roughness — not a decision anybody made, but what you get when a city
+is a single `InstancedMesh`. And the key was 1.15 against an ambient of 0.5, which is why the
+shadows that had just been switched on could not be seen: **a shadow is the absence of the
+key**, and if the key is only twice the fill there is nowhere to darken to.
 
-Three settings, three different failures:
+These are one mistake with three faces: **the image had been tuned without questioning the
+lighting model underneath it.** Bloom, vignette, grain, tone curve, facade texture, streets —
+every one is a layer applied *to* a render, and post-processing a flat scene produces a graded
+flat scene.
 
-- **threshold 1.55** — correct, and invisible. A faint ring on the moon and nothing
-  else, which is not worth a pass.
-- **threshold 0.92** — every lit window streaked and "blade runner" came back as a purple
-  wash across the entire frame.
-- **threshold 1.42** — the base scene looked right and the same verb washed out again.
+**The city had no plan, and a part was not the size it said it was.** Buildings were scattered
+through an annulus at random angles — boxes thrown at a disc, which caused four symptoms at
+once: no streets, because there were no gaps for streets to be; nothing well placed, because
+nothing was placed; rigs landing inside towers; trees with nowhere to stand. Separately, the
+radius of a capsule, cylinder or cone was `max(x, z)`, so a torso authored `[2.6, 3.4, 1.7]`
+became a sausage of radius 2.6 — and at that radius **it swallowed its own arms**, which the
+pose had placed 5.5 units off the centre line. Every rig had been built against a renderer that
+quietly disagreed with the prompt about what `size` meant.
 
-That third result is the disqualifying one, and not because of the tuning. **Fog raises
-the luminance of everything, and the threshold is absolute** — so the correct setting
-depends on which verbs happen to be in the world. In a product whose entire premise is
-that the world changes on request, that is not a setting; it is a defect waiting for a
-demo. Removed.
+### The vocabulary was the reason figures were shapeless
 
-I nearly kept it for being cheap and then nearly blamed it for a cost it was not causing.
-Frame rate drops from 120 to 73 with weather in the world — and it does that with the
-pass removed too. Nine thousand rain particles and a fog volume are the expense. Both
-mistakes are the same mistake: attributing a number to the thing I happened to be
-looking at.
+In low-poly work **the silhouette is the object.** The shape vocabulary was box, sphere,
+capsule, cylinder — every one a blob, none with a direction. Asked for an aeroplane, the model
+could only answer with boxes; it had been handed an alphabet with no consonants. Four
+directional shapes — `cone`, `wedge`, `pyramid`, `torus` — and the same request came back as a
+capsule fuselage, a cone nose and five wedges.
 
-### The claim: publishing what the harness does *not* stop
+The first `wedge` was a `CylinderGeometry` rotated and then scaled, which stretched the
+*triangle's radius* rather than the prism's length, because after the rotation the axis being
+scaled was no longer the axis intended. It did not throw. It produced thin white spars, and the
+first thing to notice was L3: *"the only non-building geometry is a set of thin white spars"*.
 
-The more interesting find was that the project's sharpest evidence was invisible. Twelve
-modules were written to get past L0 and twelve passed; that is the origin of the whole
-design — the lint reads names, `globalThis['fe'+'tch']` has no name to read, so the
-enforced boundary moved into the worker, which deletes the capability instead of
-objecting to it. All of that lived in a test file nobody runs by hand.
+### A threshold that had moved four times
 
-`npm run attack` runs the corpus and prints which layer stops what. The corpus moved to
-`src/harness/attacks.ts` so the tool and the suite iterate the same data and cannot
-disagree about what is being claimed.
+`"a taller denser city"` failed after each render change, and its threshold had already been
+loosened twice. The metric counted dark pixels — an *area* proxy — and setbacks add mass low and
+take it away high. **Three recalibrations of one threshold is a metric telling you it is
+measuring the renderer rather than the verb.** Changed to skyline *height*, it then fell to
+1.35× while area doubled to 2.30×, because density on a street grid fills blocks rather than
+scattering towers. **Chasing whichever number is highest is how a test becomes a formality.**
+The verb says two things, so it gets two assertions, and neither half can be satisfied by the
+other.
 
-**And they disagreed immediately.** I wrote two new attacks — a fetch assembled from an
-array, and the same reach deferred through `setTimeout` — and labelled both as escaping.
-The first run reported a mismatch: L0 catches them. The name is assembled at runtime and
-unreadable, but the *object* is spelled `globalThis`, which is very readable. The lint is
-better than I assumed at the one thing it does check, and I had been about to publish a
-weaker claim about my own system than the truth.
 
-Ten refused by the lint, two left to the worker. Saying which two is the point: a harness
-claiming twelve of twelve would be claiming its lint is a sandbox, and the first person to
-try would find out it is not.
-
----
-
-## 13 Sep — "El piso de la ciudad no se ve"
-
-Sent a screenshot with one sentence: the city's floor isn't there. And then the harder
-question — *do you think this is an app that wins? Because I don't.*
-
-Both were right, and the first explains part of the second.
-
-I had fixed the camera days earlier so the horizon fell inside the frame, and never
-looked at what that exposed. The ground is a near-black plane with nothing on it, so the
-towers ran down into a brown haze and stopped. The skyline read as pasted onto a dark
-background rather than as standing anywhere — and that is the first thing anyone sees,
-several seconds before a word of the interface is read.
-
-A night city from above is mostly one thing: **dark blocks with lit lines between them.**
-There are streets now — an additive grid over the ground, avenues brighter and wider than
-the side streets, irregular because evenly spaced blocks read as graph paper. It is a
-separate mesh rather than an emissive map, because the ground's emissive channel belongs
-to the time of day: `daylight` drives it and `ground-tint` blends from the authored
-colour (AC-12), and a map there would have put the streets under two owners.
-
-Three passes to get it right, each failing in a way I should have predicted:
-
-- **4000-unit plane, tiled 6×.** A grid that runs to the far plane converges, at grazing
-  angles, into a single bright band straight across the skyline. Mipmaps and anisotropy
-  soften that and cannot remove it, because the geometry really is converging.
-- **1800-unit plane.** The band became the plane's own rim: additive blending draws a
-  hard edge as a bright line, which is worse than what it replaced.
-- **Falloff painted into the texture** — which is also why `repeat` is 1 and the block
-  spacing is stated in world units. First radius fell off by the middle of the texture
-  and the streets nearly vanished.
-
-The streets go out with the windows and the lamps, because lit roads at noon is the same
-defect as lamps at noon written in a third place.
-
-### On the question
-
-The engineering is strong and the first impression was not, and only one of those is
-what a judge sees in the first three seconds. I had been scoring the product against a
-rubric and the owner was scoring it against *looking at it*, which is the more honest
-test and the one I kept deferring. Every real visual defect in this project has been
-found the same way: by someone looking at a frame, not by reading the code that made it.
-
----
-
-## 13 Sep — The model designed a hot air balloon, and it took 75 seconds
-
-The credit came back, so the one capability that had never run live finally could: the
-model writing a rig for something nobody wrote by hand.
-
-**"un globo aerostático sobrevolando la plaza"** — fourteen parts. An envelope, a crown,
-a skirt, two painted bands, a basket, and a burner flame flickering on two frequencies:
-
-```js
-let dx = Math.sin(t*0.23)*9 + Math.sin(t*0.071)*4.5;   // drift
-let tilt = Math.sin(t*0.62+1.2)*0.05;                   // the envelope leaning into it
-let fl = Math.sin(t*11.0)*0.22 + Math.sin(t*17.3)*0.14; // the flame
-```
-
-L3 judged it in Spanish, because the request was in Spanish, and approved it. The
-screenshot is a red balloon with a white zigzag band hanging between two skyscrapers.
-
-That is the answer to *"entonces la magia no existe realmente"*, and it cost 75 seconds,
-against a 40-second budget. So the rest of the session was spent on that, and it turned
-into three separate lessons.
-
-### Effort is not the lever, and reaching for it costs the thing that matters
-
-Same request at each setting: **high 58 s / 14 parts, medium 35 s / 13, low 16 s / 10.**
-Low is the obvious fix and it is the wrong one — its balloon is a plain sphere with a
-basket. The extra effort does not buy a better-*conceived* figure, it buys painted bands,
-and painted bands are exactly what this path exists to be good at. Trading them for
-seconds is paying in the only currency the feature has.
-
-### The author did not need to be second
-
-The two model calls do not depend on each other. One decides which catalogue primitives
-to compose; the other designs a rig. They ran in sequence for no reason other than that
-I wrote them in that order, which put both on the critical path.
-
-They run together now, and the speculation is free to make: the offline keyword resolver
-runs locally in microseconds and already knows whether the catalogue will leave something
-unsaid. If it will not, the author is never started and no call is wasted. **The
-deterministic floor, used as a predictor for the expensive path.** 75 s became 45 s.
-
-### And 45 s was still the wrong number, because I was measuring the wrong window
-
-R-8 says **"≤ 40 s from utterance to injection"**. L3 runs *after* injection — it is
-advisory and never blocks, which is the whole of D-1. I had been charging an advisory
-model call to a budget written for the moment the world changes.
-
-By the time the critic speaks, the balloon has been drifting for five seconds.
-
-Both are reported now. Utterance to injection, which is what the constraint names and
-what AC-18 asserts; and the whole cycle, which is what the log prints, because someone
-watching the trace finish is waiting for the total.
-
-```
-  un globo aerostático…   injected 36.6s   cycle 42.2s
-  una noche de tormenta   injected 10.5s   cycle 16.2s
-  make it rain            injected  8.9s   cycle 13.2s
-```
-
-The first measurement I tried put injection at 0.1 s, because the cycle's own clock
-starts *after* the resolver has answered. Three different windows, and only one of them
-is the one the constraint is about.
-
----
-
-## 13 Sep — "Tampoco puedo navegar por la ciudad, es 0 usable"
-
-Asked for a plane. Got a heap of white boxes filling the entire frame with the city
-nowhere behind it, and then the sentence that mattered more than the bug: *I can't even
-navigate the city.*
-
-Three defects, and the third is the one I should have found on day one.
-
-### The camera was on rails, and I had a reason for it
-
-A slow automatic orbit, no controls. The reasoning is in the source and it is not wrong:
-motion in the base scene is what makes an injected change read as an addition to a living
-world rather than a page that swapped itself out. That is true, and it was not the whole
-truth. **A 3D world you cannot look around is not a world** — and the first person who
-wanted to inspect something the agent had just built for them could not.
-
-Drag orbits, the wheel pushes in and out, and after four seconds of stillness the offsets
-ease back to zero and the automatic shot resumes. Nothing was taken away: the idle path
-is byte-identical, which is also why the frame-budget and silhouette tests still measure
-what they were written to measure.
-
-I had spent days tuning that orbit — its height, its look-at, its dolly — and never once
-asked whether someone might want to point it somewhere themselves. The thing I was most
-careful about was the thing I had least questioned.
-
-### The camera went to a fixed distance whatever it was looking at
-
-`focusPoint()` returned a point, so the camera came in to 88 units for a dog and 88 units
-for an aeroplane the model had built with forty-unit parts, which the schema permits. At
-88 units that is the whole frame.
-
-It returns a radius now, and the distance comes from the subject: `radius / tan(halfFov)`
-is where a sphere of that size exactly fills the frame, and 3.2× that leaves it about a
-third of the height with the city still behind it. Which is the shot — a figure alone
-against black is not why anyone asked for a figure in a city.
-
-That is the third time this function has been wrong in the same way. It aimed at the
-first part (a torso at eye height for a walker, a chassis three units up for a car), then
-at the centroid with a fixed lift, and now at the centroid with a distance derived from
-the size. Each fix was correct for the rig in front of me and silent about the next one.
-**A camera that frames one subject is not a camera, it is a shot.**
-
-### And the plane still is not a good plane
-
-Thirteen parts, and it reads as a plane only because it is small and moving. That is the
-model's design at medium effort and it is the honest state of the freeform surface: it
-will build you something recognisable more often than not, and "more often than not" is
-the claim, not "always". L3 said as much — *the small white plane visible against the
-moonlit sky carries the request* — and then suggested it could be larger, which is
-advice, not a veto, which is the point of L3.
-
-What made the difference between an unusable screenshot and a usable one was not the rig.
-It was the framing and the ability to look somewhere else.
-
----
-
-## 13 Sep — Physics, a camera that lets go, and a suggestion that got worse as the catalogue grew
-
-Three complaints in one message, and the third was the one I would never have found.
-
-### "Se queda toda la escena solo en el avión"
-
-The camera locked on to a rig the moment one existed and never let go. Ask for an
-aeroplane and the city was gone — permanently, with no way back to it.
-
-That is not a camera decision, it is a camera *bug*: **framing something is an act with a
-beginning and an end**, and this one had no end. The wide shot is the default now and
-focus is a state you enter and leave. A new rig takes the frame for seven seconds because
-the thing you just asked for is worth looking at, then gives it back. Tab cycles the rigs
-by hand, Escape returns to the whole city.
-
-### "No hay físicas"
+## 13 Sep — Physics with an invariant, and a budget measured on the wrong window
 
 `debris` is the first primitive whose correctness is a *law* rather than a preference.
-Everything else is judged against what someone decided it should do — rain falls at the
-speed the catalogue named. This one integrates: gravity, velocity, restitution, and a
-ground that takes energy out of every bounce.
+Everything else is judged against what someone decided it should do. This one integrates:
+gravity, velocity, restitution, and a ground that takes energy out of every bounce.
 
 Which gives L2 something no other primitive can offer. **Total mechanical energy falls
-monotonically**, because a semi-implicit integrator with restitution below one is
-dissipative. That invariant is invisible in a screenshot: a world that *gains* energy
-every bounce does not look broken, it looks livelier, right up until the bodies leave the
-frame. It is exactly the failure WorldCoder-Bench reports as dominant — hidden state
-drifting out of agreement with a scene that still looks plausible.
+monotonically**, because a semi-implicit integrator with restitution below one is dissipative.
+That invariant is invisible in a screenshot: a world that *gains* energy every bounce does not
+look broken, it looks livelier, right up until the bodies leave the frame. It is exactly the
+failure the benchmark reports as dominant — hidden state drifting out of agreement with a scene
+that still looks plausible.
 
-Verified against the bug it exists to catch, not assumed. Switching to explicit Euler —
-reading velocity before the acceleration is applied rather than after, the classic
-mistake — renders beautifully and fails by name:
+Verified against the bug it exists to catch, not assumed. Switching to explicit Euler — the
+classic mistake — renders beautifully and fails by name: `energy rose on 39 frames, worst by
+13.343`. The mirror is asserted too, because a pile frozen at its starting height also never
+gains energy and would pass.
 
-```
-energy rose on 39 frames, worst by 13.343: expected 39 to be +0
-```
+### The budget was being charged for work it does not name
 
-The mirror is asserted too, because a pile frozen at its starting height also never gains
-energy and would pass: it must *lose* ninety percent of it, come fully to rest, keep every
-body above the floor at the bounciest setting, and survive a frame that took a whole
-second — which is a browser tab coming back from the background, and unclamped it
-integrates a body straight through the ground.
+R-8 says **≤ 40 s from utterance to injection**. L3 runs *after* injection — it is advisory and
+never blocks — and its latency had been charged to a budget written for the moment the world
+changes. By the time the critic speaks, the subject has been moving for five seconds.
 
-### And the one nobody asked about
+Two further findings came out of the same measurement. The two model calls did not depend on
+each other and had been running in sequence for no reason beyond authoring order; run together,
+with the offline keyword resolver used as a free local predictor of whether the rig author is
+needed at all, **75 s became 45 s**. And the first measurement attempted put injection at 0.1 s,
+because the cycle's own clock starts *after* the resolver has answered. Three different windows,
+and only one of them is the one the constraint is about.
 
-Adding `debris` broke a test I had not thought about: `"give the world a talking dragon"`
-started being answered with *"the closest thing the catalogue can do is debris"*.
+### A suggestion that degraded as the vocabulary grew
 
-**"talking" and "falling" differ in two characters out of seven.** Score 0.71, over a bar
-of 0.7. Edit distance is inflated by shared *suffixes*, and a suggestion built on a rhyme
-is nonsense — which the function's own comment already said: *a wrong suggestion is worse
-than none.*
+Adding `debris` broke an unrelated test: a request for a talking dragon began being answered
+with *"the closest thing the catalogue can do is debris"*. **"talking" and "falling" differ in
+two characters out of seven** — score 0.71, over a bar of 0.7. Edit distance is inflated by
+shared suffixes, and a suggestion built on a rhyme is nonsense.
 
-The first letter has to agree now. A typo almost never changes it; a coincidental rhyme
-almost always does. `raning` still finds rain and `fogg` still finds fog.
-
-What is worth keeping is not the fix. It is that **the quality of that suggestion degraded
-as the vocabulary grew, and nothing was watching it.** More keywords means more chances at
-a spurious near-match, and the only reason it surfaced is that an unrelated test happened
-to use a word that rhymed with a new one. That is luck, and luck is not a verification
-strategy.
+What is worth keeping is not the fix. It is that **the quality of that suggestion degraded as
+the vocabulary grew, and nothing was watching it.** The only reason it surfaced is that an
+unrelated test happened to use a word rhyming with a new one. That is luck, and luck is not a
+verification strategy.
 
 ---
 
-## 13 Sep — "¿Por qué todo se ve tan irreal?"
+## 13 Sep — An effect removed, and an attack corpus that corrected its author
 
-The most useful question anyone has asked about this project, because it has an answer
-rather than a taste. I went and checked instead of adjusting numbers, and found three
-things, none of which was the one I had been fiddling with.
+`three/addons/tsl/display/` ships anamorphic lens streaks — the single most recognisable
+signature of a photographed night city, and this world is several thousand points of light
+against near-black. Three settings, three failures: correct and invisible; every window
+streaked into a purple wash; and a base scene that looked right while the same verb washed out
+again.
 
-**Nothing cast a shadow.** `castShadow` appeared nowhere in the renderer. A bright moon
-over eighteen hundred volumes and not one of them threw anything: every building met the
-ground at a hard edge with no contact darkening, and no tower darkened its neighbour. An
-eye reads a missing shadow before it reads anything else, and no amount of grading covers
-for it. I had spent days on bloom thresholds and fog ranges without once asking why the
-city had no shadows.
+That third result is disqualifying, and not because of tuning. **Fog raises the luminance of
+everything and the threshold is absolute** — so the correct setting depends on which verbs
+happen to be in the world. In a product whose premise is that the world changes on request,
+that is not a setting; it is a defect waiting for a demonstration. Removed.
 
-**Eighteen hundred volumes shared one material.** One colour, one roughness — which is
-not a decision anybody made, it is what you get when a city is a single `InstancedMesh`
-and nothing says otherwise. Real blocks are concrete beside glass beside brick, and the
-difference between them is most of what stops a skyline reading as one extruded object.
-Tinted per *building* now, not per volume: a tower whose setback is a different colour
-from its own shaft is two buildings stacked.
+It was nearly kept for being cheap, and then nearly blamed for a cost it was not causing: frame
+rate drops from 120 to 73 with weather in the world, and does so with the pass removed too.
+Both mistakes are the same mistake — **attributing a number to the thing you happen to be
+looking at.**
 
-**And the light was lighting a room, not a night.** Key 1.15 against an ambient of 0.5 is
-a ratio of a little over two to one. That is why the city looked flat — and it is why the
-shadows I had just switched on could not be seen, because *a shadow is the absence of the
-key*, and if the key is only twice the fill there is nowhere for it to darken to.
-Moonlight is a hard source with a very dark sky behind it. 2.15 against 0.2 is about
-eleven to one, and the faces separated immediately.
-
-The three are one mistake with three faces: **I had been tuning the image and never
-questioned the lighting model underneath it.** Bloom, vignette, grain, tone curve, a
-facade texture, streets — every one of those is a layer applied *to* a render, and the
-render itself had no shadows, no material variety and a fill light half as bright as its
-key. Post-processing a flat scene produces a graded flat scene.
-
-VSM rather than PCF, because the moon is a large soft source and this city is mostly long
-straight edges, where a fixed PCF kernel gives a stair-stepped line. `normalBias` at 1.4
-took looking rather than reasoning: without it the facades acne, because a surface at a
-grazing angle to the light samples its own depth, and under a low moon almost every face
-in a city of flat slabs is at a grazing angle.
-
-120 fps with the shadow pass in, which was the thing I expected to have to fight and did
-not: the city is one instanced draw, so shadowing it is one more.
+**The corpus corrected its author on its first run.** Two new attacks were written and labelled
+as escaping; the run reported a mismatch, because L0 catches them. The name is assembled at
+runtime and unreadable, but the *object* is spelled `globalThis`, which is very readable. The
+lint is better than assumed at the one thing it does check, and a weaker claim about the system
+than the truth was about to be published. `npm run attack` now prints which layer stops what —
+ten refused by the lint, two left to the worker. **Saying which two is the point:** a harness
+claiming twelve of twelve would be claiming its lint is a sandbox, and the first person to try
+would find out it is not.
 
 ---
 
-## 13 Sep — "Todo lo que crea se ve sin forma" — and the vocabulary was the reason
+## 13 Sep — The facade stopped being an image
 
-Asked why everything the model builds is shapeless. The research answer is blunt and
-useful: in low-poly work **the silhouette is the object.** Nobody at this distance sees a
-surface; they see an outline, and an outline is made of shapes that point somewhere.
+The building facade was a 512×1024 canvas drawn once and tiled across every building. Three
+costs a procedural one does not pay: **it repeats**, and at this density the eye finds the seam;
+**it is a fixed resolution**, so close to the camera a window is four blurry texels, and the mip
+chain that stops it shimmering is the same chain that smears it; and **it is one facade**, so a
+curtain-wall tower and a pre-war block were the same image at different tints.
 
-The vocabulary was box, sphere, capsule, cylinder. **Every one of those is a blob.** None
-has a direction. Asked for an aeroplane, the model could only answer with boxes — and a
-pile of boxes is a pile of boxes however carefully it is arranged. The failure was not
-the model's taste, it was that I had handed it an alphabet with no consonants.
+The windows are arithmetic over world position now. The grid is in world units, so a window is
+the same size on every building whatever its face measures; lit cells come from a hash of the
+cell's own coordinates, so the pattern never repeats and never needs to be stored; and the
+storey *pitch* is hashed per parcel, so a tower with tall floors stands beside one with short
+ones. `mx_cell_noise_float` is three.js's own cell hash — deterministic and stable across both
+backends, which matters because the WebGL2 fallback compiles the same graph.
 
-Four directional shapes added: `cone` for a nose or a spire, `wedge` for a wing or a
-roof, `pyramid` for a crown, `torus` for a wheel. The same request now comes back as a
-capsule fuselage, **a cone nose and five wedges** — wings, fin, stabilisers. A sailboat
-comes back with five wedges of sail and a torus.
-
-The system prompt changed with it, and the part that did the work is not the list of
-shapes but the instruction before it: *decide what the thing looks like as a black shape
-against the sky, then build that.* Plus a table of what each shape is for and the
-proportions of a few subjects, because "about 40 units across the wings" is a fact the
-model cannot get from anywhere else.
-
-### The wedge I derived was wrong, and it rendered
-
-First implementation was `CylinderGeometry` with three radial segments — which is a
-triangular prism, and correct — rotated into place and then scaled. The scale stretched
-the *triangle's radius* rather than the prism's length, because after the rotation the
-axis I was scaling was no longer the axis I meant.
-
-It did not throw. It produced thin white spars, and the first thing to notice was L3:
-
-> The airplane is not recognizable: the only non-building geometry is a set of thin
-> white spars
-
-Rebuilt from six vertices and eight triangles. That is less code than the rotations were
-and there is nothing left to get the wrong way round — and `computeVertexNormals()`
-rather than hand-written normals, because a normal written by hand is a normal that
-disagrees with its triangle the first time a number changes.
-
-After: *The white plane flying above the lit skyline against a moonlit night sky carries
-the request.*
-
-Same shape of lesson as the whole day: the thing that looked like a quality problem was a
-missing capability, and the layer that noticed was the one that only ever offers an
-opinion.
+Occupancy is still per floor before per window, which is the one thing the canvas version got
+right: offices empty a floor at a time, and a per-window roll alone produces a static of lit
+squares no building has ever shown. The canvas is deleted rather than left in place — a texture
+nothing samples is a 512 KB upload and a lie in the next person's mental model.
 
 ---
 
-## 13 Sep — Five complaints, two root causes, and the end of a bad habit
+<a id="f6"></a>
 
-A screenshot of a blob with a dog beside it, and a list: no proportion, collides with
-buildings, no streets, the floor is black, buildings badly placed, no trees, no colour.
+## 14 Sep — The critic was judging the wrong frame, and the world had no scale
 
-Seven symptoms. Two causes.
+Six findings in one session. The first is the most serious thing the harness has been wrong
+about.
 
-### The buildings were never placed
+### L3 could not see the subject it was asked about
 
-They were scattered through an annulus at random angles with random rotations. That is
-not a city, it is boxes thrown at a disc — and it caused four of the seven on its own:
-**there were no streets because there were no gaps for streets to be**; nothing was well
-placed because nothing was placed; a rig dropped into the world landed inside a tower;
-and trees had nowhere to stand.
+The perceptual critic kept reporting *"there is no human figure"* about frames that contained
+one. The cause was ordering, not eyesight: the camera was pointed at a new rig from the
+`accept` step, and **L3 judges a candidate before it is accepted.** The one layer that looks at
+pictures was photographing the skyline it was about to leave — on every figure request ever run.
 
-So there is a street plan, and everything reads from it. Avenues at irregular spacing,
-because even spacing is graph paper. Blocks are what is left between them. Buildings sit
-inside blocks, inset from the kerb, and **square to the street** — a random rotation was
-the other half of why the old city read as scattered, since buildings meet an avenue
-along their face, always.
+The camera now follows the world's published state: a subject in state is a subject to frame.
+That is the rule the framing code above it already stated, and it needs no cooperation from the
+cascade — a candidate mounted for review is in state, so it is framed, so it is what gets
+judged. The verdict on a person walking a dog went from *"no human figure and no dog"* to *"the
+rear-view person with a small dog beside them reads clearly"*. The shot also publishes its own
+arrival ramp under `mix`, so the cycle waits for the move to land with no special case for
+cameras.
 
-The street texture is drawn from the same array, which is the whole point: the previous
-grid was an independent set of lines at an unrelated spacing laid over buildings that
-were scattered, so it crossed through towers and stopped in the middle of blocks. It
-read as a texture because that is all it was.
+### The world was metric and the figures were not
 
-The open core had to be *wider than the camera's orbit*, which the first attempt was not:
-at 120 against an orbit of 165, the camera ended up inside the city looking down an
-avenue with two towers filling the frame. That was a fifteen-second lesson in the
-difference between a plan and a plan that has been looked at.
+The city is metric — a street tree's trunk is 9 units, a road is 11 across, the shortest
+building is 26 — and rigs are authored at "about 40 units tall", because that is the only scale
+a model can hold in its head alongside a thousand-unit city. The result was a pedestrian taller
+than an eight-storey block. `FIGURE_SCALE` converts once, on the rig's root transform.
 
-### A part was not the size it said it was
+That exposed two more inconsistencies. The validator's bounds were still in the old scale — a
+`MAX_SIZE` of 40 authored units is 1.8 m, so a bus could not be built and nothing could fly
+higher than 18 m — and **both tests asserting those bounds had copied the numbers, so they
+stopped testing the bounds the moment the bounds moved.** They are exported now and the tests
+read them.
 
-The radius of a capsule, cylinder or cone was `max(x, z)`. So a torso authored
-`[2.6, 3.4, 1.7]` became a sausage of radius 2.6 — and **at that radius it swallowed its
-own arms**, which the pose had placed 5.5 units off the centre line, inside a shape the
-renderer had decided was 5.2 units fat.
+### Three faults in how rigs were placed and moved
 
-Every rig in the project had been built against a renderer that quietly disagreed with
-the prompt about what `size` meant. The model was doing its part correctly and the
-result was a blob, which is the most demoralising kind of bug: everything upstream is
-right and the output is garbage.
+Setting a part's position *and* its rotation independently is a contradiction: rotating a
+segment about its centre moves both of its ends, so the elbow the upper arm reaches is not the
+elbow the forearm was placed at. The gaps opened and closed through the stride, which is why
+they read as the rig coming apart rather than as a constant offset. A joint is computed once
+and the next segment hung off it — and both components of that offset take a minus, where
+writing the y term as a subtraction and the z term as an addition hinges the joint sideways.
 
-Unit radius, scaled by the declared extents. `size` now means in the renderer what the
-prompt promises: half-extents in x, y, z.
+Every figure in the catalogue was authored with the same origin, because each was written and
+looked at on its own, so two requests put both rigs on the same three square metres pacing the
+same line through each other. **Nothing in state was wrong**, which is why no oracle caught it
+and why it needed a test. Stations are claimed by name on a phyllotaxis spiral, and the test
+measures how far each rig actually strays over a full cycle of its own animation, requiring the
+stations to be further apart than the sum of those reaches.
 
-### And the habit that had to stop
+And the walk reversed by setting `facing` from 0 to π between one frame and the next. No
+smoothing fixes that, because the path has a cusp: **a body walking a line has to stop to turn,
+and a rig cannot stop.** An oval has no cusp — heading is the direction of travel, defined and
+continuous at every instant, and the turn happens because the walker is walking a curve.
 
-`"a taller denser city"` failed afterwards, and the numbers had *swapped*. Silhouette
-area went from 1.23x to 2.30x; skyline height went from 1.76x to 1.35x — because density
-on a street grid fills blocks rather than scattering towers.
+### Two defects found only by using the product
 
-This is the fourth time that threshold has moved. 1.8x against flat-shaded boxes, 1.25x
-after rim lighting, then a change of metric to height when setbacks dropped it to 1.23x,
-and now height itself has fallen while area has doubled.
+`Escape` was the documented way back to the wide shot and was unreachable: it was guarded on
+"not currently typing", and the prompt holds focus after every utterance. The one key that
+leaves a close shot never fired for anyone who had just said something.
 
-**Chasing whichever number happens to be highest is how a test becomes a formality.** The
-verb says two things. It gets two assertions: more area because it is *denser*, a higher
-skyline because it is *taller*, at 1.6x and 1.2x against 2.30x and 1.35x. A verb that did
-nothing lands at 1.0x on both, and neither half can be satisfied by the other.
+And on the published site — static, no proxy — only the resolver had a browser path for a
+visitor's own key. The critic and the rig author were proxy-only, so a visitor with a key got
+Claude resolving their sentences and a 405 on every judgement. **Three quarters of what this
+project argues was demonstrable only on a machine running a server**, which is the one place it
+needs no demonstrating.
 
----
+### CI verifies what a GPU-less runner can honestly verify
 
-## 13 Sep — "No todo puede ser pngs"
+The first CI run failed 18 of 26 browser tests. Not a missing GPU — the scene rendered, and the
+WebGL2 fallback test passed. A hosted runner's WebGPU is SwiftShader, which comes up and then
+drops the device mid-run, after which every frame capture waits on a device that is gone.
+Forcing the WebGL2 path instead does render, and took 27.5 s to first frame, so the whole suite
+then sat on the wrong side of every timeout — turning 18 failures into 23.
 
-Fair, and it was the facade: a 512x1024 canvas drawn once and tiled across every
-building in the city. Three costs a procedural one does not pay.
-
-**It repeats.** Every building wore the same forty floors, and at this density the eye
-finds the seam. **It is a fixed resolution** — close to the camera a window is four blurry
-texels, and the mip chain that stops it shimmering is the same chain that smears it. And
-**it is one facade**: a curtain-wall tower and a pre-war block were the same image at
-different tints.
-
-The windows are arithmetic over world position now. The grid is in world units, so a
-window is the same size on every building whatever its face measures; the lit cells come
-from a hash of the cell's own coordinates, so the pattern never repeats and never needs
-to be stored; and the storey *pitch* is hashed per parcel, so a tower with tall floors
-stands next to one with short ones. `mx_cell_noise_float` is three.js's own cell hash —
-deterministic and stable across both backends, which matters because the WebGL2 fallback
-compiles the same graph (AC-03).
-
-Occupancy is still per floor before per window, which was the one thing the canvas
-version got right: offices empty a floor at a time, and a per-window roll alone produces
-a static of lit squares no building has ever shown.
-
-The first colour balance was mostly neutral-to-cool and the skyline came out looking like
-a server room. A night city is sodium and tungsten with a few cold offices in it, not the
-other way round.
-
-120 fps, and the canvas is deleted rather than left in place — a texture nothing samples
-is a 512 KB upload and a lie in the next person's mental model.
+Either way CI would be measuring a software rasteriser rather than the product, and the way to
+make it green — loosen the timeouts until a rasteriser passes — is the exact failure this
+project exists to argue against. CI runs typecheck, the unit suite and the acceptance gate, and
+**the workflow states why the browser suite is not among them** rather than omitting it in
+silence. That suite runs where there is a GPU, which the contributing rules already require
+before anything is reported finished.
 
 ---
 
 ## ⏳ Pending
 
-Recorded here as absent so their absence is not mistaken for omission:
+Recorded as absent so their absence is not mistaken for omission:
 
-- **Nightly evaluation results**, including failures and rejections per layer.
 - **The injection policy decision** — what may auto-inject and what requires approval.
-- **More failures during implementation.** The first is recorded above; there will
-  be more, and they will be worth more than any of the successes.
+- **More failures during implementation.** They will be worth more than any of the successes.

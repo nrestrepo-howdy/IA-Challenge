@@ -481,8 +481,9 @@ A record that can be silenced by how a command was invoked is not back pressure.
 this went unnoticed for twelve days in the component whose entire purpose is
 machine-readable feedback is the most useful thing in this section.
 
-Four more loops are described in [AI-DEV-LOG.md](AI-DEV-LOG.md) with their diagnoses;
-the shortest to verify:
+Two further loops are written out in [AI-DEV-LOG.md](AI-DEV-LOG.md) with their diagnoses,
+and `npm run evidence:loop` reconstructs them from the event log rather than from prose.
+The shortest to verify:
 
 **The mutation engine mutated nothing.** Wrote three harness modules and 27 tests →
 `npm test` → 26 passed, 1 failed → the `dropStateUpdate` mutant was implemented as an

@@ -1448,6 +1448,50 @@ strategy.
 
 ---
 
+## 13 Sep — "¿Por qué todo se ve tan irreal?"
+
+The most useful question anyone has asked about this project, because it has an answer
+rather than a taste. I went and checked instead of adjusting numbers, and found three
+things, none of which was the one I had been fiddling with.
+
+**Nothing cast a shadow.** `castShadow` appeared nowhere in the renderer. A bright moon
+over eighteen hundred volumes and not one of them threw anything: every building met the
+ground at a hard edge with no contact darkening, and no tower darkened its neighbour. An
+eye reads a missing shadow before it reads anything else, and no amount of grading covers
+for it. I had spent days on bloom thresholds and fog ranges without once asking why the
+city had no shadows.
+
+**Eighteen hundred volumes shared one material.** One colour, one roughness — which is
+not a decision anybody made, it is what you get when a city is a single `InstancedMesh`
+and nothing says otherwise. Real blocks are concrete beside glass beside brick, and the
+difference between them is most of what stops a skyline reading as one extruded object.
+Tinted per *building* now, not per volume: a tower whose setback is a different colour
+from its own shaft is two buildings stacked.
+
+**And the light was lighting a room, not a night.** Key 1.15 against an ambient of 0.5 is
+a ratio of a little over two to one. That is why the city looked flat — and it is why the
+shadows I had just switched on could not be seen, because *a shadow is the absence of the
+key*, and if the key is only twice the fill there is nowhere for it to darken to.
+Moonlight is a hard source with a very dark sky behind it. 2.15 against 0.2 is about
+eleven to one, and the faces separated immediately.
+
+The three are one mistake with three faces: **I had been tuning the image and never
+questioned the lighting model underneath it.** Bloom, vignette, grain, tone curve, a
+facade texture, streets — every one of those is a layer applied *to* a render, and the
+render itself had no shadows, no material variety and a fill light half as bright as its
+key. Post-processing a flat scene produces a graded flat scene.
+
+VSM rather than PCF, because the moon is a large soft source and this city is mostly long
+straight edges, where a fixed PCF kernel gives a stair-stepped line. `normalBias` at 1.4
+took looking rather than reasoning: without it the facades acne, because a surface at a
+grazing angle to the light samples its own depth, and under a low moon almost every face
+in a city of flat slabs is at a grazing angle.
+
+120 fps with the shadow pass in, which was the thing I expected to have to fight and did
+not: the city is one instanced draw, so shadowing it is one more.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

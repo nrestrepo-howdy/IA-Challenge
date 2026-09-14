@@ -340,6 +340,8 @@ export function createBaseScene(): BaseScene {
   });
   const groundMesh = new Mesh(new PlaneGeometry(4000, 4000), groundMaterial);
   groundMesh.rotation.x = -Math.PI / 2;
+  // Receives only. A ground plane that casts would shadow the world from underneath.
+  groundMesh.receiveShadow = true;
   scene.add(groundMesh);
 
   /**
@@ -737,6 +739,40 @@ export function createBaseScene(): BaseScene {
   const blocks = new InstancedMesh(
     new BoxGeometry(1, 1, 1), blockMaterial, boxStart[boxStart.length - 1]!,
   );
+
+  /**
+   * A different building material per building.
+   *
+   * Eighteen hundred volumes shared one colour and one roughness, which is a decision
+   * nobody made — it is what you get when a city is one `InstancedMesh` and nothing says
+   * otherwise. Real blocks are concrete next to glass next to brick, and the difference
+   * between them is most of what stops a skyline reading as one extruded object.
+   *
+   * Tinted per *building*, not per volume: a tower whose setback is a different colour
+   * from its own shaft is two buildings stacked, which is worse than one flat one. The
+   * seed is the slot index, so it is the same city on every load — a screenshot stays a
+   * fact (see `rng`).
+   */
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i]!;
+    const roll = rand();
+    // Three families, in the proportions a city actually has: mostly dark stone, some
+    // colder glass, a few warmer pre-war blocks.
+    const tint = roll > 0.74
+      ? new Color(0.021, 0.030, 0.048)   // glass — bluer, and it catches the moon
+      : roll > 0.58
+        ? new Color(0.030, 0.025, 0.021) // brick — warmer, reads brown against the rest
+        : new Color(0.017, 0.022, 0.033); // stone — the authored value
+    // A little brightness spread within the family, so even two stone towers differ.
+    tint.multiplyScalar(0.72 + rand() * 0.62);
+    for (let b = boxStart[i]!; b < boxStart[i + 1]!; b++) blocks.setColorAt(b, tint);
+  }
+  if (blocks.instanceColor) blocks.instanceColor.needsUpdate = true;
+
+  // The city casts and receives. Both, deliberately: a tower that casts without
+  // receiving is lit on the face its neighbour should be darkening.
+  blocks.castShadow = true;
+  blocks.receiveShadow = true;
   scene.add(blocks);
 
   /**
@@ -831,10 +867,40 @@ export function createBaseScene(): BaseScene {
   };
 
   // ── Light ──────────────────────────────────────────────────────────────────
-  const key = new DirectionalLight(new Color(0.68, 0.78, 1), 1.15);
+  // 2.15 against an ambient of 0.2 — a ratio of about eleven to one, where it used to be
+  // a little over two.
+  //
+  // That ratio is why the city looked flat, and it is why the shadows that were just
+  // switched on could not be seen: a shadow is the absence of the key, and if the key is
+  // only twice the fill there is nowhere for it to darken to. Moonlight is a hard source
+  // with a very dark sky behind it; the old numbers were lighting a room, not a night.
+  const key = new DirectionalLight(new Color(0.68, 0.78, 1), 2.15);
+  /**
+   * The moon casts.
+   *
+   * An orthographic frustum wide enough for the authored city and no wider: every unit
+   * of frustum is spread across the same 2048 texels, so a box sized to be safe is a box
+   * that throws resolution away. 1300 covers the ring the buildings actually occupy.
+   *
+   * The bias numbers are the ones that took looking rather than reasoning. Without
+   * `normalBias` the facades acne — a surface at a grazing angle to the light samples
+   * its own depth and shadows itself in stripes — and on a city of flat faces under a
+   * low moon, almost every face is at a grazing angle.
+   */
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.left = -1300;
+  key.shadow.camera.right = 1300;
+  key.shadow.camera.top = 1300;
+  key.shadow.camera.bottom = -1300;
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 4200;
+  key.shadow.bias = -0.0006;
+  key.shadow.normalBias = 1.4;
+  key.shadow.radius = 3;
   key.position.copy(moon.position);
   scene.add(key);
-  const ambient = new AmbientLight(new Color(0.16, 0.22, 0.38), 0.5);
+  const ambient = new AmbientLight(new Color(0.16, 0.22, 0.38), 0.2);
   scene.add(ambient);
 
   // The authored sky, captured from the objects themselves at the one moment nothing

@@ -11,7 +11,8 @@
  *      fallback that halves the frame rate would otherwise surface as a mysterious
  *      L1 budget failure.
  */
-import { ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
+import {
+  VSMShadowMap, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 
 export interface RendererHandle {
   readonly renderer: WebGPURenderer;
@@ -36,6 +37,22 @@ export async function createRenderer(canvas: HTMLCanvasElement): Promise<Rendere
   // already dark; 1.45 was picked by shooting dawn, noon, dusk and midnight and taking
   // the value where midnight has separation and noon still has sky above the buildings
   // rather than a white ceiling. `post.ts` reads both of these through `renderOutput()`.
+  /**
+   * Shadows, which is the single largest reason this city read as unreal.
+   *
+   * There were none. A bright moon over eighteen hundred volumes and not one of them
+   * cast anything, so every building met the ground at a hard edge with no contact
+   * darkening and no silhouette thrown across its neighbour. Nothing else on the list —
+   * materials, post, texture detail — competes with that: an eye reads a missing shadow
+   * before it reads anything else, and no amount of grading covers for it.
+   *
+   * `VSM` rather than PCF: the moon is a large, soft source and the city is mostly long
+   * straight edges, where PCF's fixed kernel gives a hard stair-stepped line. VSM blurs
+   * in shadow space, which is what a soft source actually does.
+   */
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = VSMShadowMap;
+
   renderer.toneMapping = ACESFilmicToneMapping;
   // 1.45 lifted the authored night nicely and over-exposed anything with fog in it.
   // The night is dark by design and bloom now does the lifting, so exposure only has

@@ -1220,6 +1220,50 @@ try would find out it is not.
 
 ---
 
+## 13 Sep — "El piso de la ciudad no se ve"
+
+Sent a screenshot with one sentence: the city's floor isn't there. And then the harder
+question — *do you think this is an app that wins? Because I don't.*
+
+Both were right, and the first explains part of the second.
+
+I had fixed the camera days earlier so the horizon fell inside the frame, and never
+looked at what that exposed. The ground is a near-black plane with nothing on it, so the
+towers ran down into a brown haze and stopped. The skyline read as pasted onto a dark
+background rather than as standing anywhere — and that is the first thing anyone sees,
+several seconds before a word of the interface is read.
+
+A night city from above is mostly one thing: **dark blocks with lit lines between them.**
+There are streets now — an additive grid over the ground, avenues brighter and wider than
+the side streets, irregular because evenly spaced blocks read as graph paper. It is a
+separate mesh rather than an emissive map, because the ground's emissive channel belongs
+to the time of day: `daylight` drives it and `ground-tint` blends from the authored
+colour (AC-12), and a map there would have put the streets under two owners.
+
+Three passes to get it right, each failing in a way I should have predicted:
+
+- **4000-unit plane, tiled 6×.** A grid that runs to the far plane converges, at grazing
+  angles, into a single bright band straight across the skyline. Mipmaps and anisotropy
+  soften that and cannot remove it, because the geometry really is converging.
+- **1800-unit plane.** The band became the plane's own rim: additive blending draws a
+  hard edge as a bright line, which is worse than what it replaced.
+- **Falloff painted into the texture** — which is also why `repeat` is 1 and the block
+  spacing is stated in world units. First radius fell off by the middle of the texture
+  and the streets nearly vanished.
+
+The streets go out with the windows and the lamps, because lit roads at noon is the same
+defect as lamps at noon written in a third place.
+
+### On the question
+
+The engineering is strong and the first impression was not, and only one of those is
+what a judge sees in the first three seconds. I had been scoring the product against a
+rubric and the owner was scoring it against *looking at it*, which is the more honest
+test and the one I kept deferring. Every real visual defect in this project has been
+found the same way: by someone looking at a frame, not by reading the code that made it.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

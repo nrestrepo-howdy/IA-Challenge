@@ -17,7 +17,7 @@ import {
   DirectionalLight, Fog, InstancedMesh, Matrix4,
   Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshStandardNodeMaterial,
   PerspectiveCamera, PlaneGeometry, Points, PointsMaterial,
-  Quaternion, RepeatWrapping, SRGBColorSpace, Scene,
+  ClampToEdgeWrapping, Quaternion, RepeatWrapping, SRGBColorSpace, Scene,
   SphereGeometry, Vector3,
 } from 'three/webgpu';
 import { abs, normalView, normalWorld, positionViewDirection, positionWorld, texture, uniform, vec2, vec3 } from 'three/tsl';
@@ -333,6 +333,95 @@ export function createBaseScene(): BaseScene {
   const groundMesh = new Mesh(new PlaneGeometry(4000, 4000), groundMaterial);
   groundMesh.rotation.x = -Math.PI / 2;
   scene.add(groundMesh);
+
+  /**
+   * The streets, as a lit grid laid over the ground.
+   *
+   * Without them the city stands on nothing. The ground is a near-black plane and the
+   * towers simply stop at the bottom of the frame, which reads as a skyline pasted onto
+   * a dark background rather than as a place — and it is the first thing anyone sees,
+   * before a word of the interface has been read.
+   *
+   * A night city seen from above is mostly this: dark blocks with glowing lines between
+   * them. It is a separate additive mesh rather than an emissive map on the ground,
+   * because the ground's `emissive` channel belongs to the time of day — `daylight`
+   * drives it, and `ground-tint` blends from the authored colour (AC-12). Adding a map
+   * there would have put the streets under two owners.
+   *
+   * The grid is deliberately irregular. Perfectly even blocks read as graph paper; real
+   * cities have avenues that run wider and further than the streets between them.
+   */
+  const STREET_TEX = 1024;
+  const streets = document.createElement('canvas');
+  streets.width = streets.height = STREET_TEX;
+  const sx = streets.getContext('2d')!;
+  sx.fillStyle = '#000';
+  sx.fillRect(0, 0, STREET_TEX, STREET_TEX);
+
+  const lines: { at: number; wide: boolean }[] = [];
+  for (let at = 0; at < STREET_TEX; ) {
+    const wide = rand() > 0.78;
+    lines.push({ at, wide });
+    at += wide ? 84 + rand() * 40 : 34 + rand() * 26;
+  }
+  for (const axis of [0, 1]) {
+    for (const { at, wide } of lines) {
+      // Warmer and brighter on the avenues: more lamps, more traffic, and it is what
+      // gives the grid a hierarchy instead of a uniform mesh.
+      const w = wide ? 5.5 : 2.6;
+      const g = sx.createLinearGradient(
+        axis ? 0 : at - w, axis ? at - w : 0,
+        axis ? 0 : at + w, axis ? at + w : 0,
+      );
+      g.addColorStop(0, 'rgba(255,168,84,0)');
+      g.addColorStop(0.5, wide ? 'rgba(255,190,118,1)' : 'rgba(255,166,92,0.72)');
+      g.addColorStop(1, 'rgba(255,168,84,0)');
+      sx.fillStyle = g;
+      if (axis) sx.fillRect(0, at - w, STREET_TEX, w * 2);
+      else sx.fillRect(at - w, 0, w * 2, STREET_TEX);
+    }
+  }
+
+  // Faded to nothing before the plane ends.
+  //
+  // A grid that stops at a hard edge draws that edge: additive blending turned the rim
+  // of the plane into a bright line straight across the skyline, which is worse than the
+  // horizon band it replaced. Painted into the texture rather than done with a shader
+  // because the texture covers the plane exactly once — which is also why `repeat` is 1
+  // here, and why the block spacing above is in world units rather than tile units.
+  sx.globalCompositeOperation = 'destination-in';
+  const falloff = sx.createRadialGradient(
+    STREET_TEX / 2, STREET_TEX / 2, STREET_TEX * 0.16,
+    STREET_TEX / 2, STREET_TEX / 2, STREET_TEX * 0.5,
+  );
+  falloff.addColorStop(0, 'rgba(0,0,0,1)');
+  falloff.addColorStop(0.82, 'rgba(0,0,0,0.9)');
+  falloff.addColorStop(1, 'rgba(0,0,0,0)');
+  sx.fillStyle = falloff;
+  sx.fillRect(0, 0, STREET_TEX, STREET_TEX);
+  sx.globalCompositeOperation = 'source-over';
+
+  const streetMap = new CanvasTexture(streets);
+  streetMap.wrapS = streetMap.wrapT = ClampToEdgeWrapping;
+  streetMap.colorSpace = SRGBColorSpace;
+  streetMap.generateMipmaps = true;
+  streetMap.minFilter = LinearMipmapLinearFilter;
+  streetMap.anisotropy = 16;
+  const streetMat = new MeshBasicMaterial({
+    map: streetMap, transparent: true, opacity: 0.9,
+    blending: AdditiveBlending, depthWrite: false, fog: true,
+  });
+  // 1800 rather than the ground's 4000, and the difference is the horizon. A street
+  // grid that runs to the far plane compresses, at grazing angles, into a single bright
+  // band across the skyline — mipmaps and anisotropy soften it and cannot remove it,
+  // because the geometry really is converging. Stopping the plane short of the fog's
+  // reach lets the haze end it instead, which is what distance does to a real one.
+  //
+  // Just above the ground: coplanar with it would z-fight along every line.
+  const streetMesh = new Mesh(new PlaneGeometry(1800, 1800), streetMat);
+  streetMesh.rotation.x = -Math.PI / 2;
+  streetMesh.position.y = 0.4;
+  scene.add(streetMesh);
 
   // The authored values are captured here, not in the binding: `ground-tint` blends
   // *from* what the world was made of, and a binding that read the current material
@@ -899,6 +988,9 @@ export function createBaseScene(): BaseScene {
       // Street light answers to the time of day for the same reason the windows do:
       // lamps burning at noon is one defect written in two places.
       lampMat.opacity = 0.55 * windowGlow;
+      // The streets go out with the windows. Lit roads at noon is the same defect as
+      // lamps at noon, written in a third place.
+      streetMat.opacity = 0.9 * windowGlow;
     },
   };
 }

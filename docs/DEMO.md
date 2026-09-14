@@ -155,21 +155,26 @@ bottom-right; the status line reads `KEY ACTIVE` when it is set.
 
 ## The A/B at 2:30 — record this separately
 
-The debris primitive is **not framed by the camera** — it has no rig, so the shot stays
-wide and the bodies are small at the bottom of the frame. Do not try to film it live.
-Capture two stills instead; they are indistinguishable, which is the point.
+Two stills, captured the same way twice. They are indistinguishable, which is the point —
+so frame them identically and do not move the camera between takes.
 
 1. `npm run dev`, say **`bouncing debris`**, wait eight seconds, screenshot. → **A**
 2. In `src/world/debris.ts`, move `x += vx * h; y += vy * h; z += vz * h;` to *above*
-   `vy -= GRAVITY * h;` — that is explicit Euler, reading velocity before the
-   acceleration is applied.
+   `vy -= GRAVITY * h;` — that is explicit Euler, reading velocity before the acceleration
+   is applied.
 3. Reload, say the same thing, wait the same eight seconds, screenshot. → **B**
-4. `npx vitest run tests/world/debris.test.ts`. Capture the failure line verbatim.
+4. `npx vitest run tests/world/debris.test.ts`. Capture the failure line verbatim:
+   `energy rose on 39 frames, worst by 13.343`.
 5. **Revert the change.** Confirm `npx vitest run` prints 6 passed before recording
    anything else.
 
-Measured while preparing this: correct world total energy 33,175; broken 37,781. The
-critic's note on both was a complaint about framing, not about the physics.
+Measured while preparing this: correct world total energy 33,175; broken 37,781 — and the
+critic's note on both was a complaint about framing, not about the physics. That is the
+claim, and it was checked rather than assumed.
+
+The camera frames the debris field now, so both stills show a readable pile of bouncing
+bodies on the plaza with the lit city behind. If you would rather film it live than cut
+stills, that works too — the shot is the same.
 
 ---
 

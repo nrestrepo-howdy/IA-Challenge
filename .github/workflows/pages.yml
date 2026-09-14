@@ -27,13 +27,6 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
-        env:
-          # The runner has no GPU. Its WebGPU is SwiftShader, which comes up and then
-          # drops the device mid-run, and every capture after that waits forever on a
-          # device that is gone. WebGL2 is a backend this product ships (AC-03), and
-          # testing the product on it beats testing SwiftShader on neither. Only the
-          # test build takes this; the deploy job below builds without it.
-          VITE_FORCE_WEBGL: '1'
 
   deploy:
     needs: verify

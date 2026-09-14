@@ -16,17 +16,17 @@ import type { WorldHandle } from '../../src/contracts.js';
 
 const world = { state: {}, scene: null, clock: { elapsed: 0 } } as unknown as WorldHandle;
 
-const CAR: FigureSpec = {
-  name: 'red-car',
+const BALLOON: FigureSpec = {
+  name: 'hot-air-balloon',
   origin: [-65, 0, 2],
   parts: [
-    { id: 'body', shape: 'box', size: [14, 3, 6], color: [0.42, 0.06, 0.05], emissive: 0.2 },
-    { id: 'cabin', shape: 'box', size: [6, 2.4, 5], color: [0.1, 0.11, 0.14], emissive: 0.15 },
+    { id: 'envelope', shape: 'sphere', size: [11, 13, 11], color: [0.5, 0.12, 0.1], emissive: 0.3 },
+    { id: 'basket', shape: 'box', size: [2.6, 2, 2.6], color: [0.3, 0.22, 0.12], emissive: 0.2 },
   ],
-  pose: 'const d = ((t * 12) % 200) - 100; p[0].y = 3; p[0].z = d; p[1].y = 7.4; p[1].z = d - 1;',
-  rationale: 'un coche rojo cruzando la plaza',
+  pose: 'const rise = 40 + Math.sin(t * 0.3) * 9; p[0].y = rise; p[1].y = rise - 16;',
+  rationale: 'a hot air balloon drifting over the plaza',
   triggers: [],
-  covers: ['coche', 'cruzando', 'plaza'],
+  covers: ['balloon', 'hot', 'air', 'drifting', 'plaza'],
 };
 
 function compilerWith(author: FigureAuthor) {
@@ -35,14 +35,15 @@ function compilerWith(author: FigureAuthor) {
 
 describe('the rig author, as the compiler uses it (AC-17)', () => {
   it('is asked when the catalogue leaves part of the request on the floor', async () => {
-    // Not only on a total miss. "un coche rojo" resolves the red ground and not the car,
-    // and asking only when nothing matched would answer half of it and call that
-    // success.
-    const author = { author: vi.fn(async () => CAR) };
-    const out = await compilerWith(author).compile('un coche rojo cruzando la plaza', world);
+    // Not only on a total miss. "a hot air balloon over the plaza" resolves nothing the
+    // catalogue owns and nothing the written rig library owns either — but the general
+    // case is a request the catalogue *half* answers, and asking only when nothing
+    // matched at all would answer half of it and call that success.
+    const author = { author: vi.fn(async () => BALLOON) };
+    const out = await compilerWith(author).compile('a hot air balloon over the plaza', world);
     expect(author.author).toHaveBeenCalledOnce();
     if ('rejected' in out) throw new Error(out.reason);
-    expect(out.brief.directives.map((d) => d.statePath)).toContain('figures.red-car');
+    expect(out.brief.directives.map((d) => d.statePath)).toContain('figures.hot-air-balloon');
     expect(out.unaddressed).toEqual([]);
   });
 
@@ -50,7 +51,7 @@ describe('the rig author, as the compiler uses it (AC-17)', () => {
     // The catalogue stays the cheap path, and a rig cannot be reached by asking for
     // weather. This is also what keeps a model call off the latency budget (R-8) for
     // the requests that never needed one.
-    const author = { author: vi.fn(async () => CAR) };
+    const author = { author: vi.fn(async () => BALLOON) };
     const out = await compilerWith(author).compile('make it rain', world);
     expect(author.author).not.toHaveBeenCalled();
     if ('rejected' in out) throw new Error(out.reason);
@@ -58,28 +59,31 @@ describe('the rig author, as the compiler uses it (AC-17)', () => {
   });
 
   it('is not asked when a written rig already answers', async () => {
-    const author = { author: vi.fn(async () => CAR) };
+    const author = { author: vi.fn(async () => BALLOON) };
     await compilerWith(author).compile('un perro con una persona paseando', world);
     expect(author.author).not.toHaveBeenCalled();
   });
 
   it('carries the authored pose through as source, not as data', async () => {
-    const out = await compilerWith({ author: async () => CAR }).compile('un coche rojo', world);
+    const out = await compilerWith({ author: async () => BALLOON }).compile('a hot air balloon', world);
     if ('rejected' in out) throw new Error(out.reason);
     const figure = out.brief.directives.find((d) => d.name === 'figure')!;
-    expect(figure.params['poseSource']).toContain('p[0].z = d');
+    expect(figure.params['poseSource']).toContain('p[0].y = rise');
   });
 
   it('falls back to the catalogue answer when the author throws', async () => {
     // The case that actually happens: no key, a 503, a provider outage mid-request. The
     // catalogue's answer and its disclosure are still the right output, and a failed
     // author must not turn a partly-answerable request into a refusal.
+    // The utterance is one the catalogue answers *in part*: rain resolves, the balloon
+    // does not. That is the case this guards — when nothing at all resolves and the
+    // author is unreachable, a refusal is the right answer and the test below covers it.
     const out = await compilerWith({
       author: async () => { throw new Error('no ANTHROPIC_API_KEY on the server'); },
-    }).compile('un coche rojo cruzando la plaza', world);
+    }).compile('a hot air balloon in the rain', world);
     if ('rejected' in out) throw new Error(out.reason);
-    expect(out.brief.directives.map((d) => d.name)).toEqual(['ground-tint']);
-    expect(out.unaddressed).toContain('coche');
+    expect(out.brief.directives.map((d) => d.name)).toEqual(['rain-emitter']);
+    expect(out.unaddressed).toContain('balloon');
   });
 
   it('still refuses when neither the catalogue nor the author can answer', async () => {

@@ -1122,6 +1122,47 @@ things confidently; it never occurred to me to point it at my own prose.
 
 ---
 
+## 13 Sep — Asked why Product Quality was not full marks, and two of three reasons were excuses
+
+I had scored the product 17/20 and attributed the gap to two blocked things: no live URL
+until the repository is pushed, and a headline capability that needs API credit to
+demonstrate. Both are true. The third point I had written off as "remaining product gaps"
+without going to look, which is the difference between an assessment and an excuse.
+
+So I went to look, with a stress pass rather than a demo pass. Fourteen consecutive verbs:
+all accepted, no page errors. Three simultaneous: one runs, two return `busy`. Empty
+input, six hundred characters, emoji, `<script>alert(1)</script>`, `DROP TABLE worlds`:
+all refused with a reason a person can read. Three viewports down to 390×844: no
+horizontal overflow, nothing off-screen. The product is sturdier than I had assumed.
+
+What the pass did find was two things worth fixing.
+
+**The floor was three rigs.** A judge without a key types "a car" and gets a refusal, and
+concludes the freeform surface is three canned tricks. The model writing rigs is the
+point of that surface, but the floor is what most people will see, so the floor is the
+product. There are five now — a car with lit lamps and tail lights, and a tree, which had
+to sway because a rig that does not move is rejected by its own contract and rightly.
+
+Adding the car found a framing bug that the dog had hidden. `focusPoint()` aimed at the
+rig's *first part*, which is a torso at eye height for a walker and a chassis three units
+off the ground for a car: the camera came in to 88 units and pointed at the pavement,
+with a tower filling the frame. It is a centroid now, which is the same number for a
+walker and does not have to know what it is looking at. And the car's first drive ran 150
+units either way from an origin already 65 out — straight into the building ring at 150,
+with the camera following it in.
+
+**And the log sits where the subject does.** The verification trace runs across the
+middle-bottom of the frame, which is exactly where a figure walks the near plaza. For the
+ten seconds after a verb they compete, and opaque text beats a dark rig every time. It
+recedes to a third opacity once the cycle has nothing left to report, and comes straight
+back on hover. Nothing is lost: the panel top-right keeps the full record.
+
+That last one took two attempts, and the first one failed for a reason worth writing
+down: I settled the log at `panel.end()`, and the final `done in 0.1s` line came *after*
+it — and `line()` wakes the log back up. The fade was correct and unreachable.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

@@ -173,7 +173,18 @@
         width: min(620px, calc(100vw - 2 * var(--gap)));
         display: flex; flex-direction: column-reverse; gap: 2px;
         pointer-events: none; z-index: 3;
+        /* The log sits where the subject does.
+           A figure walks the near plaza and the verification trace runs across the
+           middle-bottom of the frame, so for the ten seconds after a verb the two
+           compete and the trace wins by being opaque text. It recedes once the cycle
+           is done: still legible, no longer the brightest thing over the world. The
+           panel top-right keeps the full record, so nothing is lost by this. */
+        transition: opacity 900ms ease 1400ms;
       }
+      #log[data-settled='true'] { opacity: 0.34; }
+      /* Reading it is a deliberate act, so hovering brings it straight back with no
+         delay -- a fade that has to be waited out twice is worse than no fade. */
+      #log[data-settled='true']:hover { opacity: 1; transition-delay: 0ms; }
       #log .l {
         font: 400 13.5px/1.5 var(--sans);
         letter-spacing: -0.004em;

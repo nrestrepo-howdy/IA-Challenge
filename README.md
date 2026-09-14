@@ -89,7 +89,9 @@ runs it in a worker with its capabilities revoked, L2 asserts the rig actually *
 like what was asked for. Every value a pose returns is clamped on the way into state, so
 the worst a bad one can do is stand still in the wrong place.
 
-Three rigs ship written by hand, so the path works with no key at all. With one, the
+Five rigs ship written by hand — a person, a dog, the two of them together, a car and a
+tree — so the path works with no key at all and "un coche rojo cruzando la plaza"
+resolves the red ground from the catalogue and the car from the library. With one, the
 model writes the rig: `/api/figure` asks it for a part list and a `pose` body for
 anything the catalogue left on the floor — which is why the author is consulted when a
 request is *partly* met, not only when it misses entirely. "un coche rojo cruzando la

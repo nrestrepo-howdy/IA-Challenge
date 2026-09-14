@@ -105,12 +105,29 @@ function focusPoint(): readonly [number, number, number] | null {
   const figures = state?.['figures'] as Record<string, { pose?: unknown }> | undefined;
   for (const figure of Object.values(figures ?? {})) {
     const pose = figure?.pose;
-    if (!Array.isArray(pose) || pose.length < 3) continue;
-    const [x, y, z] = pose as number[];
-    if (typeof x === 'number' && typeof y === 'number' && typeof z === 'number') return [x, y, z];
+    if (!Array.isArray(pose) || pose.length < 7) continue;
+    // The centroid of every part, not the first one.
+    //
+    // The first version aimed at `pose[0..2]` plus a fixed lift, which works for a rig
+    // whose first part happens to be a torso at eye height and fails for one whose first
+    // part is a car body three units off the ground: the camera came in to 88 units and
+    // pointed at the pavement, and a tower filled the frame. A centroid is the same
+    // number for a walker and does not have to know what it is looking at.
+    let x = 0, y = 0, z = 0, n = 0;
+    for (let i = 0; i + 6 < pose.length; i += 7) {
+      const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
+      if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
+      x += px; y += py; z += pz; n += 1;
+    }
+    if (n === 0) continue;
+    // Lifted by a third of the rig's own height above its centre, so the frame has the
+    // city behind the subject rather than the pavement under it.
+    return [x / n, y / n + 14, z / n];
   }
   return null;
 }
+
+
 
 /**
  * Frame capture, performed inside the loop immediately after `render()`.
@@ -321,7 +338,15 @@ function sync(): void {
  */
 const LINE_DWELL_MS = 14_000;
 
+/** Marks the log as done, which is what the stylesheet fades on. */
+function settleLog(): void {
+  log.dataset['settled'] = 'true';
+}
+
 function line(text: string, kind: CycleStep['kind'] | 'you'): void {
+  // A new line means the cycle is live again, so the log comes back to full strength.
+  // It recedes again when the cycle ends; see `settleLog`.
+  log.dataset['settled'] = 'false';
   const el = document.createElement('div');
   el.className = `l ${kind}`;
   // One line each. A diagnosis is written for a repair agent and runs to several
@@ -406,6 +431,12 @@ async function say(utterance: string): Promise<SayResult> {
     panel.end();
     line(outcome.ok ? `done in ${(outcome.ms / 1000).toFixed(1)}s` : (outcome.reason ?? 'failed'),
       outcome.ok ? 'accept' : 'reject');
+    // After the last line, not before it: `line()` wakes the log back up, so settling
+    // above the final "done in 0.1s" settled nothing. The trace recedes once it has
+    // nothing left to report — a figure walks the near plaza and this runs across the
+    // middle-bottom of the frame, and opaque text beats a dark rig every time. The
+    // panel top-right keeps the full record, so this costs prominence and nothing else.
+    settleLog();
     if (outcome.ok) {
       // The link carries intent, never code. replaceState rather than push: the world
       // is cumulative, so each verb refines one address instead of stacking history

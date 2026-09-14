@@ -885,7 +885,10 @@ export function createBaseScene(): BaseScene {
       // the thing that makes the figure worth looking at.
       aim.set(Math.sin(a + 0.42) * 70, 50 + framing * 60, Math.cos(a + 0.42) * 70);
       if (focus) {
-        subject.set(focus[0], focus[1] + 16, focus[2]);
+        // No extra lift here: `focusPoint()` already returns a point above the rig's
+        // centroid. Adding a second one put the subject a third of the way down the
+        // frame and pointed the camera at the skyline behind it.
+        subject.set(focus[0], focus[1], focus[2]);
         aim.lerp(subject, 0.72);
       }
       camera.lookAt(aim);

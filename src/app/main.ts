@@ -15,8 +15,10 @@ import { readPath } from '../harness/l2-contract.js';
 import { CatalogueIntentCompiler, isRejection } from '../intent/compiler.js';
 import { keywordModel, type LanguageModel } from '../intent/model.js';
 import { lastResolver, ProxiedModel, withFallback } from './proxied-model.js';
-import { browserModel, forgetKey, looksLikeKey, storeKey, storedKey } from './byok.js';
+import { browserCritic, browserFigureAuthor, browserModel, forgetKey, looksLikeKey, storeKey, storedKey } from './byok.js';
 import { ProxiedVisualCritic } from './proxied-critic.js';
+import type { VisualCritic } from '../harness/l3-perceptual.js';
+import type { FigureAuthor } from '../intent/figure-model.js';
 import { ProxiedFigureAuthor } from './proxied-figure.js';
 import { BrowserModuleLoader } from '../runtime/browser-loader.js';
 import { runCycle, prober, type CycleStep } from './cycle.js';
@@ -367,10 +369,40 @@ const proxied = new ProxiedModel();
  * cannot veto (D-1, AC-11). A critic that throws or is unreachable produces a step
  * naming what went unjudged, never a pass.
  */
-const critic = new ProxiedVisualCritic();
+const proxiedCritic = new ProxiedVisualCritic();
+const proxiedAuthor = new ProxiedFigureAuthor();
 
-/** Writes a rig when the catalogue cannot. Unreachable without a server key, by design. */
-const figureAuthor = new ProxiedFigureAuthor();
+/**
+ * Server first, the visitor's own key second — the same order the resolver uses.
+ *
+ * These two were proxy-only, and on the published site there is no proxy: a visitor
+ * who pasted a key got Claude resolving their sentences and a 405 on every judgement,
+ * so the layer this project talks about most never ran where anyone could see it.
+ */
+const critic: VisualCritic = {
+  async judge(frame, request) {
+    const key = storedKey();
+    if (!key) return proxiedCritic.judge(frame, request);
+    try {
+      return await proxiedCritic.judge(frame, request);
+    } catch {
+      return browserCritic(key).judge(frame, request);
+    }
+  },
+};
+
+/** Writes a rig when the catalogue cannot. */
+const figureAuthor: FigureAuthor = {
+  async author(utterance) {
+    const key = storedKey();
+    if (!key) return proxiedAuthor.author(utterance);
+    try {
+      return await proxiedAuthor.author(utterance);
+    } catch {
+      return browserFigureAuthor(key).author(utterance);
+    }
+  },
+};
 
 function resolver(): LanguageModel {
   const key = storedKey();

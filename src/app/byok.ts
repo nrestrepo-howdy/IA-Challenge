@@ -18,6 +18,9 @@
  * exists for anyone who would rather not.
  */
 import Anthropic from '@anthropic-ai/sdk';
+import { ClaudeVisualCritic } from '../harness/claude-critic.js';
+import type { VisualCritic } from '../harness/l3-perceptual.js';
+import { ClaudeFigureAuthor, type FigureAuthor } from '../intent/figure-model.js';
 import { ClaudeResolver } from '../intent/model-resolver.js';
 import type { LanguageModel } from '../intent/model.js';
 
@@ -51,11 +54,34 @@ export function looksLikeKey(value: string): boolean {
   return /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(value.trim());
 }
 
+function browserClient(key: string): Anthropic {
+  return new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
+}
+
 export function browserModel(key: string): LanguageModel {
-  const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
   // Reuses the same resolver the server path uses, so the prompt, the schema, the
   // enum built from the catalogue and the required `unaddressed` field are identical.
   // A hosted visitor and a local developer are running the same resolution, which is
   // the only way the demo is evidence of anything.
-  return new ClaudeResolver({ client });
+  return new ClaudeResolver({ client: browserClient(key) });
+}
+
+/**
+ * The other two model-backed components, which a visitor's key did not reach.
+ *
+ * Only the resolver had a browser path. On the published site — static, no proxy — a
+ * visitor who supplied a key got Claude resolving their sentence and then a 405 from
+ * `/api/critique` on every verb, so L3 never judged a single frame, and `/api/figure`
+ * was unreachable too, so any request needing a rig the catalogue does not have fell
+ * back to keywords. Three quarters of what the project claims was demonstrable only on
+ * a machine with a server.
+ *
+ * The same classes, the same prompts, the same schemas — only the transport differs.
+ */
+export function browserCritic(key: string): VisualCritic {
+  return new ClaudeVisualCritic({ client: browserClient(key) });
+}
+
+export function browserFigureAuthor(key: string): FigureAuthor {
+  return new ClaudeFigureAuthor({ client: browserClient(key) });
 }

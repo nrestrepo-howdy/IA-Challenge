@@ -194,6 +194,7 @@ npm run eval           # one pass of the nightly evaluation corpus
 npm run evidence       # regenerate the parallelism evidence in SYSTEM.md
 npm run evidence:autonomy   # reconstruct autonomous loops from the event log
 npm run evidence:loop       # run the product's own repair loop and print the trace
+npm run attack              # run the attack corpus against L0 and report what escapes
 ```
 
 `npm run verify` runs the browser suite deliberately. The gate counts browser criteria,

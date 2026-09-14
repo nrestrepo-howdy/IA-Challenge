@@ -221,6 +221,32 @@ Four short-circuiting layers. Full definitions in [SPEC.md §4](SPEC.md).
 | **L2 state contract** | assertions over `__VERBO_STATE__` | ~1 s | yes |
 | L3 perceptual | pixel delta + visual critic | ~5 s | no |
 
+### What the harness refuses — `npm run attack`
+
+```
+  L0        computed global access         forbidden-global
+  L0        dynamic import                 import-not-allowed
+  L0        computed state write           out-of-scope-write
+  L0        globalThis assignment          forbidden-global
+  …
+  worker    indirect Function constructor  build a function from a string without naming eval
+  worker    constructor chain              the next spelling of the same thing
+
+  10 refused by the lint, 2 left to the worker — which is the claim.
+```
+
+L0 is a lint over the AST, not a sandbox, and its own docstring says so. Twelve escapes
+were written against it and twelve passed; that is why the enforced boundary moved into
+the probe worker, which **deletes** eleven capabilities before the candidate is imported.
+The check is not "did you ask for this" but "is this here at all".
+
+Publishing which ones escape is the point. A harness claiming twelve of twelve would be
+claiming its lint is a sandbox, and the first person to try would find out it is not. The
+corpus lives in `src/harness/attacks.ts` so the tool and
+`tests/harness/l0-escapes.test.ts` cannot disagree about what is claimed — and they did
+disagree once, on the first run, when two attacks were labelled as escaping and the tool
+reported that L0 catches them.
+
 ### The inversion
 
 **L2 decides correctness; L3 does not.** WorldCoder-Bench reports failures in generated

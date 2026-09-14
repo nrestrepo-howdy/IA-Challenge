@@ -21,7 +21,8 @@
     "eval": "node tools/eval/nightly.mjs",
     "audit": "node tools/evidence/mutate-suite.mjs",
     "evidence:autonomy": "node tools/evidence/autonomy.mjs",
-    "evidence:loop": "npx tsx tools/evidence/loop-trace.mts"
+    "evidence:loop": "npx tsx tools/evidence/loop-trace.mts",
+    "attack": "npx tsx tools/evidence/attacks.mts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -1163,6 +1163,63 @@ it — and `line()` wakes the log back up. The fade was correct and unreachable.
 
 ---
 
+## 13 Sep — An effect I removed, and an attack corpus that corrected me on its first run
+
+Asked to make the project remarkable rather than merely compliant, I went looking in two
+places: the picture, and the claim.
+
+### The picture: anamorphic streaks, tried three times and removed
+
+`three/addons/tsl/display/` ships SSR, GTAO, motion blur, and anamorphic lens streaks —
+the horizontal smear a wide lens puts on a point of light, and the single most
+recognisable signature of a photographed night city. This world is several thousand
+points of light against near-black, which is exactly the input the effect is for.
+
+Three settings, three different failures:
+
+- **threshold 1.55** — correct, and invisible. A faint ring on the moon and nothing
+  else, which is not worth a pass.
+- **threshold 0.92** — every lit window streaked and "blade runner" came back as a purple
+  wash across the entire frame.
+- **threshold 1.42** — the base scene looked right and the same verb washed out again.
+
+That third result is the disqualifying one, and not because of the tuning. **Fog raises
+the luminance of everything, and the threshold is absolute** — so the correct setting
+depends on which verbs happen to be in the world. In a product whose entire premise is
+that the world changes on request, that is not a setting; it is a defect waiting for a
+demo. Removed.
+
+I nearly kept it for being cheap and then nearly blamed it for a cost it was not causing.
+Frame rate drops from 120 to 73 with weather in the world — and it does that with the
+pass removed too. Nine thousand rain particles and a fog volume are the expense. Both
+mistakes are the same mistake: attributing a number to the thing I happened to be
+looking at.
+
+### The claim: publishing what the harness does *not* stop
+
+The more interesting find was that the project's sharpest evidence was invisible. Twelve
+modules were written to get past L0 and twelve passed; that is the origin of the whole
+design — the lint reads names, `globalThis['fe'+'tch']` has no name to read, so the
+enforced boundary moved into the worker, which deletes the capability instead of
+objecting to it. All of that lived in a test file nobody runs by hand.
+
+`npm run attack` runs the corpus and prints which layer stops what. The corpus moved to
+`src/harness/attacks.ts` so the tool and the suite iterate the same data and cannot
+disagree about what is being claimed.
+
+**And they disagreed immediately.** I wrote two new attacks — a fetch assembled from an
+array, and the same reach deferred through `setTimeout` — and labelled both as escaping.
+The first run reported a mismatch: L0 catches them. The name is assembled at runtime and
+unreadable, but the *object* is spelled `globalThis`, which is very readable. The lint is
+better than I assumed at the one thing it does check, and I had been about to publish a
+weaker claim about my own system than the truth.
+
+Ten refused by the lint, two left to the worker. Saying which two is the point: a harness
+claiming twelve of twelve would be claiming its lint is a sandbox, and the first person to
+try would find out it is not.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

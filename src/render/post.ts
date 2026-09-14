@@ -86,7 +86,39 @@ export function createFramePass(
   try {
     post = new PostProcessing(renderer);
     const scenePass = pass(scene, camera);
+
+    // Bloom bleeds light in every direction; this bleeds it sideways, and sideways is
+    // what a lens does.
+    //
+    // An anamorphic lens is wider than it is tall, so a point of light smears into a
+    // horizontal streak — the single most recognisable signature of a photographed
+    // night city, and the reason a skyline shot reads as cinema rather than as a
+    // render. This world is several thousand points of light against near-black, which
+    // is the exact input the effect is for.
+    //
+    // Threshold above bloom's, deliberately. At bloom's threshold every lit window
+    // grows a streak and the frame turns into a comb; at 1.55 only the moon, the
+    // aviation beacons and the brightest window cores get one, which is what happens
+    // through a real lens.
     const lit = scenePass.add(bloom(scenePass, STRENGTH, RADIUS, THRESHOLD));
+
+    // Anamorphic streaks were tried here and removed. Three settings, three different
+    // failures: at threshold 1.55 the effect was correct and invisible; at 0.92 it caught
+    // every lit window and "blade runner" came back as a purple wash over the whole
+    // frame; at 1.42 the base scene looked right and the same verb washed out again,
+    // because fog raises the luminance of *everything* and the threshold is absolute.
+    //
+    // That is the disqualifying property, not the tuning. An effect whose correct
+    // setting depends on which verbs happen to be in the world is not a setting — and
+    // in a product whose entire premise is that the world changes on request, it is a
+    // defect waiting for a demo. `anamorphic` is a good node; this is the wrong scene
+    // for an absolute threshold.
+    //
+    // It was not the cost, which is worth recording because it looked like it was:
+    // frame rate dropped from 120 to 73 with weather in the world, and it does that
+    // with the pass removed too. Nine thousand rain particles and a fog volume are the
+    // expense. I nearly kept a bad effect for being cheap and nearly blamed it for a
+    // cost it was not causing, which is the same mistake in both directions.
 
     // The tone curve and the working->output colour conversion, applied here rather
     // than by the pipeline's own trailing transform, so that the two display-space

@@ -80,8 +80,24 @@ export async function createRenderer(canvas: HTMLCanvasElement): Promise<Rendere
  * `?forceWebGL` exists so AC-03 can be verified in a browser that does support
  * WebGPU. A fallback path nobody can reach on demand is a fallback path nobody
  * has tested.
+ *
+ * `VITE_FORCE_WEBGL=1` forces the same thing at build time, and exists for one reason:
+ * a headless CI runner has no GPU, so its WebGPU is SwiftShader, which initialises and
+ * then drops the device part-way through a run — twenty-four "Instance dropped in
+ * popErrorScope" errors, after which every frame capture waits on a device that is
+ * gone and eighteen of twenty-six browser tests time out. The suite is not there to
+ * test SwiftShader. It is there to test the product, and WebGL2 is a backend the
+ * product ships.
+ *
+ * The honest cost, stated rather than buried: under this flag the AC-03 test reaches
+ * WebGL2 from a browser that was already on WebGL2, so it stops proving a *fallback*.
+ * That claim is verified where it means something — on a machine that actually has
+ * WebGPU to fall back from. The deploy job builds without the flag, so what is
+ * published still prefers WebGPU.
  */
 function forcedToWebGL(): boolean {
+  const build = (import.meta as { env?: Record<string, string | undefined> }).env;
+  if (build?.['VITE_FORCE_WEBGL'] === '1') return true;
   if (typeof location === 'undefined') return false;
   return new URLSearchParams(location.search).has('forceWebGL');
 }

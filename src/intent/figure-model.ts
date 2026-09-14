@@ -117,12 +117,15 @@ capsule body, a cone beak, two wedge wings.
      a road                   240 wide, kerb to kerb
      a low building           600 tall
      the tallest towers     6,600 tall
+     a light aircraft         240 long, 260 across the wings
+     an airliner              900 long, 800 across the wings
 
-   Ground is y = 0 and the whole city stands on it, so anything flying belongs between
-   y = 2,000 and y = 5,000 — above the roofs, below nothing. A plane authored at y = 300
-   is parked on the road. This is the mistake to check for: a thing that should be in
-   the air is almost always authored an order of magnitude too low, because 300 sounds
-   high and against a 6,600-unit skyline it is ankle-deep.
+   Ground is y = 0 and the whole city stands on it, so anything flying over it belongs
+   between y = 5,500 and y = 9,000 — clear of the tallest tower, close enough that the
+   city is still the thing it is flying over. A plane authored at y = 300 is parked on
+   the road. This is the mistake to check for: a thing that should be in the air is
+   almost always authored an order of magnitude too low, because 300 sounds high and
+   against a 6,600-unit skyline it is ankle-deep.
 
 4. USE THE CANON FOR PROPORTION. This is where rigs go wrong, and it is not a matter of
    taste — there are numbers, and they are old.

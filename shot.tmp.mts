@@ -3,7 +3,7 @@ const b = await chromium.launch({ args: ['--use-angle=metal', '--enable-unsafe-w
 const page = await b.newPage({ viewport: { width: 1280, height: 800 } });
 await page.goto('http://localhost:5173/', { waitUntil: 'load' });
 await page.waitForFunction(() => (globalThis as never as Record<string, unknown>)['__VERBO__'], null, { timeout: 60000 });
-const utterance = process.argv[3] ?? 'a person walking a dog';
+const utterance = 'un avion de pasajeros volando sobre la ciudad';
 await page.evaluate(async (u) => {
   const api = (globalThis as never as Record<string, { say(s: string): Promise<unknown> }>)['__VERBO__']!;
   await api.say(u);

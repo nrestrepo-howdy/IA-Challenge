@@ -93,18 +93,20 @@ export interface FigureParams {
  * Bounds every rig is held to, whoever wrote it.
  *
  * These are in authored units, so `FIGURE_SCALE` is what says what they mean: a part may
- * be up to 18 metres in any half-extent and a rig may reach 270 metres from its origin.
+ * be up to 40 metres in any half-extent — an airliner's half-length — and a rig may
+ * reach 540 metres from its origin, which is what it takes to fly one over a city whose
+ * tallest tower is 300.
  * Both were an order of magnitude tighter, from before the world was metric, and they
  * were bounding the wrong things — 40 units was 1.8 metres, so a bus failed validation,
  * and 400 units of reach put a hard ceiling of 18 metres on anything that flies.
  *
- * They still do the job they exist for. The city is 2,300 metres across and the tallest
- * tower is 300; a rig that cannot exceed 36 metres across or 270 from where it stands
- * cannot swallow the frame, which is the only promise these ever made.
+ * They still do the job they exist for. The city is 2,300 metres across; a rig that
+ * cannot exceed 80 metres across, or stray 540 from where it stands, cannot swallow the
+ * frame, which is the only promise these ever made.
  */
 const MAX_PARTS = 48;
-const MAX_SIZE = 400;
-const MAX_REACH = 6000;
+const MAX_SIZE = 900;
+const MAX_REACH = 12000;
 const MAX_SCALE = 8;
 
 /**

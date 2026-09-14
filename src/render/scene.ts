@@ -35,9 +35,17 @@ export interface BaseScene {
   readonly sky: SkyHandle;
   resize(w: number, h: number): void;
   /**
-   * @param focus  Where the world's subject is, if it has one. The camera frames it.
+   * Lets a viewer look around: drag to orbit, wheel to push in and out.
+   *
+   * Returns the detach function. The offsets ease back to zero after a few seconds of
+   * stillness, so this adds a way to look without taking away the shot.
    */
-  update(elapsed: number, focus?: readonly [number, number, number] | null): void;
+  controls(el: HTMLElement): () => void;
+  /**
+   * @param focus  `[x, y, z, radius]` — where the world's subject is and how big it is.
+   *               The camera frames it by its size rather than from a fixed distance.
+   */
+  update(elapsed: number, focus?: readonly [number, number, number, number] | null): void;
 }
 
 /**
@@ -912,6 +920,74 @@ export function createBaseScene(): BaseScene {
    */
   const camera = new PerspectiveCamera(54, 1, 0.5, 4000);
   let dolly = 165;
+
+  /**
+   * What the viewer has asked for, on top of the automatic orbit.
+   *
+   * The camera was on rails: a slow orbit, no controls, and the reasoning was that the
+   * motion makes an injected change read as an addition to a living world rather than a
+   * page that swapped itself out. That is true and it was not the whole truth — a 3D
+   * world you cannot look around is not a world, and the first person to try to inspect
+   * something the agent had just built could not.
+   *
+   * So the orbit is a *default*, not a track. Dragging adds to it, the wheel pushes in
+   * and out, and after a few seconds of stillness the offsets ease back to zero and the
+   * automatic shot resumes. Nothing is taken away: the idle behaviour is byte-identical
+   * to what it was, which is also why the frame-budget and silhouette tests still
+   * measure what they were written to measure.
+   */
+  const view = { yaw: 0, pitch: 0, zoom: 1, lastInput: -Infinity };
+  /** Seconds of stillness before the shot takes itself back. */
+  const RELEASE_AFTER = 4;
+  const MIN_PITCH = -0.35;
+  const MAX_PITCH = 0.85;
+
+  function grabInput(el: HTMLElement): () => void {
+    let dragging = false;
+    let px = 0, py = 0;
+
+    const down = (e: PointerEvent): void => {
+      // Only the canvas itself, and never through the prompt or the panel.
+      if (e.button !== 0) return;
+      dragging = true; px = e.clientX; py = e.clientY;
+      view.lastInput = performance.now() / 1000;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = 'grabbing';
+    };
+    const move = (e: PointerEvent): void => {
+      if (!dragging) return;
+      view.yaw -= (e.clientX - px) * 0.0045;
+      view.pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, view.pitch + (e.clientY - py) * 0.0032));
+      px = e.clientX; py = e.clientY;
+      view.lastInput = performance.now() / 1000;
+    };
+    const up = (e: PointerEvent): void => {
+      dragging = false;
+      el.releasePointerCapture?.(e.pointerId);
+      el.style.cursor = 'grab';
+      view.lastInput = performance.now() / 1000;
+    };
+    const wheel = (e: WheelEvent): void => {
+      e.preventDefault();
+      // Multiplicative, so a step feels the same close in as far out.
+      view.zoom = Math.max(0.28, Math.min(2.4, view.zoom * Math.exp(e.deltaY * 0.0012)));
+      view.lastInput = performance.now() / 1000;
+    };
+
+    el.style.cursor = 'grab';
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => {
+      el.removeEventListener('pointerdown', down);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      el.removeEventListener('wheel', wheel);
+    };
+  }
   const aim = new Vector3();
   const subject = new Vector3();
   let framing = 0;
@@ -930,6 +1006,7 @@ export function createBaseScene(): BaseScene {
      * primitives or contracts.
      */
     setFraming(v: number) { framing = Math.max(0, Math.min(1, v)); },
+    controls: grabInput,
     resize(w, h) {
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
@@ -951,14 +1028,31 @@ export function createBaseScene(): BaseScene {
       // "un perro con una persona paseando", the subject of the picture is the dog and
       // the person, and a camera that keeps framing the skyline is answering a
       // different request.
-      const want = (focus ? 88 : 150) + framing * 130;
+      // Framed by the subject's own size. `radius / tan(halfFov)` is the distance at
+      // which a sphere of that radius exactly fills the frame; 3.2x that leaves it about
+      // a third of the height with the city still behind it — which is the shot, because
+      // a figure alone against black is not why anyone asked for a figure in a city.
+      const want = focus
+        ? Math.max(70, Math.min(320, (focus[3] / Math.tan((camera.fov * Math.PI) / 360)) * 3.2))
+        : 150 + framing * 130;
       dolly += (want - dolly) * 0.02;
       // Low, and looking up. 12 units is street level against 300-unit towers, which
       // is the whole point: at 26 the camera was level with nothing and taller than
       // the low-rises, so the skyline read as a model on a table.
       // Lower than the shortest tower, which is the whole difference between standing
       // in a city and hovering over one.
-      camera.position.set(Math.sin(a) * dolly, 15 + dolly * 0.06 + Math.sin(elapsed * 0.09) * 2.5, Math.cos(a) * dolly);
+      // The viewer's offsets, released back to zero after a few seconds of stillness so
+      // the automatic shot resumes rather than leaving the frame wherever it was dropped.
+      if (elapsed - view.lastInput > RELEASE_AFTER) {
+        view.yaw *= 0.985; view.pitch *= 0.985; view.zoom += (1 - view.zoom) * 0.015;
+      }
+      const r = dolly * view.zoom;
+      const ay = a + view.yaw;
+      camera.position.set(
+        Math.sin(ay) * r,
+        15 + r * 0.06 + Math.sin(elapsed * 0.09) * 2.5 + view.pitch * r * 0.9,
+        Math.cos(ay) * r,
+      );
       // Biased off-centre, and lowered from 78 so the horizon is inside the frame.
       //
       // At 78 the camera pitched up about 32 degrees with a 54-degree field, so the
@@ -972,7 +1066,7 @@ export function createBaseScene(): BaseScene {
       // Eased toward the subject rather than cut to it, and never all the way: at 1.0
       // the figure sits dead centre and the city stops being in the shot, which loses
       // the thing that makes the figure worth looking at.
-      aim.set(Math.sin(a + 0.42) * 70, 50 + framing * 60, Math.cos(a + 0.42) * 70);
+      aim.set(Math.sin(ay + 0.42) * 70, 50 + framing * 60, Math.cos(ay + 0.42) * 70);
       if (focus) {
         // No extra lift here: `focusPoint()` already returns a point above the rig's
         // centroid. Adding a second one put the subject a third of the way down the

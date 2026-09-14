@@ -1328,6 +1328,62 @@ is the one the constraint is about.
 
 ---
 
+## 13 Sep — "Tampoco puedo navegar por la ciudad, es 0 usable"
+
+Asked for a plane. Got a heap of white boxes filling the entire frame with the city
+nowhere behind it, and then the sentence that mattered more than the bug: *I can't even
+navigate the city.*
+
+Three defects, and the third is the one I should have found on day one.
+
+### The camera was on rails, and I had a reason for it
+
+A slow automatic orbit, no controls. The reasoning is in the source and it is not wrong:
+motion in the base scene is what makes an injected change read as an addition to a living
+world rather than a page that swapped itself out. That is true, and it was not the whole
+truth. **A 3D world you cannot look around is not a world** — and the first person who
+wanted to inspect something the agent had just built for them could not.
+
+Drag orbits, the wheel pushes in and out, and after four seconds of stillness the offsets
+ease back to zero and the automatic shot resumes. Nothing was taken away: the idle path
+is byte-identical, which is also why the frame-budget and silhouette tests still measure
+what they were written to measure.
+
+I had spent days tuning that orbit — its height, its look-at, its dolly — and never once
+asked whether someone might want to point it somewhere themselves. The thing I was most
+careful about was the thing I had least questioned.
+
+### The camera went to a fixed distance whatever it was looking at
+
+`focusPoint()` returned a point, so the camera came in to 88 units for a dog and 88 units
+for an aeroplane the model had built with forty-unit parts, which the schema permits. At
+88 units that is the whole frame.
+
+It returns a radius now, and the distance comes from the subject: `radius / tan(halfFov)`
+is where a sphere of that size exactly fills the frame, and 3.2× that leaves it about a
+third of the height with the city still behind it. Which is the shot — a figure alone
+against black is not why anyone asked for a figure in a city.
+
+That is the third time this function has been wrong in the same way. It aimed at the
+first part (a torso at eye height for a walker, a chassis three units up for a car), then
+at the centroid with a fixed lift, and now at the centroid with a distance derived from
+the size. Each fix was correct for the rig in front of me and silent about the next one.
+**A camera that frames one subject is not a camera, it is a shot.**
+
+### And the plane still is not a good plane
+
+Thirteen parts, and it reads as a plane only because it is small and moving. That is the
+model's design at medium effort and it is the honest state of the freeform surface: it
+will build you something recognisable more often than not, and "more often than not" is
+the claim, not "always". L3 said as much — *the small white plane visible against the
+moonlit sky carries the request* — and then suggested it could be larger, which is
+advice, not a veto, which is the point of L3.
+
+What made the difference between an unusable screenshot and a usable one was not the rig.
+It was the framing and the ability to look somewhere else.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

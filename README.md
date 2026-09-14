@@ -8,7 +8,8 @@ black frame. No lost state.
 Fifteen verbs today — weather, light and time of day, water, aurora, searchlights,
 birds, and structural changes to the city itself — plus the path out of that list: ask
 for *"un perro con una persona paseando"* and the agent writes a rig of shapes and the
-code that walks it. Undo with ⌘Z, share a world as a link, and watch the verification race in
+code that walks it. Drag to look around, wheel to push in and out — the camera returns to its own shot after
+a few seconds. Undo with ⌘Z, share a world as a link, and watch the verification race in
 the panel while it happens.
 
 The interesting part is not the generation. It is the **verification**: what it takes to

@@ -60,6 +60,10 @@ const base = createBaseScene();
 const primitives = createPrimitives();
 const bindings = new Map<string, Binding>();
 
+// Drag to look, wheel to push in and out. Attached to the canvas rather than to the
+// document so the prompt, the inventory and the panel keep their own pointer events.
+base.controls(canvas);
+
 const handle = await createRenderer(canvas);
 status.textContent = `${handle.backend} · ready`;
 document.body.dataset['backend'] = handle.backend;
@@ -113,19 +117,17 @@ function reconcile(): void {
  * Returns null the moment the rig is undone, so the camera goes back to framing the
  * city without anything having to remember to tell it.
  */
-function focusPoint(): readonly [number, number, number] | null {
+function focusPoint(): readonly [number, number, number, number] | null {
   const state = (globalThis as { __VERBO_STATE__?: Record<string, unknown> }).__VERBO_STATE__;
   const figures = state?.['figures'] as Record<string, { pose?: unknown }> | undefined;
   for (const figure of Object.values(figures ?? {})) {
     const pose = figure?.pose;
     if (!Array.isArray(pose) || pose.length < 7) continue;
-    // The centroid of every part, not the first one.
-    //
-    // The first version aimed at `pose[0..2]` plus a fixed lift, which works for a rig
-    // whose first part happens to be a torso at eye height and fails for one whose first
-    // part is a car body three units off the ground: the camera came in to 88 units and
-    // pointed at the pavement, and a tower filled the frame. A centroid is the same
-    // number for a walker and does not have to know what it is looking at.
+
+    // The centroid of every part, not the first one. The first version aimed at
+    // `pose[0..2]` plus a fixed lift, which works for a rig whose first part happens to
+    // be a torso at eye height and fails for one whose first part is a car body three
+    // units off the ground: the camera came in to 88 units and pointed at the pavement.
     let x = 0, y = 0, z = 0, n = 0;
     for (let i = 0; i + 6 < pose.length; i += 7) {
       const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
@@ -133,12 +135,27 @@ function focusPoint(): readonly [number, number, number] | null {
       x += px; y += py; z += pz; n += 1;
     }
     if (n === 0) continue;
-    // Lifted by a third of the rig's own height above its centre, so the frame has the
-    // city behind the subject rather than the pavement under it.
-    return [x / n, y / n + 14, z / n];
+    const cx = x / n, cy = y / n, cz = z / n;
+
+    // And how big it is, which decides how far away to stand.
+    //
+    // Without this the camera went to a fixed distance whatever it was looking at, so a
+    // rig the model happened to build large — an aeroplane with forty-unit parts, which
+    // the schema permits — arrived filling the entire frame with the city nowhere behind
+    // it. Distance has to come from the subject: a big thing is framed from further
+    // back, which is what a camera operator does without being asked.
+    let radius = 0;
+    for (let i = 0; i + 6 < pose.length; i += 7) {
+      const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
+      if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
+      radius = Math.max(radius, Math.hypot(px - cx, py - cy, pz - cz));
+    }
+    return [cx, cy + Math.max(14, radius * 0.5), cz, Math.max(12, radius)];
   }
   return null;
 }
+
+
 
 
 

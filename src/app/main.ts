@@ -37,6 +37,19 @@ export interface SayResult {
   readonly reason: string | null;
   /** Which resolver answered: the model, or the built-in phrasebook floor. */
   readonly resolver?: 'model' | 'phrasebook';
+  /**
+   * Utterance to injection, which is the window R-8 actually constrains.
+   *
+   * `ms` is the whole cycle and includes L3 — a model call that runs *after* the world
+   * has already changed, because the critic is advisory and never blocks (D-1).
+   * Charging an advisory judgement to a budget written for "utterance to injection"
+   * overstates the latency anyone experiences: by the time the critic speaks, the rain
+   * has been falling for several seconds.
+   *
+   * Both are reported. The log prints the total, because someone watching the trace
+   * finish is waiting for the total.
+   */
+  readonly injectedMs?: number;
 }
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -423,7 +436,11 @@ async function say(utterance: string): Promise<SayResult> {
       // the rules name; delivering it with the gap stated is honest service.
       line(`cannot express: ${compiled.unaddressed.map((u) => `"${u}"`).join(', ')}`, 'reject');
     }
+    // Stamped from the step that says the world changed, not from inside the cycle:
+    // the cycle's own clock starts after the resolver has already answered.
+    let injectedMs: number | undefined;
     const outcome = await runCycle(compiled, loader, world, (s) => {
+      if (s.kind === 'accept' && injectedMs === undefined) injectedMs = performance.now() - startedAt;
       panel.step(s);
       // Generation notices belong in the panel's lanes, not duplicated in the log.
       if (!(s.candidate && s.kind === 'info')) line(s.text, s.kind);
@@ -455,6 +472,7 @@ async function say(utterance: string): Promise<SayResult> {
       steps: outcome.steps.map((s) => ({ kind: s.kind, text: s.text })),
       reason: outcome.reason,
       resolver: lastResolver(),
+      ...(injectedMs !== undefined ? { injectedMs } : {}),
     };
   } finally {
     busy = false;

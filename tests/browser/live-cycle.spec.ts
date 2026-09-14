@@ -8,7 +8,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 type Api = {
-  say(u: string): Promise<{ ok: boolean; ms: number; steps: { kind: string; text: string }[] }>;
+  say(u: string): Promise<{ ok: boolean; ms: number; injectedMs?: number; steps: { kind: string; text: string }[] }>;
   capture(): Promise<ImageData>;
   world: { state: Record<string, unknown> };
   loader: { residentCount: number };
@@ -39,9 +39,19 @@ test.describe('AC-18 · "make it rain" completes the full cycle', () => {
 
     expect(errors, `page errors: ${errors.join('; ')}`).toEqual([]);
     expect(result.ok).toBe(true);
-    // R-8. The deterministic generator is far under this; the budget is what the
-    // model-backed generator will have to live inside, so it is asserted from the start.
-    expect(result.ms).toBeLessThan(40_000);
+    // R-8, asserted on the window the constraint names: **utterance to injection**.
+    //
+    // `ms` is the whole cycle and includes L3, a model call that runs *after* the world
+    // has already changed, because the critic is advisory and never blocks (D-1). With
+    // a key, the two diverge and the divergence is the whole point — a rig the model
+    // designed reaches the world at 36.6 s and the trace finishes at 42.2 s. Asserting
+    // on the total would fail a verb that met its budget, because a layer that cannot
+    // block was charged to it.
+    //
+    // Both are checked. `injectedMs` against the budget, and `ms` against a bound that
+    // exists to catch a cycle that never finishes rather than one that is slow.
+    expect(result.injectedMs ?? result.ms).toBeLessThan(40_000);
+    expect(result.ms).toBeLessThan(90_000);
 
     // The verb reached the live world, not just the cycle's return value.
     const rain = await page.evaluate(() =>

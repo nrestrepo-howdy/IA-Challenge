@@ -1264,6 +1264,70 @@ found the same way: by someone looking at a frame, not by reading the code that 
 
 ---
 
+## 13 Sep — The model designed a hot air balloon, and it took 75 seconds
+
+The credit came back, so the one capability that had never run live finally could: the
+model writing a rig for something nobody wrote by hand.
+
+**"un globo aerostático sobrevolando la plaza"** — fourteen parts. An envelope, a crown,
+a skirt, two painted bands, a basket, and a burner flame flickering on two frequencies:
+
+```js
+let dx = Math.sin(t*0.23)*9 + Math.sin(t*0.071)*4.5;   // drift
+let tilt = Math.sin(t*0.62+1.2)*0.05;                   // the envelope leaning into it
+let fl = Math.sin(t*11.0)*0.22 + Math.sin(t*17.3)*0.14; // the flame
+```
+
+L3 judged it in Spanish, because the request was in Spanish, and approved it. The
+screenshot is a red balloon with a white zigzag band hanging between two skyscrapers.
+
+That is the answer to *"entonces la magia no existe realmente"*, and it cost 75 seconds,
+against a 40-second budget. So the rest of the session was spent on that, and it turned
+into three separate lessons.
+
+### Effort is not the lever, and reaching for it costs the thing that matters
+
+Same request at each setting: **high 58 s / 14 parts, medium 35 s / 13, low 16 s / 10.**
+Low is the obvious fix and it is the wrong one — its balloon is a plain sphere with a
+basket. The extra effort does not buy a better-*conceived* figure, it buys painted bands,
+and painted bands are exactly what this path exists to be good at. Trading them for
+seconds is paying in the only currency the feature has.
+
+### The author did not need to be second
+
+The two model calls do not depend on each other. One decides which catalogue primitives
+to compose; the other designs a rig. They ran in sequence for no reason other than that
+I wrote them in that order, which put both on the critical path.
+
+They run together now, and the speculation is free to make: the offline keyword resolver
+runs locally in microseconds and already knows whether the catalogue will leave something
+unsaid. If it will not, the author is never started and no call is wasted. **The
+deterministic floor, used as a predictor for the expensive path.** 75 s became 45 s.
+
+### And 45 s was still the wrong number, because I was measuring the wrong window
+
+R-8 says **"≤ 40 s from utterance to injection"**. L3 runs *after* injection — it is
+advisory and never blocks, which is the whole of D-1. I had been charging an advisory
+model call to a budget written for the moment the world changes.
+
+By the time the critic speaks, the balloon has been drifting for five seconds.
+
+Both are reported now. Utterance to injection, which is what the constraint names and
+what AC-18 asserts; and the whole cycle, which is what the log prints, because someone
+watching the trace finish is waiting for the total.
+
+```
+  un globo aerostático…   injected 36.6s   cycle 42.2s
+  una noche de tormenta   injected 10.5s   cycle 16.2s
+  make it rain            injected  8.9s   cycle 13.2s
+```
+
+The first measurement I tried put injection at 0.1 s, because the cycle's own clock
+starts *after* the resolver has answered. Three different windows, and only one of them
+is the one the constraint is about.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

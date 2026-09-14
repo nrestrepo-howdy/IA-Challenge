@@ -108,10 +108,16 @@ export class ClaudeFigureAuthor implements FigureAuthor {
   constructor(options: FigureAuthorOptions = {}) {
     this.#client = options.client ?? new Anthropic();
     this.#model = options.model ?? 'claude-opus-5';
-    // High, and this is the one call in the project that earns it. Choosing rain over
-    // snow is a lookup with judgement; designing a rig that reads as a dog from a
-    // hundred and sixty units away, and writing a gait for it, is design work.
-    this.#effort = options.effort ?? 'high';
+    // Medium. The same request at the three settings: high took 58 s and produced 14
+    // parts, medium 35 s and 13, low 16 s and 10 — and low's balloon was a plain sphere
+    // where high's had painted bands, which is paying in exactly the thing this path
+    // exists to be good at.
+    //
+    // Medium is affordable because the call no longer sits on the critical path: the
+    // compiler starts it beside the resolver rather than after it (see `willLeaveGaps`).
+    // Serialised, medium landed exactly on R-8's 40 s with nothing left for the cascade;
+    // in parallel it hides behind a resolver that takes 12 to 20 s on its own.
+    this.#effort = options.effort ?? 'medium';
   }
 
   async author(utterance: string): Promise<FigureSpec | null> {

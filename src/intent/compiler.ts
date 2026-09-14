@@ -107,12 +107,39 @@ export class CatalogueIntentCompiler implements IntentCompiler {
       worldPaths: statePaths(world.state),
     };
 
+    // The written rigs answer first: free, deterministic, and they settle most of the
+    // freeform requests anyone actually types.
+    let figure = matchFigure(toTranslatedVocabulary(goal));
+
+    /**
+     * The author runs *beside* the resolver, not after it.
+     *
+     * These two calls do not depend on each other — one decides which catalogue
+     * primitives to compose, the other designs a rig — and running them in sequence put
+     * both on the critical path. Measured on "un globo aerostático sobrevolando la
+     * plaza": 58 s at high effort, 35 s at medium, against R-8's 40 s budget for the
+     * whole cycle. Serialised, the only lever left was effort, and dropping to low
+     * bought the time by producing a plainer balloon — paying in the one thing the
+     * freeform path exists to be good at.
+     *
+     * Speculative, and the speculation is free to make. The offline keyword resolver
+     * runs locally in microseconds and already knows whether the catalogue will leave
+     * something unsaid; if it will not, the author is never started and no call is
+     * wasted. That is the same deterministic floor the product falls back to, used here
+     * as a predictor instead.
+     */
+    const speculate = this.figureAuthor !== null && !figure && await willLeaveGaps(request);
+    const authored = speculate
+      ? this.figureAuthor!.author(goal).catch(() => null)
+      : Promise.resolve(null);
+
     let raw: string;
     try {
       raw = await this.model.propose(request);
     } catch (err) {
       // A model failure is reported, never papered over with a guess: guessing is the
       // behaviour AC-17 exists to forbid.
+      void authored.catch(() => null);
       return reject(`the model could not be reached: ${(err as Error).message}`, 'retry the request');
     }
 
@@ -127,22 +154,17 @@ export class CatalogueIntentCompiler implements IntentCompiler {
     // rig of typed shapes and a pose function, verified by the same four layers as
     // everything else. It is added *alongside* whatever the catalogue matched, so "a
     // dog in the rain" is one world and not a choice between two.
-    let figure = matchFigure(toTranslatedVocabulary(goal));
-
-    // The written rigs answer first because they are free and deterministic; the author
-    // is asked only when they do not, and only when the resolver has already said the
-    // catalogue fell short — either it matched nothing at all, or it matched something
-    // and left part of the request on the floor. "a red car in the rain" is the case
-    // that makes the second condition necessary: rain resolves, the car does not, and
-    // asking only on a total miss would answer half of it and call that success.
-    if (!figure && this.figureAuthor && (parsed.proposal.primitives.length === 0 || (parsed.proposal.unaddressed ?? []).length > 0)) {
-      try {
-        figure = await this.figureAuthor.author(goal);
-      } catch {
-        // A failed author is not a failed request: the catalogue's answer, and the
-        // disclosure of what it could not reach, are still the right output.
-        figure = null;
-      }
+    // Collected, not started, here: it has been running since before the resolver was
+    // called. A rig is used only when the resolver agrees the catalogue fell short —
+    // either it matched nothing, or it matched something and left part of the request on
+    // the floor. "a red car in the rain" is why the second condition is needed: rain
+    // resolves, the car does not, and taking the rig only on a total miss would answer
+    // half the request and call it success.
+    //
+    // A failed author is not a failed request. The catalogue's answer, and the
+    // disclosure of what it could not reach, are still the right output.
+    if (!figure && (parsed.proposal.primitives.length === 0 || (parsed.proposal.unaddressed ?? []).length > 0)) {
+      figure = await authored;
     }
 
     if (parsed.proposal.primitives.length === 0 && !figure) {
@@ -347,6 +369,27 @@ function figureSelection(figure: FigureSpec): Selection {
       count: figure.parts.length,
     },
   };
+}
+
+/**
+ * Would the catalogue leave part of this request unsaid?
+ *
+ * Answered by the offline keyword resolver, which is free, local and already computes
+ * exactly this — so the expensive question ("design me a rig") can be started before the
+ * expensive answer ("which primitives") comes back. It is a predictor, not a decision:
+ * the resolver's own `unaddressed` is what actually decides whether the rig is used.
+ *
+ * Wrong in the cheap direction on purpose. A false positive costs one speculative call
+ * that gets discarded; a false negative costs the user twenty seconds of waiting.
+ */
+async function willLeaveGaps(request: ModelRequest): Promise<boolean> {
+  try {
+    const parsed = parseProposal(await keywordModel.propose(request));
+    if (!parsed.ok) return true;
+    return parsed.proposal.primitives.length === 0 || (parsed.proposal.unaddressed ?? []).length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function reject(reason: string, suggestion: string | null): IntentRejection {

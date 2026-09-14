@@ -20,7 +20,10 @@ import {
   ClampToEdgeWrapping, Quaternion, RepeatWrapping, SRGBColorSpace, Scene,
   SphereGeometry, Vector3,
 } from 'three/webgpu';
-import { abs, normalView, normalWorld, positionViewDirection, positionWorld, texture, uniform, vec2, vec3 } from 'three/tsl';
+import {
+  abs, float, mix, mx_cell_noise_float, normalView, normalWorld, positionViewDirection,
+  positionWorld, smoothstep, uniform, vec2, vec3,
+} from 'three/tsl';
 
 export interface BaseScene {
   readonly scene: Scene;
@@ -775,77 +778,6 @@ export function createBaseScene(): BaseScene {
   // frame where it is least wanted (noon) and most wanted (midnight).
   // The exponent is what keeps it a contour: at 1 the whole face lifts and the city
   // turns grey.
-  /**
-   * A facade, drawn once into a canvas and worn by every building.
-   *
-   * The research on why realtime web 3D reads as cheap is blunt about this: the secret
-   * is not in the geometry, it is in the textures. A box with a rim light is still a
-   * box; a box with a grid of windows is a building, and the difference costs one
-   * 256x512 canvas and no extra draw calls.
-   *
-   * Deliberately irregular. A perfect grid of identical lit squares reads as wallpaper,
-   * because real buildings have floors where nobody is home. Roughly a third are lit,
-   * a few are warmer than the rest, and the columns are not perfectly aligned.
-   */
-  const facade = document.createElement('canvas');
-  facade.width = 512;
-  facade.height = 1024;
-  const fx = facade.getContext('2d')!;
-  fx.fillStyle = '#05070c';
-  fx.fillRect(0, 0, 512, 1024);
-
-  const cols = 18, rows = 40;
-  const cw = 512 / cols, ch = 1024 / rows;
-
-  // Structure before glass. A facade is not a field of lit rectangles floating in
-  // black — it is a frame with glass in it, and the frame is what the eye reads as
-  // construction. Mullions run the full height between window columns; floor slabs run
-  // the full width between them. Both are barely lighter than the wall, which is all
-  // they need to be: at this distance they are the difference between a building and
-  // a QR code.
-  fx.fillStyle = 'rgba(150,168,198,0.035)';
-  for (let c = 0; c <= cols; c++) fx.fillRect(c * cw - 1, 0, 2, 1024);
-  for (let r = 0; r <= rows; r++) fx.fillRect(0, r * ch - 1, 512, 2);
-
-  for (let r = 0; r < rows; r++) {
-    // Occupancy by floor, not by window. Offices empty a floor at a time, so lighting
-    // each window independently is the tell — it produces a static of lit squares no
-    // real building has ever shown. A few floors are fully lit (lobby, mechanical,
-    // someone's very bad night) and most are empty.
-    const roll = rand();
-    const occupancy = roll > 0.86 ? 0.92 : roll > 0.62 ? 0.34 : roll > 0.34 ? 0.12 : 0;
-    if (occupancy === 0) continue;
-    // One temperature per floor, with drift. A building lit at one colour is
-    // generated; a building lit at twenty is a Christmas tree. Floors share bulbs.
-    const floorWarm = rand();
-    for (let c = 0; c < cols; c++) {
-      if (rand() > occupancy) continue;
-      const warm = floorWarm * 0.72 + rand() * 0.28;
-      fx.fillStyle = warm > 0.74 ? `rgba(255,206,142,${0.55 + rand() * 0.4})`
-        : warm > 0.3 ? `rgba(240,231,210,${0.4 + rand() * 0.38})`
-        : `rgba(168,194,228,${0.3 + rand() * 0.3})`;
-      // Inset inside its cell so the mullion and the slab both survive, and the glass
-      // reads as glass held in something rather than as a tile.
-      fx.fillRect(c * cw + 2.5, r * ch + 2, cw - 5, ch - 4.5);
-    }
-  }
-
-  const facadeMap = new CanvasTexture(facade);
-  facadeMap.wrapS = facadeMap.wrapT = RepeatWrapping;
-  facadeMap.colorSpace = SRGBColorSpace;
-  // Mipmaps and anisotropy, or the windows tear themselves apart.
-  //
-  // A facade this fine is mostly high-frequency detail, and a tower fifty units wide
-  // covering two hundred pixels of screen asks for one texel out of every four. Without
-  // a mip chain the sampler picks whichever it lands on, and the result was not "small
-  // windows" but a shimmering herringbone — the towers looked like untuned television.
-  // Anisotropy is the other half: these surfaces are almost always seen at a grazing
-  // angle, where a trilinear sample blurs along the wrong axis and the floors smear
-  // into stripes.
-  facadeMap.generateMipmaps = true;
-  facadeMap.minFilter = LinearMipmapLinearFilter;
-  facadeMap.anisotropy = 16;
-  facadeMap.needsUpdate = true;
   // Combined, not assigned. `emissiveNode` *replaces* the emissive chain, so setting
   // the rim light there silently discarded `emissiveMap` — the facade was uploaded,
   // bound, and never sampled. The windows were there the whole time and nothing drew
@@ -866,19 +798,77 @@ export function createBaseScene(): BaseScene {
    * a smear of stretched glass.
    */
   const nAbs = abs(normalWorld);
-  // 36 world units per tile across, 140 up. With 18 columns and 40 rows in the tile
-  // that is a window every two units and a floor every three and a half — and, at the
-  // sizes the city is authored in, roughly one tile per building. Both halves of that
-  // matter: the first makes a window a fixed thing, and the second keeps a tile's worth
-  // of variety attached to one building. Tiling a facade eight times over averages the
-  // lit and dark floors back into a uniform glow, which is how the first attempt turned
-  // every tower into beige corduroy.
-  const facadeUv = vec2(
-    positionWorld.x.mul(nAbs.z).add(positionWorld.z.mul(nAbs.x)).mul(1 / 36),
-    positionWorld.y.mul(1 / 140),
+
+  /**
+   * The windows, computed on the GPU instead of sampled from a canvas.
+   *
+   * They were a 512x1024 PNG drawn once and tiled, which has three costs a procedural
+   * facade does not pay. It repeats — every building wore the same forty floors, and at
+   * this density the eye finds the seam. It is a fixed resolution — close to the camera
+   * a window is four blurry texels, and the mip chain that stops it shimmering is the
+   * same chain that smears it. And it is one facade: a curtain-wall tower and a pre-war
+   * block are the same texture at different tints.
+   *
+   * This is arithmetic over the world position instead. The grid is in world units, so a
+   * window is the same size on every building whatever its face measures; the lit cells
+   * come from a hash of the cell's own coordinates, so the pattern never repeats and
+   * never needs to be stored; and the window *pitch* is hashed per building, so a tower
+   * with tall storeys stands next to one with short ones.
+   *
+   * `mx_cell_noise_float` is three.js's own cell hash — deterministic, stable across
+   * both backends, and already in the TSL bundle, which matters because the WebGL2
+   * fallback (AC-03) compiles the same graph.
+   */
+  const WINDOW_W = 2.4;   // world units, horizontally, per window cell
+  const FLOOR_H = 3.6;    // and vertically
+
+  // Which face of the building this fragment is on, as a coordinate along it.
+  const along = positionWorld.x.mul(nAbs.z).add(positionWorld.z.mul(nAbs.x));
+  // The building's own identity: constant across one facade, different on the next
+  // block. Quantised coarsely so it does not change halfway up a wall.
+  const parcel = vec2(
+    positionWorld.x.mul(nAbs.z).add(positionWorld.z.mul(nAbs.x)).mul(1 / 48).floor(),
+    positionWorld.z.mul(nAbs.z).add(positionWorld.x.mul(nAbs.x)).mul(1 / 48).floor(),
   );
-  const facadeGlow = texture(facadeMap, facadeUv)
-    .rgb
+  const parcelHash = mx_cell_noise_float(vec3(parcel.x, parcel.y, float(3.1)));
+  // Storey height varies by about a third between buildings, which is the difference
+  // between an office block and a warehouse and is visible at a glance.
+  const pitchY = float(FLOOR_H).mul(parcelHash.mul(0.42).add(0.82));
+
+  const cell = vec2(along.div(WINDOW_W), positionWorld.y.div(pitchY));
+  const cellId = vec2(cell.x.floor(), cell.y.floor());
+  const inCell = vec2(cell.x.fract(), cell.y.fract());
+
+  // The pane, inset inside its cell so the mullion and the floor slab survive. Framed
+  // rather than filled: the frame is what reads as construction.
+  const pane = smoothstep(float(0.12), float(0.2), inCell.x)
+    .mul(smoothstep(float(0.88), float(0.8), inCell.x))
+    .mul(smoothstep(float(0.16), float(0.26), inCell.y))
+    .mul(smoothstep(float(0.82), float(0.72), inCell.y));
+
+  // Occupancy by floor, then by window. Offices empty a floor at a time, so a per-window
+  // roll alone produces a static of lit squares no building has ever shown.
+  const floorRoll = mx_cell_noise_float(vec3(cellId.y, parcel.x, parcel.y));
+  const cellRoll = mx_cell_noise_float(vec3(cellId.x, cellId.y, parcel.x.add(parcel.y)));
+  const floorLit = smoothstep(float(0.34), float(0.42), floorRoll);
+  const lit = floorLit.mul(smoothstep(float(0.3), float(0.46), cellRoll));
+
+  // Three colour temperatures, chosen by the same roll that lit it. A night city lit at
+  // one temperature is the tell that it was generated rather than observed.
+  const warm = vec3(1, 0.78, 0.45);
+  const neutral = vec3(0.95, 0.92, 0.84);
+  const cool = vec3(0.6, 0.74, 1);
+  // Weighted warm. A real night city is sodium and tungsten with a few cold offices in
+  // it, not the other way round: the first balance here was mostly neutral-to-cool and
+  // the skyline came out looking like a server room.
+  const tint = mix(cool, mix(neutral, warm, smoothstep(float(0.25), float(0.62), cellRoll)),
+    smoothstep(float(0.08), float(0.2), cellRoll));
+
+  const facadeGlow = tint
+    .mul(pane)
+    .mul(lit)
+    // Roofs get none of it: a vertical projection has nothing to say about a horizontal
+    // surface, and without the mask every rooftop wore a smear of stretched glass.
     .mul(nAbs.y.oneMinus().clamp())
     .mul(0.62);
   /**

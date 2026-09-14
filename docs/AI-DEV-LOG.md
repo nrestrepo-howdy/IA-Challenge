@@ -1603,6 +1603,38 @@ nothing lands at 1.0x on both, and neither half can be satisfied by the other.
 
 ---
 
+## 13 Sep — "No todo puede ser pngs"
+
+Fair, and it was the facade: a 512x1024 canvas drawn once and tiled across every
+building in the city. Three costs a procedural one does not pay.
+
+**It repeats.** Every building wore the same forty floors, and at this density the eye
+finds the seam. **It is a fixed resolution** — close to the camera a window is four blurry
+texels, and the mip chain that stops it shimmering is the same chain that smears it. And
+**it is one facade**: a curtain-wall tower and a pre-war block were the same image at
+different tints.
+
+The windows are arithmetic over world position now. The grid is in world units, so a
+window is the same size on every building whatever its face measures; the lit cells come
+from a hash of the cell's own coordinates, so the pattern never repeats and never needs
+to be stored; and the storey *pitch* is hashed per parcel, so a tower with tall floors
+stands next to one with short ones. `mx_cell_noise_float` is three.js's own cell hash —
+deterministic and stable across both backends, which matters because the WebGL2 fallback
+compiles the same graph (AC-03).
+
+Occupancy is still per floor before per window, which was the one thing the canvas
+version got right: offices empty a floor at a time, and a per-window roll alone produces
+a static of lit squares no building has ever shown.
+
+The first colour balance was mostly neutral-to-cool and the skyline came out looking like
+a server room. A night city is sodium and tungsten with a few cold offices in it, not the
+other way round.
+
+120 fps, and the canvas is deleted rather than left in place — a texture nothing samples
+is a 512 KB upload and a lie in the next person's mental model.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

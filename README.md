@@ -12,6 +12,11 @@ code that walks it. Drag to look around, wheel to push in and out — the camera
 a few seconds. Undo with ⌘Z, share a world as a link, and watch the verification race in
 the panel while it happens.
 
+The city is laid out, not scattered: irregular avenues, blocks between them, buildings
+square to the street with their windows computed on the GPU rather than sampled from a
+texture — so a window is the same size on every building, the pattern never repeats, and
+each block has its own storey height.
+
 The interesting part is not the generation. It is the **verification**: what it takes to
 make it safe to inject machine-written code into a running system.
 

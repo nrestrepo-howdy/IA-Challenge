@@ -32,10 +32,9 @@ bottom-right; the status line reads `KEY ACTIVE` when it is set.
 > "Make it rain. Five seconds. And notice what didn't happen — the page didn't reload, the
 > camera didn't cut, the city is still the city you were looking at."
 
-> [Type **`una noche de tormenta`**. Talk over the wait.]
+> [Type **`a stormy night`**. Talk over the wait.]
 >
-> "Now something harder. That's Spanish, and it isn't the name of any feature in this
-> system. It's a mood.
+> "Now something harder. That isn't the name of any feature in this system. It's a mood.
 >
 > And it becomes four things at once. Night. Heavy rain. Wind pushing the rain sideways.
 > Lightning. Composed together, because that's what the sentence meant."
@@ -44,10 +43,18 @@ bottom-right; the status line reads `KEY ACTIVE` when it is set.
 >
 > "Every one of those imports is code that did not exist a second ago."
 
-> [Type **`un astronauta caminando por la plaza`**. Start talking immediately — it takes
-> between ten and sixty seconds.]
+> [Type **`una noche de tormenta`**. Same four things happen.]
 >
-> "And this is the part that isn't a catalogue lookup. There's no astronaut in this system.
+> "Same request in Spanish. Same four things.
+>
+> And that one matters, because this system has an offline fallback that works by matching
+> keywords — and every keyword in it is English. There is no Spanish in there at all. So
+> that sentence can only have been understood, not matched."
+
+> [Type **`an astronaut walking through the plaza`**. Start talking immediately — it takes
+> between ten and eighty seconds.]
+>
+> "This last one isn't a catalogue lookup at all. There's no astronaut in this system.
 > There's no walk cycle either. So the agent has to design the body and write the motion
 > itself.
 >
@@ -153,8 +160,10 @@ Two takes, thirty seconds of footage, cut to fifteen.
 ## Rehearse against these
 
 - **Latency is the only thing that can ruin a take.** Measured on the live site with a key:
-  `make it rain` ≈ 5 s, `una noche de tormenta` ≈ 16 s, a model-authored figure **11 s to
-  67 s**. Never open with the slow one, and narrate *over* it rather than pausing.
+  `make it rain` ≈ 5 s, a mood sentence ≈ 19 s in either language, a model-authored
+  figure **11 s to 79 s**. Never open with the slow one, and narrate *over* it rather than
+  pausing. The astronaut is the one that can run long — have a second sentence of
+  narration ready for it.
 - **Check L3's line before committing to read it aloud.** It is a live judgement and will
   not say the same thing twice. If it approves with no criticism, say another verb — that
   beat only works when the critique is real.

@@ -33,7 +33,7 @@ describe('figure · what it refuses (AC-06)', () => {
   const bad: [string, Partial<FigureParams>][] = [
     ['a name that is not a path segment', { name: 'Rig One!' }],
     ['no parts at all', { parts: [] }],
-    ['a shape outside the four', { parts: [{ ...PART, shape: 'torus' as never }] }],
+    ['a shape that is not in the vocabulary', { parts: [{ ...PART, shape: 'dodecahedron' as never }] }],
     ['two parts sharing an id', { parts: [PART, PART] }],
     ['a size that is not three numbers', { parts: [{ ...PART, size: [1, 1] as never }] }],
     ['a part larger than the bound', { parts: [{ ...PART, size: [1, 400, 1] }] }],

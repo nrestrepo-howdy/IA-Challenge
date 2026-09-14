@@ -22,8 +22,21 @@
  */
 import type { Primitive, PrimitiveInstance, WorldHandle } from '../contracts.js';
 
-/** The shapes a rig may be built from. Four, and no way to ask for a fifth. */
-export const SHAPES = ['box', 'sphere', 'capsule', 'cylinder'] as const;
+/**
+ * The shapes a rig may be built from. Eight, and no way to ask for a ninth.
+ *
+ * It was four — box, sphere, capsule, cylinder — and every one of them is a *blob*.
+ * None has a direction. Asked for an aeroplane, the model could only answer with boxes,
+ * and a pile of boxes is a pile of boxes however carefully it is arranged: what makes a
+ * low-poly object recognisable is its silhouette, and a silhouette needs shapes that
+ * point somewhere.
+ *
+ * The four added are the directional ones. A `cone` is a nose, a spire, a tree; a
+ * `wedge` is a wing, a roof, a ramp; a `pyramid` is a crown or a tent; a `torus` is a
+ * wheel or a ring. Between them a fuselage with a nose and swept wings becomes
+ * expressible, which it simply was not before.
+ */
+export const SHAPES = ['box', 'sphere', 'capsule', 'cylinder', 'cone', 'wedge', 'pyramid', 'torus'] as const;
 export type Shape = (typeof SHAPES)[number];
 
 export interface PartSpec {

@@ -13,11 +13,11 @@
  */
 import {
   AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry,
-  CanvasTexture, Color, CylinderGeometry, DataTexture, DoubleSide,
+  CanvasTexture, Color, ConeGeometry, CylinderGeometry, DataTexture, DoubleSide,
   EquirectangularReflectionMapping, Fog, InstancedMesh, LineBasicMaterial, LineSegments,
   Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
   CapsuleGeometry, Euler, Object3D, PlaneGeometry, Points, PointsMaterial, Quaternion, RingGeometry,
-  RGBAFormat, Scene, SphereGeometry, Vector3,
+  RGBAFormat, Scene, SphereGeometry, TorusGeometry, Vector3,
 } from 'three/webgpu';
 import { sceneHandles, type SkyState } from './scene.js';
 
@@ -1094,6 +1094,42 @@ function wobble(n: number): number {
  * so meshes are built from it once; `pose` is seven numbers per part per frame, and is
  * read defensively because the code that writes it was generated.
  */
+/**
+ * A right triangular prism: full height at -z, tapering to nothing at +z.
+ *
+ * Built vertex by vertex rather than derived from a cylinder, because the derived
+ * version was wrong in a way that rendered: `CylinderGeometry` with three segments is a
+ * prism about *its own axis*, and after rotating that axis into place a later `scale`
+ * stretched the triangle's radius instead of the prism's length. The result was a set of
+ * thin white spars, and L3 said so — "the airplane is not recognizable".
+ *
+ * Six vertices and eight triangles is less code than the rotations were, and there is
+ * nothing left to get the wrong way round. `size` means the same thing it means for
+ * every other shape: half-extents in x, y and z.
+ */
+function wedgeGeometry(hx: number, hy: number, hz: number): BufferGeometry {
+  const x = Math.max(0.01, hx), y = Math.max(0.01, hy), z = Math.max(0.01, hz);
+  // Four along the base, two along the raised edge at -z.
+  const v = [
+    -x, -y, -z,   x, -y, -z,   x, -y, z,   -x, -y, z,   // 0..3 base
+    -x, y, -z,    x, y, -z,                             // 4..5 ridge
+  ];
+  const index = [
+    0, 2, 1, 0, 3, 2,   // base
+    0, 1, 5, 0, 5, 4,   // the tall face
+    3, 4, 5, 3, 5, 2,   // the slope
+    0, 4, 3,            // left
+    1, 2, 5,            // right
+  ];
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(v), 3));
+  geometry.setIndex(index);
+  // Computed rather than authored: a normal written by hand is a normal that disagrees
+  // with the triangle it belongs to the first time a number here changes.
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export const figureBinding: BindingFactory = (scene, statePath) => {
   interface Rig {
     readonly root: Object3D;
@@ -1111,10 +1147,18 @@ export const figureBinding: BindingFactory = (scene, statePath) => {
     // Radii come from the widest horizontal half-extent: a capsule authored 0.3 x 1.2
     // x 0.3 is a limb, and reading only `x` would make an arm out of a thread.
     const radius = Math.max(0.01, Math.max(x, z));
+    const height = Math.max(0.01, y * 2);
     if (shape === 'sphere') return new SphereGeometry(radius, 18, 12);
-    if (shape === 'capsule') return new CapsuleGeometry(radius, Math.max(0.01, y * 2), 6, 12);
-    if (shape === 'cylinder') return new CylinderGeometry(radius, radius, Math.max(0.01, y * 2), 18);
-    return new BoxGeometry(Math.max(0.01, x * 2), Math.max(0.01, y * 2), Math.max(0.01, z * 2));
+    if (shape === 'capsule') return new CapsuleGeometry(radius, height, 6, 12);
+    if (shape === 'cylinder') return new CylinderGeometry(radius, radius, height, 18);
+    // Directional shapes. These are the ones that give a rig a silhouette: a cone points,
+    // a wedge sweeps, a pyramid caps. Without them a model asked for an aeroplane has
+    // only blobs to answer with.
+    if (shape === 'cone') return new ConeGeometry(radius, height, 18);
+    if (shape === 'pyramid') return new ConeGeometry(radius, height, 4);
+    if (shape === 'torus') return new TorusGeometry(radius, Math.max(0.01, Math.min(y, radius * 0.6)), 10, 22);
+    if (shape === 'wedge') return wedgeGeometry(x, y, z);
+    return new BoxGeometry(Math.max(0.01, x * 2), height, Math.max(0.01, z * 2));
   }
 
   function build(name: string, parts: readonly Record<string, unknown>[]): Rig {

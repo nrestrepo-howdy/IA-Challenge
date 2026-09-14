@@ -1492,6 +1492,54 @@ not: the city is one instanced draw, so shadowing it is one more.
 
 ---
 
+## 13 Sep — "Todo lo que crea se ve sin forma" — and the vocabulary was the reason
+
+Asked why everything the model builds is shapeless. The research answer is blunt and
+useful: in low-poly work **the silhouette is the object.** Nobody at this distance sees a
+surface; they see an outline, and an outline is made of shapes that point somewhere.
+
+The vocabulary was box, sphere, capsule, cylinder. **Every one of those is a blob.** None
+has a direction. Asked for an aeroplane, the model could only answer with boxes — and a
+pile of boxes is a pile of boxes however carefully it is arranged. The failure was not
+the model's taste, it was that I had handed it an alphabet with no consonants.
+
+Four directional shapes added: `cone` for a nose or a spire, `wedge` for a wing or a
+roof, `pyramid` for a crown, `torus` for a wheel. The same request now comes back as a
+capsule fuselage, **a cone nose and five wedges** — wings, fin, stabilisers. A sailboat
+comes back with five wedges of sail and a torus.
+
+The system prompt changed with it, and the part that did the work is not the list of
+shapes but the instruction before it: *decide what the thing looks like as a black shape
+against the sky, then build that.* Plus a table of what each shape is for and the
+proportions of a few subjects, because "about 40 units across the wings" is a fact the
+model cannot get from anywhere else.
+
+### The wedge I derived was wrong, and it rendered
+
+First implementation was `CylinderGeometry` with three radial segments — which is a
+triangular prism, and correct — rotated into place and then scaled. The scale stretched
+the *triangle's radius* rather than the prism's length, because after the rotation the
+axis I was scaling was no longer the axis I meant.
+
+It did not throw. It produced thin white spars, and the first thing to notice was L3:
+
+> The airplane is not recognizable: the only non-building geometry is a set of thin
+> white spars
+
+Rebuilt from six vertices and eight triangles. That is less code than the rotations were
+and there is nothing left to get the wrong way round — and `computeVertexNormals()`
+rather than hand-written normals, because a normal written by hand is a normal that
+disagrees with its triangle the first time a number changes.
+
+After: *The white plane flying above the lit skyline against a moonlit night sky carries
+the request.*
+
+Same shape of lesson as the whole day: the thing that looked like a quality problem was a
+missing capability, and the layer that noticed was the one that only ever offers an
+opinion.
+
+---
+
 ## ⏳ Pending
 
 Recorded here as absent so their absence is not mistaken for omission:

@@ -113,20 +113,23 @@ const PERSON_PARTS: readonly FigurePart[] = [
  * as a rat on a lead.
  */
 const DOG_PARTS: readonly FigurePart[] = [
-  { id: 'body', shape: 'capsule', size: [2.2, 6.4, 2.2], color: FUR, emissive: 0.24 },
-  { id: 'chest', shape: 'capsule', size: [2.4, 2.2, 2.5], color: FUR, emissive: 0.24 },
-  { id: 'neck', shape: 'cylinder', size: [1.1, 1.7, 1.1], color: FUR, emissive: 0.24 },
-  { id: 'head', shape: 'box', size: [1.45, 1.3, 1.6], color: FUR, emissive: 0.26 },
-  { id: 'muzzle', shape: 'box', size: [0.7, 0.55, 1.3], color: MUZZLE, emissive: 0.3 },
-  // Laid back along the skull rather than stood upright. Two vertical wedges on a box
-  // head are antlers, and the rig read as a goat.
-  { id: 'ear-l', shape: 'wedge', size: [0.22, 0.62, 0.95], color: MUZZLE, emissive: 0.24 },
-  { id: 'ear-r', shape: 'wedge', size: [0.22, 0.62, 0.95], color: MUZZLE, emissive: 0.24 },
-  { id: 'leg-fl', shape: 'cylinder', size: [0.48, 3.1, 0.48], color: FUR, emissive: 0.22 },
-  { id: 'leg-fr', shape: 'cylinder', size: [0.48, 3.1, 0.48], color: FUR, emissive: 0.22 },
-  { id: 'leg-bl', shape: 'cylinder', size: [0.52, 3.1, 0.52], color: FUR, emissive: 0.22 },
-  { id: 'leg-br', shape: 'cylinder', size: [0.52, 3.1, 0.52], color: FUR, emissive: 0.22 },
-  { id: 'tail', shape: 'capsule', size: [0.34, 1.9, 0.34], color: FUR, emissive: 0.24 },
+  // A medium dog at the world's scale: 0.9 m nose to tail, 0.5 at the shoulder. The
+  // body runs along z and the pose pitches it there, which is why its long extent is
+  // written in y — a capsule's axis.
+  { id: 'body', shape: 'capsule', size: [2.0, 6.0, 2.0], color: FUR, emissive: 0.24 },
+  { id: 'chest', shape: 'capsule', size: [2.3, 2.0, 2.3], color: FUR, emissive: 0.24 },
+  { id: 'neck', shape: 'cylinder', size: [1.15, 2.0, 1.15], color: FUR, emissive: 0.24 },
+  { id: 'head', shape: 'box', size: [1.5, 1.35, 1.9], color: FUR, emissive: 0.26 },
+  { id: 'muzzle', shape: 'box', size: [0.78, 0.6, 1.5], color: MUZZLE, emissive: 0.3 },
+  // Upright, on top of the skull and behind the eye line. Laid flat along the head they
+  // vanished into it; stood at the front they read as horns.
+  { id: 'ear-l', shape: 'wedge', size: [0.2, 1.0, 0.72], color: MUZZLE, emissive: 0.24 },
+  { id: 'ear-r', shape: 'wedge', size: [0.2, 1.0, 0.72], color: MUZZLE, emissive: 0.24 },
+  { id: 'leg-fl', shape: 'cylinder', size: [0.5, 3.0, 0.5], color: FUR, emissive: 0.22 },
+  { id: 'leg-fr', shape: 'cylinder', size: [0.5, 3.0, 0.5], color: FUR, emissive: 0.22 },
+  { id: 'leg-bl', shape: 'cylinder', size: [0.55, 3.0, 0.55], color: FUR, emissive: 0.22 },
+  { id: 'leg-br', shape: 'cylinder', size: [0.55, 3.0, 0.55], color: FUR, emissive: 0.22 },
+  { id: 'tail', shape: 'capsule', size: [0.34, 2.0, 0.34], color: FUR, emissive: 0.24 },
 ];
 
 /**
@@ -161,7 +164,7 @@ const LEASH_POSE = `
   const hx = 8 + side * 5.0;
   const hy = side > 0 ? handLy : handRy;
   const hz = side > 0 ? handLz : handRz;
-  const cx = dx, cy = 11.6 + lift, cz = path + nose * 5.2;
+  const cx = dx, cy = by + 2.4, cz = path + nose * 7.0;
   const ex = cx - hx, ey = cy - hy, ez = cz - hz;
   const len = Math.max(0.001, Math.sqrt(ex * ex + ey * ey + ez * ez));
   p[0].x = (hx + cx) / 2; p[0].y = (hy + cy) / 2; p[0].z = (hz + cz) / 2;
@@ -248,23 +251,30 @@ const PERSON_POSE = `
  * actually does and what stops four legs moving like a pantomime horse.
  */
 const DOG_POSE = `
+  // Laid out along z from tail to nose, so every part's place is read off one line
+  // rather than guessed: body -6..+6, chest at the shoulder, neck rising to a head that
+  // is clear of both. The head used to sit inside the chest with the neck buried in
+  // between, which renders as a barrel with a snout growing out of its side.
   const trot = w * 1.7;
-  const lift = Math.abs(Math.sin(trot)) * 0.5;
+  const lift = Math.abs(Math.sin(trot)) * 0.45;
   const side = out ? -1 : 1;
   const dx = 8 + side * 9.5;
   const nose = out ? -1 : 1;
-  p[0].x = dx; p[0].y = 8.4 + lift; p[0].z = path + nose * -1.5; p[0].pitch = Math.PI / 2; p[0].yaw = facing;
-  p[1].x = dx; p[1].y = 8.8 + lift; p[1].z = path + nose * 4.0; p[1].pitch = Math.PI / 2;
-  p[2].x = dx; p[2].y = 10.9 + lift; p[2].z = path + nose * 5.8; p[2].pitch = nose * 0.75;
-  p[3].x = dx; p[3].y = 12.7 + lift; p[3].z = path + nose * 7.0; p[3].yaw = facing;
-  p[4].x = dx; p[4].y = 12.1 + lift; p[4].z = path + nose * 8.6; p[4].yaw = facing;
-  p[5].x = dx + 0.95; p[5].y = 13.7 + lift; p[5].z = path + nose * 6.3; p[5].pitch = nose * -0.5; p[5].yaw = facing;
-  p[6].x = dx - 0.95; p[6].y = 13.7 + lift; p[6].z = path + nose * 6.3; p[6].pitch = nose * -0.5; p[6].yaw = facing;
-  p[7].x = dx + 1.4; p[7].y = 3.1; p[7].z = path + nose * 3.6; p[7].pitch = Math.sin(trot) * 0.7;
-  p[8].x = dx - 1.4; p[8].y = 3.1; p[8].z = path + nose * 3.6; p[8].pitch = -Math.sin(trot) * 0.7;
-  p[9].x = dx + 1.5; p[9].y = 3.1; p[9].z = path + nose * -4.0; p[9].pitch = -Math.sin(trot) * 0.7;
-  p[10].x = dx - 1.5; p[10].y = 3.1; p[10].z = path + nose * -4.0; p[10].pitch = Math.sin(trot) * 0.7;
-  p[11].x = dx; p[11].y = 10.2 + lift; p[11].z = path + nose * -6.0; p[11].pitch = nose * (0.9 + Math.sin(w * 5) * 0.45);
+  const by = 8.2 + lift;
+  p[0].x = dx; p[0].y = by; p[0].z = path; p[0].pitch = Math.PI / 2; p[0].yaw = facing;
+  p[1].x = dx; p[1].y = by + 0.4; p[1].z = path + nose * 5.6; p[1].pitch = Math.PI / 2;
+  p[2].x = dx; p[2].y = by + 2.6; p[2].z = path + nose * 7.2; p[2].pitch = nose * 0.85;
+  p[3].x = dx; p[3].y = by + 4.6; p[3].z = path + nose * 8.9; p[3].yaw = facing; p[3].pitch = nose * 0.12;
+  p[4].x = dx; p[4].y = by + 3.9; p[4].z = path + nose * 11.0; p[4].yaw = facing;
+  p[5].x = dx + 1.0; p[5].y = by + 6.2; p[5].z = path + nose * 8.4; p[5].yaw = facing;
+  p[6].x = dx - 1.0; p[6].y = by + 6.2; p[6].z = path + nose * 8.4; p[6].yaw = facing;
+  // Legs under the body, not outboard of it: a dog is narrow, and splayed legs read as
+  // a table. The diagonal pairs swing together, which is what a trot is.
+  p[7].x = dx + 1.15; p[7].y = 3.0; p[7].z = path + nose * 4.4; p[7].pitch = Math.sin(trot) * 0.62;
+  p[8].x = dx - 1.15; p[8].y = 3.0; p[8].z = path + nose * 4.4; p[8].pitch = -Math.sin(trot) * 0.62;
+  p[9].x = dx + 1.25; p[9].y = 3.0; p[9].z = path - nose * 4.4; p[9].pitch = -Math.sin(trot) * 0.62;
+  p[10].x = dx - 1.25; p[10].y = 3.0; p[10].z = path - nose * 4.4; p[10].pitch = Math.sin(trot) * 0.62;
+  p[11].x = dx; p[11].y = by + 2.2; p[11].z = path - nose * 7.2; p[11].pitch = nose * (1.05 + Math.sin(w * 5) * 0.4);
 `;
 
 /**

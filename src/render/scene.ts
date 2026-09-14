@@ -15,7 +15,7 @@ import {
   AdditiveBlending, AmbientLight, BackSide, BoxGeometry,
   BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, LinearMipmapLinearFilter,
   DirectionalLight, Fog, InstancedMesh, Matrix4,
-  Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshStandardNodeMaterial,
+  Mesh, MeshBasicMaterial, MeshBasicNodeMaterial, MeshStandardMaterial, MeshStandardNodeMaterial,
   PerspectiveCamera, PlaneGeometry, Points, PointsMaterial,
   ClampToEdgeWrapping, Quaternion, RepeatWrapping, SRGBColorSpace, Scene,
   SphereGeometry, Vector3,
@@ -338,11 +338,21 @@ export function createBaseScene(): BaseScene {
   const moon = new Mesh(new SphereGeometry(DISC_RADIUS, 24, 16), moonMat);
   moon.position.set(-430, 330, -900);
   scene.add(moon);
-  const haloMat = new MeshBasicMaterial({
+  const haloMat = new MeshBasicNodeMaterial({
     color: HALO_COLOR.clone(), transparent: true, opacity: 0.16 * HALO_GAIN,
     blending: AdditiveBlending, depthWrite: false, fog: false,
   });
-  const halo = new Mesh(new SphereGeometry(150, 20, 14), haloMat);
+  /**
+   * The glow has to fade at its own silhouette.
+   *
+   * A sphere with a constant opacity is a disc with a hard edge, and an additive disc
+   * hanging in a night sky reads as a rendering artifact rather than as light — the
+   * boundary was plainly visible around the moon. The facing ratio is 1 where the
+   * surface points at the camera and 0 at the rim, so raising it to a power gives a
+   * falloff that reaches zero exactly where the edge used to be.
+   */
+  haloMat.opacityNode = normalView.dot(positionViewDirection).max(0).pow(2.4).mul(0.5 * HALO_GAIN);
+  const halo = new Mesh(new SphereGeometry(150, 32, 20), haloMat);
   halo.position.copy(moon.position);
   scene.add(halo);
 

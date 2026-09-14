@@ -169,6 +169,13 @@ const LEASH_POSE = `
   put(0, (hx + cx) / 2, (hy + cy) / 2, (hz + cz) / 2);
   p[0].pitch = Math.acos(Math.max(-1, Math.min(1, ey / len)));
   p[0].yaw = facing + Math.atan2(ex, ez);
+  // Stretched to span the gap it is aimed across. The length was authored as a constant
+  // on the assumption that a fixed station means a fixed distance, and the arm swing
+  // makes that false: the strap fell short of the hand for most of the stride, which
+  // leaves the walker and the dog as two unconnected bodies. Uniform scale is the only
+  // lever a pose has and it fattens the strap as well — from 0.16 to about 0.18, which
+  // nothing can see, against a length error that everything can.
+  p[0].scale = len / 13.2;
 `;
 
 const WALK_PREAMBLE = `
@@ -260,9 +267,15 @@ const PERSON_POSE = `
   put(10, -2.5, hipY - th * Math.cos(tR), -th * Math.sin(tR)); p[10].pitch = tR;
   put(11, 2.5, kLy - sn * Math.cos(kL), kLz - sn * Math.sin(kL)); p[11].pitch = kL;
   put(12, -2.5, kRy - sn * Math.cos(kR), kRz - sn * Math.sin(kR)); p[12].pitch = kR;
-  // Feet sit at the ankle and stay level with the ground, which is what a foot does.
-  put(13, 2.5, 0.55, kLz - 2 * sn * Math.sin(kL) + 1.1);
-  put(14, -2.5, 0.55, kRz - 2 * sn * Math.sin(kR) + 1.1);
+  // Feet hang off the ankle the way every other segment hangs off its joint. Pinning
+  // them to y = 0.55 left them on the pavement while the leg above lifted through the
+  // swing — a gap of about an authored unit, four centimetres at world scale, hidden
+  // behind the near leg at most camera angles and caught by the connectivity check
+  // rather than by looking. They still cannot go through the floor.
+  const ankLy = kLy - 2 * sn * Math.cos(kL), ankLz = kLz - 2 * sn * Math.sin(kL);
+  const ankRy = kRy - 2 * sn * Math.cos(kR), ankRz = kRz - 2 * sn * Math.sin(kR);
+  put(13, 2.5, Math.max(0.55, ankLy - 0.55), ankLz + 1.1);
+  put(14, -2.5, Math.max(0.55, ankRy - 0.55), ankRz + 1.1);
 `;
 
 /**
@@ -288,10 +301,13 @@ const DOG_POSE = `
   put(6, dx - 1.0, by + 6.2, 8.4);
   // Legs under the body, not outboard of it: a dog is narrow, and splayed legs read as
   // a table. The diagonal pairs swing together, which is what a trot is.
-  put(7, dx + 1.15, 3.0, 4.4); p[7].pitch = Math.sin(trot) * 0.62;
-  put(8, dx - 1.15, 3.0, 4.4); p[8].pitch = -Math.sin(trot) * 0.62;
-  put(9, dx + 1.25, 3.0, -4.4); p[9].pitch = -Math.sin(trot) * 0.62;
-  put(10, dx - 1.25, 3.0, -4.4); p[10].pitch = Math.sin(trot) * 0.62;
+  // Hung off the body rather than pinned to the ground: the body bobs on the trot and
+  // the legs did not follow it, so all four detached at the top of every stride.
+  const legY = by - 4.6;
+  put(7, dx + 1.15, legY, 4.4); p[7].pitch = Math.sin(trot) * 0.62;
+  put(8, dx - 1.15, legY, 4.4); p[8].pitch = -Math.sin(trot) * 0.62;
+  put(9, dx + 1.25, legY, -4.4); p[9].pitch = -Math.sin(trot) * 0.62;
+  put(10, dx - 1.25, legY, -4.4); p[10].pitch = Math.sin(trot) * 0.62;
   put(11, dx, by + 2.2, -7.2); p[11].pitch = 1.05 + Math.sin(w * 5) * 0.4;
 `;
 

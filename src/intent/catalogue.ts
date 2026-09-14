@@ -504,7 +504,12 @@ export const CATALOGUE: readonly PrimitiveSpec[] = [
       required: ['count', 'size', 'bounce', 'height', 'spread'],
       additionalProperties: false,
     },
-    defaults: { count: 90, size: 4, bounce: 0.42, height: 180, spread: 95 },
+    // Spread was 95, which is a radius of ninety-five metres for ninety bodies: the
+    // camera frames the field by its size, so it stood three hundred metres back and
+    // every four-metre body came out four pixels wide in the critic's capture. "Faint
+    // dark dots in the mid-distance" was an accurate description of a verb that had
+    // run correctly. A pile of debris is a pile.
+    defaults: { count: 90, size: 4, bounce: 0.42, height: 180, spread: 42 },
     keywords: [
       'drop', 'dropping', 'drops', 'fall', 'falling', 'gravity', 'physics',
       'debris', 'rubble', 'boxes', 'crates', 'bounce', 'bouncing', 'collapse', 'hail',

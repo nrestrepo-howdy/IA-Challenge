@@ -126,39 +126,64 @@ function reconcile(): void {
  * stand: without it the camera went to a fixed distance whatever it was looking at, so a
  * rig the model happened to build large arrived filling the entire frame.
  */
-function subjectOf(pose: readonly unknown[]): readonly [number, number, number, number] | null {
+function subjectOf(
+  values: readonly unknown[],
+  stride: number,
+  scale: number,
+): readonly [number, number, number, number] | null {
   let x = 0, y = 0, z = 0, n = 0;
-  for (let i = 0; i + 6 < pose.length; i += 7) {
-    const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
+  for (let i = 0; i + stride - 1 < values.length; i += stride) {
+    const px = values[i], py = values[i + 1], pz = values[i + 2];
     if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
     x += px; y += py; z += pz; n += 1;
   }
   if (n === 0) return null;
   const cx = x / n, cy = y / n, cz = z / n;
   let radius = 0;
-  for (let i = 0; i + 6 < pose.length; i += 7) {
-    const px = pose[i], py = pose[i + 1], pz = pose[i + 2];
+  for (let i = 0; i + stride - 1 < values.length; i += stride) {
+    const px = values[i], py = values[i + 1], pz = values[i + 2];
     if (typeof px !== 'number' || typeof py !== 'number' || typeof pz !== 'number') continue;
     radius = Math.max(radius, Math.hypot(px - cx, py - cy, pz - cz));
   }
-  // Returned in world units: a pose is authored at roughly twenty-two metres to the
-  // metre (FIGURE_SCALE) and the camera works in metres, so a subject reported in
-  // authored units asks to be framed as something the size of an office block.
-  const S = FIGURE_SCALE;
-  return [cx * S, cy * S + Math.max(0.55, radius * S * 0.5), cz * S, Math.max(0.9, radius * S)];
+  // Scaled on the way out, because the two kinds of subject are authored in different
+  // units: a rig's pose is written at roughly twenty-two to the metre (FIGURE_SCALE),
+  // and a physics body is already in world units. A subject reported in the wrong one
+  // asks to be framed as something the size of an office block.
+  return [
+    cx * scale,
+    cy * scale + Math.max(0.55, radius * scale * 0.5),
+    cz * scale,
+    Math.max(0.9, radius * scale),
+  ];
 }
 
 /** Every rig in the world, in the order they were added. */
 function subjects(): { readonly name: string; readonly at: readonly [number, number, number, number] }[] {
   const state = (globalThis as { __VERBO_STATE__?: Record<string, unknown> }).__VERBO_STATE__;
-  const figures = state?.['figures'] as Record<string, { pose?: unknown }> | undefined;
   const out: { name: string; at: readonly [number, number, number, number] }[] = [];
+
+  const figures = state?.['figures'] as Record<string, { pose?: unknown }> | undefined;
   for (const [name, figure] of Object.entries(figures ?? {})) {
     const pose = figure?.pose;
     if (!Array.isArray(pose)) continue;
-    const at = subjectOf(pose);
+    const at = subjectOf(pose, 7, FIGURE_SCALE);
     if (at) out.push({ name, at });
   }
+
+  // Physics is a subject too. `debris` drops a hundred and ten bodies and the camera
+  // never once looked at them: only rigs were subjects, so the shot stayed wide and the
+  // bodies sat small along the bottom of the frame. The perceptual critic reported
+  // exactly that — "nothing readable as debris appears in frame" — which was a true
+  // statement about a verb that had run correctly and could not be seen.
+  const physics = state?.['physics'] as Record<string, { bodies?: unknown }> | undefined;
+  for (const [name, slice] of Object.entries(physics ?? {})) {
+    const bodies = slice?.bodies;
+    if (!Array.isArray(bodies)) continue;
+    // Three per body, already in world units — no conversion, unlike a rig's pose.
+    const at = subjectOf(bodies, 3, 1);
+    if (at) out.push({ name, at });
+  }
+
   return out;
 }
 
@@ -207,7 +232,19 @@ let lastSubjectCount = 0;
 
 function followNewest(): void {
   const n = subjects().length;
-  if (n > lastSubjectCount && !manualFocus) focusIndex = n - 1;
+  if (n > lastSubjectCount && !manualFocus) {
+    focusIndex = n - 1;
+    // Mark the shot stale here, not in the render loop.
+    //
+    // `settle()` polls every hundred milliseconds and trusts `camera.framing.mix`. At the
+    // instant a candidate mounts, the loop has not yet run with the new subject, so the
+    // ramp still reads 1 from the wide shot and settle returns immediately — and L3
+    // photographs the frame the camera is about to leave. That is the same ordering fault
+    // as pointing the camera from the accept step, one layer further down, and it showed
+    // up the same way: a true-sounding "nothing resembling debris appears" about a world
+    // with ninety bodies bouncing in it.
+    camera.mix = 0;
+  }
   lastSubjectCount = n;
 }
 

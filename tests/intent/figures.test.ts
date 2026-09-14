@@ -22,6 +22,13 @@ import type { WorldHandle } from '../../src/contracts.js';
 const world = { state: {}, scene: null, clock: { elapsed: 0 } } as unknown as WorldHandle;
 const compiler = new CatalogueIntentCompiler({ catalogue: CATALOGUE });
 
+/** A snapshot of the person rig at rest, sized to however many parts it currently has. */
+function rest(): { count: number; pose: number[]; instance: string } {
+  const parts = matchFigure('a person walking')!.parts.length;
+  const pose = Array.from({ length: parts * 7 }, (_, i) => (i % 7 === 6 ? 1 : 0));
+  return { count: parts, pose, instance: 'figure#0' };
+}
+
 async function compile(utterance: string) {
   const out = await compiler.compile(utterance, world);
   if ('rejected' in out) return { rejected: true as const, reason: out.reason };
@@ -106,9 +113,7 @@ describe('a rig that does not move is rejected by L2 (AC-21)', () => {
     const out = await compiler.compile('a person walking', world);
     if ('rejected' in out) throw new Error(out.reason);
 
-    const still = {
-      figures: { walker: { count: 6, pose: [0, 0, 0, 0, 0, 0, 1], instance: 'figure#0' } },
-    };
+    const still = { figures: { walker: rest() } };
     const verdict = evaluateContract(out.contract, still, still);
 
     expect(verdict.passed).toBe(false);
@@ -120,12 +125,14 @@ describe('a rig that does not move is rejected by L2 (AC-21)', () => {
   it('passes the same contract once the pose moves', () => {
     // The half that keeps the assertion above from passing for the wrong reason: a
     // contract that rejected everything would satisfy the first test and be useless.
-    const before = {
-      figures: { walker: { count: 6, pose: [0, 0, 0, 0, 0, 0, 1], instance: 'figure#0' } },
-    };
-    const after = {
-      figures: { walker: { count: 6, pose: [0, 1.4, 0, 0, 0.3, 0, 1], instance: 'figure#0' } },
-    };
+    // Derived from the rig rather than written out: the anatomy is edited often, and a
+    // fixture that hard-codes a part count silently stops testing the rig it names the
+    // moment a limb is split at a joint.
+    const before = { figures: { walker: rest() } };
+    const moved = rest();
+    moved.pose[1] = 1.4;
+    moved.pose[4] = 0.3;
+    const after = { figures: { walker: moved } };
     return compiler.compile('a person walking', world).then((out) => {
       if ('rejected' in out) throw new Error(out.reason);
       expect(evaluateContract(out.contract, before, after).passed).toBe(true);

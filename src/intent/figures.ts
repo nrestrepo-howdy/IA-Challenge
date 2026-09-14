@@ -15,9 +15,11 @@
  * is a decision, and it is this one.
  */
 
+import type { Shape } from '../world/figure.js';
+
 export interface FigurePart {
   readonly id: string;
-  readonly shape: 'box' | 'sphere' | 'capsule' | 'cylinder';
+  readonly shape: Shape;
   readonly size: readonly [number, number, number];
   readonly color: readonly [number, number, number];
   readonly emissive?: number;
@@ -56,69 +58,124 @@ const FUR: readonly [number, number, number] = [0.38, 0.26, 0.16];
 const COAT: readonly [number, number, number] = [0.16, 0.19, 0.28];
 const SKIN: readonly [number, number, number] = [0.72, 0.56, 0.44];
 
-/** A walking person: torso, head, two arms, two legs, and a counter-swinging gait. */
+/**
+ * A walking person, at eight heads.
+ *
+ * The proportions were guessed and they read as a blob: the head was a quarter of the
+ * figure, the torso was nearly as wide as it was tall, and the arms sat *inside* the
+ * torso's own half-width, so a walk cycle swung limbs that were buried in a capsule.
+ * Every one of those is visible in a screenshot and none of them is visible in the
+ * numbers unless you know what to compare them against.
+ *
+ * So they come from the canon instead. The eight-head figure is the standard artists
+ * have used since Vitruvius: total height is eight head-lengths, the shoulders are two,
+ * the hips fall at the halfway line, and the fingertips reach mid-thigh. At a total of
+ * 40 units the head is 5, which is what makes everything else fall out.
+ *
+ * The limbs are split at the joint. An arm as one capsule cannot bend, so a walk can
+ * only slide it back and forth; an upper arm and a forearm with an elbow between them
+ * is the difference between a figure that is walking and a figure being carried.
+ */
+const HEAD = 5;                   // one head-length; the figure is eight of them
 const PERSON_PARTS: readonly FigurePart[] = [
-  { id: 'torso', shape: 'capsule', size: [5.46, 7.14, 3.57], color: COAT, emissive: 0.2 },
-  { id: 'head', shape: 'sphere', size: [3.57, 3.57, 3.57], color: SKIN, emissive: 0.34 },
-  { id: 'arm-l', shape: 'capsule', size: [1.51, 5.67, 1.51], color: COAT, emissive: 0.2 },
-  { id: 'arm-r', shape: 'capsule', size: [1.51, 5.67, 1.51], color: COAT, emissive: 0.2 },
-  { id: 'leg-l', shape: 'capsule', size: [1.99, 6.51, 1.99], color: [0.12, 0.13, 0.18], emissive: 0.12 },
-  { id: 'leg-r', shape: 'capsule', size: [1.99, 6.51, 1.99], color: [0.12, 0.13, 0.18], emissive: 0.12 },
-];
-
-/** A dog: body, head, muzzle, four legs, a tail that never stops. */
-const DOG_PARTS: readonly FigurePart[] = [
-  { id: 'body', shape: 'capsule', size: [3.15, 5.04, 2.94], color: FUR, emissive: 0.3 },
-  { id: 'head', shape: 'box', size: [2.10, 1.89, 1.99], color: FUR, emissive: 0.3 },
-  { id: 'muzzle', shape: 'box', size: [0.88, 0.71, 1.47], color: [0.28, 0.19, 0.12], emissive: 0.3 },
-  { id: 'leg-fl', shape: 'cylinder', size: [0.63, 2.31, 0.63], color: FUR, emissive: 0.3 },
-  { id: 'leg-fr', shape: 'cylinder', size: [0.63, 2.31, 0.63], color: FUR, emissive: 0.3 },
-  { id: 'leg-bl', shape: 'cylinder', size: [0.63, 2.31, 0.63], color: FUR, emissive: 0.3 },
-  { id: 'leg-br', shape: 'cylinder', size: [0.63, 2.31, 0.63], color: FUR, emissive: 0.3 },
-  { id: 'tail', shape: 'capsule', size: [0.46, 1.89, 0.46], color: FUR, emissive: 0.22 },
+  // Hips to shoulders. Shoulders are two head-lengths across, so half-width is one.
+  { id: 'torso', shape: 'capsule', size: [HEAD * 0.98, HEAD * 1.35, HEAD * 0.5], color: COAT, emissive: 0.16 },
+  { id: 'hips', shape: 'capsule', size: [HEAD * 0.72, HEAD * 0.42, HEAD * 0.46], color: [0.12, 0.13, 0.18], emissive: 0.12 },
+  { id: 'head', shape: 'sphere', size: [HEAD * 0.4, HEAD * 0.5, HEAD * 0.42], color: SKIN, emissive: 0.2 },
+  { id: 'neck', shape: 'cylinder', size: [HEAD * 0.16, HEAD * 0.16, HEAD * 0.16], color: SKIN, emissive: 0.16 },
+  // Arms outboard of the shoulder, not inside it: x sits beyond the torso's half-width.
+  { id: 'arm-l', shape: 'capsule', size: [HEAD * 0.16, HEAD * 0.62, HEAD * 0.16], color: COAT, emissive: 0.16 },
+  { id: 'arm-r', shape: 'capsule', size: [HEAD * 0.16, HEAD * 0.62, HEAD * 0.16], color: COAT, emissive: 0.16 },
+  { id: 'forearm-l', shape: 'capsule', size: [HEAD * 0.14, HEAD * 0.58, HEAD * 0.14], color: SKIN, emissive: 0.16 },
+  { id: 'forearm-r', shape: 'capsule', size: [HEAD * 0.14, HEAD * 0.58, HEAD * 0.14], color: SKIN, emissive: 0.16 },
+  { id: 'thigh-l', shape: 'capsule', size: [HEAD * 0.22, HEAD * 0.92, HEAD * 0.22], color: [0.12, 0.13, 0.18], emissive: 0.12 },
+  { id: 'thigh-r', shape: 'capsule', size: [HEAD * 0.22, HEAD * 0.92, HEAD * 0.22], color: [0.12, 0.13, 0.18], emissive: 0.12 },
+  { id: 'shin-l', shape: 'capsule', size: [HEAD * 0.18, HEAD * 0.88, HEAD * 0.18], color: [0.1, 0.11, 0.15], emissive: 0.12 },
+  { id: 'shin-r', shape: 'capsule', size: [HEAD * 0.18, HEAD * 0.88, HEAD * 0.18], color: [0.1, 0.11, 0.15], emissive: 0.12 },
 ];
 
 /**
- * The walk, written once and shared.
+ * A dog, at a scale a dog actually is: about sixteen units at the shoulder, which is
+ * two-fifths of the person beside it. The first one was a tenth of the person and read
+ * as a rat on a lead.
+ */
+const DOG_PARTS: readonly FigurePart[] = [
+  { id: 'body', shape: 'capsule', size: [2.1, 5.0, 2.4], color: FUR, emissive: 0.24 },
+  { id: 'chest', shape: 'capsule', size: [2.4, 2.2, 2.6], color: FUR, emissive: 0.24 },
+  { id: 'neck', shape: 'cylinder', size: [1.1, 1.6, 1.1], color: FUR, emissive: 0.24 },
+  { id: 'head', shape: 'box', size: [1.5, 1.4, 1.7], color: FUR, emissive: 0.26 },
+  { id: 'muzzle', shape: 'box', size: [0.75, 0.62, 1.25], color: [0.26, 0.18, 0.11], emissive: 0.3 },
+  { id: 'ear-l', shape: 'wedge', size: [0.3, 0.9, 0.7], color: [0.26, 0.18, 0.11], emissive: 0.24 },
+  { id: 'ear-r', shape: 'wedge', size: [0.3, 0.9, 0.7], color: [0.26, 0.18, 0.11], emissive: 0.24 },
+  { id: 'leg-fl', shape: 'cylinder', size: [0.5, 3.1, 0.5], color: FUR, emissive: 0.22 },
+  { id: 'leg-fr', shape: 'cylinder', size: [0.5, 3.1, 0.5], color: FUR, emissive: 0.22 },
+  { id: 'leg-bl', shape: 'cylinder', size: [0.55, 3.1, 0.55], color: FUR, emissive: 0.22 },
+  { id: 'leg-br', shape: 'cylinder', size: [0.55, 3.1, 0.55], color: FUR, emissive: 0.22 },
+  { id: 'tail', shape: 'capsule', size: [0.38, 1.7, 0.38], color: FUR, emissive: 0.24 },
+];
+
+/**
+ * The gait, written once for the new anatomy.
  *
- * `w` is the phase of the gait and `path` the distance travelled along the promenade.
- * Both figures walk the same line at the same speed because one of them is on a lead.
+ * `leg` walks the promenade up and back; `w` is the phase of the stride. Limbs are
+ * placed at joints rather than at fixed offsets, so the elbow and the knee land where
+ * the segment above them ends — which is the whole reason the arms were split in two.
  */
 const WALK_PREAMBLE = `
   const speed = 4.6;
-  // A short promenade, walked up and back rather than a loop. The camera orbits the
-  // city on a five-minute cycle, so a figure that walks away in a straight line is out
-  // of frame before anyone has read the log; a figure that paces stays where it can be
-  // seen and still moves enough to prove it is alive.
   const leg = ((t * speed) % 150) - 75;
-  const path = leg > 0 ? 75 - leg * 2 : 75 + leg * 2;
-  const facing = leg > 0 ? Math.PI : 0;
-  const w = t * 3.4;
+  const out = leg > 0;
+  const path = out ? 75 - leg * 2 : 75 + leg * 2;
+  const facing = out ? Math.PI : 0;
+  const w = t * 3.1;
+  const swing = Math.sin(w);
+  const bob = Math.abs(Math.sin(w)) * 0.9;
 `;
 
+/**
+ * Eight heads, laid out from the ground up: shins 0-8.8, thighs to 18, hips at 19.5,
+ * torso 20-33.5, neck, head centred at 36.5. The arms hang outboard of the shoulder at
+ * x = 5.6 against a torso half-width of 4.9, which is the difference between an arm and
+ * a bulge in a capsule.
+ */
 const PERSON_POSE = `
-  const bob = Math.abs(Math.sin(w)) * 0.5;
-  p[0].y = 19.3 + bob * 2; p[0].z = path; p[0].x = 8; p[0].yaw = facing;
-  p[1].y = 28.1 + bob * 2; p[1].z = path + Math.sin(w * 2) * 0.25; p[1].x = 8;
+  const px = 8, sh = 32;
+  const kneeL = -swing * 3.4, kneeR = swing * 3.4;
+  p[0].x = px; p[0].y = 26.8 + bob; p[0].z = path; p[0].yaw = facing;
+  p[1].x = px; p[1].y = 19.6 + bob; p[1].z = path; p[1].yaw = facing;
+  p[2].x = px; p[2].y = 36.6 + bob; p[2].z = path + Math.sin(w * 2) * 0.2;
+  p[3].x = px; p[3].y = 34.2 + bob; p[3].z = path;
   // Arms counter-swing against the legs, which is most of what makes a walk read.
-  p[2].y = 20.2 + bob * 2; p[2].z = path; p[2].x = 13.5; p[2].pitch = Math.sin(w) * 0.55;
-  p[3].y = 20.2 + bob * 2; p[3].z = path; p[3].x = 2.5; p[3].pitch = -Math.sin(w) * 0.55;
-  p[4].y = 8.4; p[4].z = path + Math.sin(w) * 3.2; p[4].x = 10.5; p[4].pitch = -Math.sin(w) * 0.6;
-  p[5].y = 8.4; p[5].z = path - Math.sin(w) * 3.2; p[5].x = 5.5; p[5].pitch = Math.sin(w) * 0.6;
+  p[4].x = px + 5.6; p[4].y = 28.9 + bob; p[4].z = path + swing * 1.6; p[4].pitch = swing * 0.5;
+  p[5].x = px - 5.6; p[5].y = 28.9 + bob; p[5].z = path - swing * 1.6; p[5].pitch = -swing * 0.5;
+  p[6].x = px + 5.6; p[6].y = 23.1 + bob; p[6].z = path + swing * 3.0; p[6].pitch = swing * 0.72;
+  p[7].x = px - 5.6; p[7].y = 23.1 + bob; p[7].z = path - swing * 3.0; p[7].pitch = -swing * 0.72;
+  p[8].x = px + 2.4; p[8].y = 13.4; p[8].z = path - swing * 2.6; p[8].pitch = -swing * 0.46;
+  p[9].x = px - 2.4; p[9].y = 13.4; p[9].z = path + swing * 2.6; p[9].pitch = swing * 0.46;
+  p[10].x = px + 2.4; p[10].y = 4.4; p[10].z = path - swing * 4.6 + kneeL * 0.3; p[10].pitch = -swing * 0.2;
+  p[11].x = px - 2.4; p[11].y = 4.4; p[11].z = path + swing * 4.6 + kneeR * 0.3; p[11].pitch = swing * 0.2;
 `;
 
+/**
+ * The dog, trotting on diagonal pairs — front-left with back-right, which is what a dog
+ * actually does and what stops four legs moving like a pantomime horse.
+ */
 const DOG_POSE = `
   const trot = w * 1.7;
-  const lift = Math.abs(Math.sin(trot)) * 0.22;
-  p[0].y = 6.5 + lift; p[0].z = path - 11; p[0].x = -7; p[0].roll = Math.PI / 2;
-  p[1].y = 8.2 + lift; p[1].z = path - 7.2; p[1].x = -7;
-  p[2].y = 7.6 + lift; p[2].z = path - 5.4; p[2].x = -7;
-  // Diagonal pairs, which is how a dog actually trots: front-left with back-right.
-  p[3].y = 2.5; p[3].z = path - 8.8; p[3].x = -5.6; p[3].pitch = Math.sin(trot) * 0.8;
-  p[4].y = 2.5; p[4].z = path - 8.8; p[4].x = -8.4; p[4].pitch = -Math.sin(trot) * 0.8;
-  p[5].y = 2.5; p[5].z = path - 13.6; p[5].x = -5.6; p[5].pitch = -Math.sin(trot) * 0.8;
-  p[6].y = 2.5; p[6].z = path - 13.6; p[6].x = -8.4; p[6].pitch = Math.sin(trot) * 0.8;
-  p[7].y = 8.4; p[7].z = path - 15.2; p[7].x = -7; p[7].pitch = 0.7 + Math.sin(w * 5) * 0.5;
+  const lift = Math.abs(Math.sin(trot)) * 0.5;
+  const dx = -6, dz = -9;
+  p[0].x = dx; p[0].y = 8.6 + lift; p[0].z = path + dz; p[0].pitch = Math.PI / 2; p[0].yaw = facing;
+  p[1].x = dx; p[1].y = 9.0 + lift; p[1].z = path + dz + 4.6; p[1].pitch = Math.PI / 2;
+  p[2].x = dx; p[2].y = 11.2 + lift; p[2].z = path + dz + 6.4; p[2].pitch = 0.7;
+  p[3].x = dx; p[3].y = 13.0 + lift; p[3].z = path + dz + 7.6;
+  p[4].x = dx; p[4].y = 12.3 + lift; p[4].z = path + dz + 9.2;
+  p[5].x = dx + 1.1; p[5].y = 14.4 + lift; p[5].z = path + dz + 7.3;
+  p[6].x = dx - 1.1; p[6].y = 14.4 + lift; p[6].z = path + dz + 7.3;
+  p[7].x = dx + 1.5; p[7].y = 3.1; p[7].z = path + dz + 4.2; p[7].pitch = Math.sin(trot) * 0.7;
+  p[8].x = dx - 1.5; p[8].y = 3.1; p[8].z = path + dz + 4.2; p[8].pitch = -Math.sin(trot) * 0.7;
+  p[9].x = dx + 1.6; p[9].y = 3.1; p[9].z = path + dz - 3.4; p[9].pitch = -Math.sin(trot) * 0.7;
+  p[10].x = dx - 1.6; p[10].y = 3.1; p[10].z = path + dz - 3.4; p[10].pitch = Math.sin(trot) * 0.7;
+  p[11].x = dx; p[11].y = 10.4 + lift; p[11].z = path + dz - 5.4; p[11].pitch = 0.9 + Math.sin(w * 5) * 0.45;
 `;
 
 /**

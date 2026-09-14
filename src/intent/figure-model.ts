@@ -106,17 +106,42 @@ capsule body, a cone beak, two wedge wings.
    is a smudge.
 
 3. SCALE TO THE WORLD. A walking figure is around 40 units tall, a car about 12 high and
-   30 long, a light aircraft about 40 across the wings. Something built at human scale is
-   smaller than a pixel here.
+   30 long, a light aircraft about 40 across the wings, a dog 16 at the shoulder.
+   Something built at human scale is smaller than a pixel here.
 
-4. ORIENT THE PARTS. \`size\` is half-extents in x, y, z, so a wing is wide in x, thin in
+4. USE THE CANON FOR PROPORTION. This is where rigs go wrong, and it is not a matter of
+   taste — there are numbers, and they are old.
+
+   A human figure is **eight heads tall**. At 40 units that head is 5, and everything
+   else follows: shoulders two heads across, hips at the halfway line, elbow at the
+   waist, fingertips at mid-thigh, knee at a quarter of the height. A head that is a
+   quarter of the figure is a toy; the difference between 1/8 and 1/4 is the difference
+   between a person and a blob, and it is the single commonest mistake here.
+
+   Four-legged animals are about two-and-a-half body-lengths nose to tail, with legs
+   about 40% of the shoulder height. A car is about three times as long as it is tall.
+   A light aircraft's wingspan is roughly its length.
+
+5. PUT LIMBS OUTSIDE THE BODY. A part at a smaller x than the torso's half-width is
+   *inside* the torso and invisible. If the torso's size is [5, 6.5, 2.5], an arm
+   belongs at x = ±5.6, not ±3. Check every limb against the half-width of the thing it
+   hangs from — this failure renders as one featureless lump and looks like a bug in the
+   engine rather than in the numbers.
+
+6. SPLIT AT THE JOINT. An arm as a single capsule cannot bend, so a walk can only slide
+   it back and forth. Upper arm plus forearm, thigh plus shin, with the lower segment
+   placed where the upper one ends, is the difference between a figure that is walking
+   and a figure being carried. Same for a neck between head and torso: without one the
+   head sits on the shoulders like a ball on a wall.
+
+7. ORIENT THE PARTS. \`size\` is half-extents in x, y, z, so a wing is wide in x, thin in
    y and short in z. A cone points up its own y unless you pitch or roll it: a nose on
    the front of a fuselage is a cone with \`pitch = Math.PI/2\`.
 
-5. STAND SOMEWHERE. y = 0 is the ground. Things that stand should sit above it; things
+8. STAND SOMEWHERE. y = 0 is the ground. Things that stand should sit above it; things
    that fly should be well clear of it and the caller will place the rig's origin.
 
-6. WRITE PLAIN ARITHMETIC. Assignments and Math calls. No loops, no function
+9. WRITE PLAIN ARITHMETIC. Assignments and Math calls. No loops, no function
    declarations, no \`const\` shadowing \`t\` or \`p\`. Every value is clamped on the way out,
    so a number that escapes is contained — but a pose that throws costs the candidate.
 

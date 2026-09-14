@@ -57,6 +57,15 @@ const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const status = document.getElementById('status') as HTMLElement;
 
 const world = new World();
+
+/**
+ * The shot's own arrival ramp, published into world state like any other slice.
+ *
+ * A mutable object rather than a fresh one per frame, and declared here rather than
+ * inside the loop, so `settle()` reads one stable slice at `camera.framing.mix`.
+ */
+const camera = { mix: 1 };
+(world.state as Record<string, unknown>)['camera'] = { framing: camera };
 const base = createBaseScene();
 const primitives = createPrimitives();
 const bindings = new Map<string, Binding>();
@@ -175,31 +184,52 @@ function subjects(): { readonly name: string; readonly at: readonly [number, num
  */
 let focusIndex: number | null = null;
 
+/**
+ * The camera follows the world's published state, not the cycle's decisions.
+ *
+ * This used to be driven from the `accept` step, and that ordering was the reason the
+ * perceptual critic kept reporting "no human figure" about a frame with a person in it:
+ * L3 judges a candidate *before* it is accepted, so the camera was still on the wide
+ * shot and the critic was photographing the skyline it was about to leave. Pointing the
+ * camera from the accept step meant the one layer that looks at pictures never saw the
+ * thing it was asked about.
+ *
+ * A subject appearing in state is the signal, which is the same rule the framing above
+ * follows and needs no cooperation from the cascade: a candidate mounted for review is
+ * in state, so it is framed, so it is what gets judged. A viewer who has picked a
+ * subject by hand keeps it — an arriving rig should not yank the camera off something
+ * someone chose to look at.
+ */
+let manualFocus = false;
+let lastSubjectCount = 0;
+
+function followNewest(): void {
+  const n = subjects().length;
+  if (n > lastSubjectCount && !manualFocus) focusIndex = n - 1;
+  lastSubjectCount = n;
+}
+
 function focusPoint(): readonly [number, number, number, number] | null {
   const all = subjects();
-  if (all.length === 0) { focusIndex = null; return null; }
+  if (all.length === 0) { focusIndex = null; manualFocus = false; return null; }
 
   if (focusIndex === null) return null;
   return all[focusIndex % all.length]?.at ?? null;
-}
-
-/** Called when a verb lands, so the newest rig gets the frame briefly. */
-function glanceAtNewest(): void {
-  const all = subjects();
-  if (all.length === 0) return;
-  focusIndex = all.length - 1;
 }
 
 function cycleFocus(): void {
   const all = subjects();
   if (all.length === 0) return;
   focusIndex = focusIndex === null ? 0 : (focusIndex + 1) % all.length;
+  manualFocus = true;
   line(`framing “${all[focusIndex]!.name}” — tab for the next, esc for the whole city`, 'info');
 }
 
 function releaseFocus(): void {
   if (focusIndex === null) return;
   focusIndex = null;
+  // Released by hand, so the next rig to arrive may take the frame again.
+  manualFocus = false;
   line('framing the whole city', 'info');
 }
 
@@ -295,7 +325,11 @@ handle.renderer.setAnimationLoop(() => {
     typeof skyline === 'number' ? (skyline - 1) / 4 : 0,
     typeof tower === 'number' ? tower / 900 : 0,
   ));
-  base.update(world.clock.elapsed, focusPoint());
+  // The shot is part of what "the world has arrived" means, and it is published on the
+  // same convention everything else that takes time uses, so `settle()` needs no special
+  // case for it: a verdict taken mid-move judges the frame the viewer was leaving.
+  followNewest();
+  camera.mix = base.update(world.clock.elapsed, focusPoint());
   frame.render();
   drain();
 });
@@ -526,9 +560,6 @@ async function say(utterance: string): Promise<SayResult> {
       // is cumulative, so each verb refines one address instead of stacking history
       // entries a back button would have to unwind.
       worldHistory.push(before);
-      // The newest rig takes the frame for a few seconds, then gives it back. Framing
-      // something is an act with an end.
-      glanceAtNewest();
       sync();
     }
     // The full shape is returned, not just ok/ms, because the nightly evaluation

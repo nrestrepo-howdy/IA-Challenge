@@ -105,9 +105,24 @@ capsule body, a cone beak, two wedge wings.
    trim. Detail below about half a unit is invisible here — a rig of forty small parts
    is a smudge.
 
-3. SCALE TO THE WORLD. A walking figure is around 40 units tall, a car about 12 high and
-   30 long, a light aircraft about 40 across the wings, a dog 16 at the shoulder.
-   Something built at human scale is smaller than a pixel here.
+3. SCALE TO THE WORLD. Everything below is in your units, and they are consistent with
+   each other — read it as one world, not as a list:
+
+     a person                  40 tall
+     a dog                     14 at the shoulder
+     a bicycle                 40 long
+     a car                    100 long, 33 high
+     a bus                    260 long
+     a street tree            200 tall
+     a road                   240 wide, kerb to kerb
+     a low building           600 tall
+     the tallest towers     6,600 tall
+
+   Ground is y = 0 and the whole city stands on it, so anything flying belongs between
+   y = 2,000 and y = 5,000 — above the roofs, below nothing. A plane authored at y = 300
+   is parked on the road. This is the mistake to check for: a thing that should be in
+   the air is almost always authored an order of magnitude too low, because 300 sounds
+   high and against a 6,600-unit skyline it is ankle-deep.
 
 4. USE THE CANON FOR PROPORTION. This is where rigs go wrong, and it is not a matter of
    taste — there are numbers, and they are old.

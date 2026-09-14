@@ -89,11 +89,34 @@ export interface FigureParams {
   readonly pose: (t: number, parts: PoseTarget[]) => void;
 }
 
-/** Bounds every rig is held to, whoever wrote it. */
+/**
+ * Bounds every rig is held to, whoever wrote it.
+ *
+ * These are in authored units, so `FIGURE_SCALE` is what says what they mean: a part may
+ * be up to 18 metres in any half-extent and a rig may reach 270 metres from its origin.
+ * Both were an order of magnitude tighter, from before the world was metric, and they
+ * were bounding the wrong things — 40 units was 1.8 metres, so a bus failed validation,
+ * and 400 units of reach put a hard ceiling of 18 metres on anything that flies.
+ *
+ * They still do the job they exist for. The city is 2,300 metres across and the tallest
+ * tower is 300; a rig that cannot exceed 36 metres across or 270 from where it stands
+ * cannot swallow the frame, which is the only promise these ever made.
+ */
 const MAX_PARTS = 48;
-const MAX_SIZE = 40;
-const MAX_REACH = 400;
+const MAX_SIZE = 400;
+const MAX_REACH = 6000;
 const MAX_SCALE = 8;
+
+/**
+ * The same bounds, exported so tests assert against them rather than against copies.
+ *
+ * A test that writes `400` where it means "the reach bound" stops testing the bound the
+ * moment the bound moves — it then passes for a reason unrelated to what it claims, and
+ * it did, when the world went metric.
+ */
+export const FIGURE_BOUNDS = Object.freeze({
+  parts: MAX_PARTS, size: MAX_SIZE, reach: MAX_REACH, scale: MAX_SCALE,
+});
 
 export class FigureValidationError extends Error {
   constructor(detail: string) {

@@ -304,18 +304,21 @@ const LEAF: readonly [number, number, number] = [0.1, 0.2, 0.11];
 
 /** A car: body, cabin, four wheels, two headlights and two tail lights. */
 const CAR_PARTS: readonly FigurePart[] = [
-  { id: 'body', shape: 'box', size: [12.6, 2.2, 5.2], color: STEEL, emissive: 0.12 },
-  { id: 'cabin', shape: 'box', size: [5.2, 1.9, 4.6], color: GLASS, emissive: 0.18 },
-  { id: 'wheel-fl', shape: 'cylinder', size: [1.5, 0.7, 1.5], color: [0.06, 0.06, 0.07] },
-  { id: 'wheel-fr', shape: 'cylinder', size: [1.5, 0.7, 1.5], color: [0.06, 0.06, 0.07] },
-  { id: 'wheel-bl', shape: 'cylinder', size: [1.5, 0.7, 1.5], color: [0.06, 0.06, 0.07] },
-  { id: 'wheel-br', shape: 'cylinder', size: [1.5, 0.7, 1.5], color: [0.06, 0.06, 0.07] },
+  // A saloon at the world's scale: 4.5 m long, 1.8 wide, 1.5 to the roof. The rig was
+  // authored at a quarter of that, from before the figures were metric, which rendered
+  // a car the size of a briefcase parked on a road eleven metres across.
+  { id: 'body', shape: 'box', size: [50, 8, 20], color: STEEL, emissive: 0.12 },
+  { id: 'cabin', shape: 'box', size: [21, 7.5, 18], color: GLASS, emissive: 0.18 },
+  { id: 'wheel-fl', shape: 'cylinder', size: [7, 3, 7], color: [0.06, 0.06, 0.07] },
+  { id: 'wheel-fr', shape: 'cylinder', size: [7, 3, 7], color: [0.06, 0.06, 0.07] },
+  { id: 'wheel-bl', shape: 'cylinder', size: [7, 3, 7], color: [0.06, 0.06, 0.07] },
+  { id: 'wheel-br', shape: 'cylinder', size: [7, 3, 7], color: [0.06, 0.06, 0.07] },
   // The lamps are the whole reason a car reads at night. They are the brightest thing
   // in the rig by a wide margin and they carry the direction of travel on their own.
-  { id: 'lamp-l', shape: 'sphere', size: [0.9, 0.9, 0.9], color: [1, 0.94, 0.78], emissive: 1 },
-  { id: 'lamp-r', shape: 'sphere', size: [0.9, 0.9, 0.9], color: [1, 0.94, 0.78], emissive: 1 },
-  { id: 'tail-l', shape: 'sphere', size: [0.6, 0.6, 0.6], color: [1, 0.12, 0.08], emissive: 0.9 },
-  { id: 'tail-r', shape: 'sphere', size: [0.6, 0.6, 0.6], color: [1, 0.12, 0.08], emissive: 0.9 },
+  { id: 'lamp-l', shape: 'sphere', size: [3.6, 3.6, 3.6], color: [1, 0.94, 0.78], emissive: 1 },
+  { id: 'lamp-r', shape: 'sphere', size: [3.6, 3.6, 3.6], color: [1, 0.94, 0.78], emissive: 1 },
+  { id: 'tail-l', shape: 'sphere', size: [2.4, 2.4, 2.4], color: [1, 0.12, 0.08], emissive: 0.9 },
+  { id: 'tail-r', shape: 'sphere', size: [2.4, 2.4, 2.4], color: [1, 0.12, 0.08], emissive: 0.9 },
 ];
 
 /**
@@ -325,34 +328,37 @@ const CAR_PARTS: readonly FigurePart[] = [
  * over two seconds at this distance reads as a glitch, and one that cuts reads as a cut.
  */
 const CAR_POSE = `
-  const speed = 21;
-  // A 90-unit lap, so the drive stays inside the plaza. The first version swung 150
-  // units either way from an origin already 65 out, which drove the car into the
-  // building ring at radius 150 — and the camera, which follows the rig, went with it.
-  const leg = ((t * speed) % 90) - 45;
+  const speed = 120;
+  // A 360-unit lap — about sixteen metres each way — so the drive stays on the plaza.
+  // The first version swung 150 units either way from an origin already 65 out, which
+  // drove the car into the building ring, and the camera followed it there.
+  const leg = ((t * speed) % 360) - 180;
   const out = leg > 0;
-  const path = out ? 45 - leg * 2 : 45 + leg * 2;
+  const path = out ? 180 - leg * 2 : 180 + leg * 2;
   const facing = out ? Math.PI : 0;
   const dir = out ? -1 : 1;
   const roll = t * 9;
-  p[0].y = 3.1; p[0].z = path; p[0].yaw = facing;
-  p[1].y = 5.9; p[1].z = path - dir * 1.2; p[1].yaw = facing;
-  p[2].y = 1.5; p[2].z = path + dir * 4.2; p[2].x = 2.6; p[2].roll = Math.PI / 2; p[2].pitch = roll;
-  p[3].y = 1.5; p[3].z = path + dir * 4.2; p[3].x = -2.6; p[3].roll = Math.PI / 2; p[3].pitch = roll;
-  p[4].y = 1.5; p[4].z = path - dir * 4.2; p[4].x = 2.6; p[4].roll = Math.PI / 2; p[4].pitch = roll;
-  p[5].y = 1.5; p[5].z = path - dir * 4.2; p[5].x = -2.6; p[5].roll = Math.PI / 2; p[5].pitch = roll;
-  p[6].y = 3.2; p[6].z = path + dir * 6.4; p[6].x = 1.9;
-  p[7].y = 3.2; p[7].z = path + dir * 6.4; p[7].x = -1.9;
-  p[8].y = 3.3; p[8].z = path - dir * 6.4; p[8].x = 1.9;
-  p[9].y = 3.3; p[9].z = path - dir * 6.4; p[9].x = -1.9;
+  p[0].y = 13; p[0].z = path; p[0].yaw = facing;
+  p[1].y = 25; p[1].z = path - dir * 5; p[1].yaw = facing;
+  p[2].y = 7; p[2].z = path + dir * 17; p[2].x = 11; p[2].roll = Math.PI / 2; p[2].pitch = roll;
+  p[3].y = 7; p[3].z = path + dir * 17; p[3].x = -11; p[3].roll = Math.PI / 2; p[3].pitch = roll;
+  p[4].y = 7; p[4].z = path - dir * 17; p[4].x = 11; p[4].roll = Math.PI / 2; p[4].pitch = roll;
+  p[5].y = 7; p[5].z = path - dir * 17; p[5].x = -11; p[5].roll = Math.PI / 2; p[5].pitch = roll;
+  p[6].y = 13; p[6].z = path + dir * 26; p[6].x = 7.6;
+  p[7].y = 13; p[7].z = path + dir * 26; p[7].x = -7.6;
+  p[8].y = 13.5; p[8].z = path - dir * 26; p[8].x = 7.6;
+  p[9].y = 13.5; p[9].z = path - dir * 26; p[9].x = -7.6;
 `;
 
 /** A tree: trunk and three staggered canopies, breathing in the wind. */
 const TREE_PARTS: readonly FigurePart[] = [
-  { id: 'trunk', shape: 'cylinder', size: [1.1, 9, 1.1], color: BARK },
-  { id: 'canopy-low', shape: 'sphere', size: [7.4, 7.4, 7.4], color: LEAF, emissive: 0.1 },
-  { id: 'canopy-mid', shape: 'sphere', size: [6.2, 6.2, 6.2], color: LEAF, emissive: 0.1 },
-  { id: 'canopy-top', shape: 'sphere', size: [4.6, 4.6, 4.6], color: LEAF, emissive: 0.12 },
+  // Matched to the street trees the city already plants — a nine-metre canopy — so a
+  // tree someone asks for stands beside the ones that were always there instead of
+  // beside them at a tenth their height.
+  { id: 'trunk', shape: 'cylinder', size: [4, 46, 4], color: BARK },
+  { id: 'canopy-low', shape: 'sphere', size: [38, 38, 38], color: LEAF, emissive: 0.1 },
+  { id: 'canopy-mid', shape: 'sphere', size: [32, 32, 32], color: LEAF, emissive: 0.1 },
+  { id: 'canopy-top', shape: 'sphere', size: [24, 24, 24], color: LEAF, emissive: 0.12 },
 ];
 
 /**
@@ -361,10 +367,10 @@ const TREE_PARTS: readonly FigurePart[] = [
  */
 const TREE_POSE = `
   const sway = Math.sin(t * 0.9) * 0.055 + Math.sin(t * 2.3) * 0.018;
-  p[0].y = 9; p[0].roll = sway * 0.4;
-  p[1].y = 15.5; p[1].x = sway * 9; p[1].z = Math.sin(t * 1.1) * 1.4;
-  p[2].y = 21.5; p[2].x = sway * 15; p[2].z = Math.sin(t * 1.1 + 0.4) * 2.1;
-  p[3].y = 26.5; p[3].x = sway * 21; p[3].z = Math.sin(t * 1.1 + 0.8) * 2.6;
+  p[0].y = 46; p[0].roll = sway * 0.4;
+  p[1].y = 80; p[1].x = sway * 46; p[1].z = Math.sin(t * 1.1) * 7;
+  p[2].y = 111; p[2].x = sway * 77; p[2].z = Math.sin(t * 1.1 + 0.4) * 11;
+  p[3].y = 137; p[3].x = sway * 108; p[3].z = Math.sin(t * 1.1 + 0.8) * 13;
 `;
 
 export const FIGURES: readonly FigureSpec[] = [

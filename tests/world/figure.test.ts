@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { World } from '../../src/core/world.js';
-import { createFigure, FigureValidationError, type FigureParams } from '../../src/world/figure.js';
+import { createFigure, FIGURE_BOUNDS, FigureValidationError, type FigureParams } from '../../src/world/figure.js';
 
 const PART = { id: 'body', shape: 'box', size: [1, 1, 1], color: [0.5, 0.5, 0.5] } as const;
 
@@ -36,7 +36,7 @@ describe('figure · what it refuses (AC-06)', () => {
     ['a shape that is not in the vocabulary', { parts: [{ ...PART, shape: 'dodecahedron' as never }] }],
     ['two parts sharing an id', { parts: [PART, PART] }],
     ['a size that is not three numbers', { parts: [{ ...PART, size: [1, 1] as never }] }],
-    ['a part larger than the bound', { parts: [{ ...PART, size: [1, 400, 1] }] }],
+    ['a part larger than the bound', { parts: [{ ...PART, size: [1, FIGURE_BOUNDS.size + 1, 1] }] }],
     ['a pose that is not a function', { pose: 'Math.sin(t)' as never }],
   ];
   for (const [what, overrides] of bad) {
@@ -48,7 +48,7 @@ describe('figure · what it refuses (AC-06)', () => {
   it('names the offending part rather than the rig', () => {
     // The generated half of a rig is the part list; a rejection that says only "invalid
     // figure" leaves a repair agent with nothing to act on (§ diagnoses are actionable).
-    expect(() => mount({ parts: [PART, { ...PART, id: 'leg', size: [1, 99, 1] }] }))
+    expect(() => mount({ parts: [PART, { ...PART, id: 'leg', size: [1, FIGURE_BOUNDS.size + 1, 1] }] }))
       .toThrow(/part 'leg'/);
   });
 });
@@ -89,12 +89,12 @@ describe('figure · what it contains (R-9)', () => {
   it('clamps a part that reaches past the world', () => {
     const world = mount({ pose: (_t, p) => { p[0]!.y = 1e9; } });
     world.tick(1 / 60);
-    expect((slice(world)['pose'] as number[])[1]).toBeLessThanOrEqual(400);
+    expect((slice(world)['pose'] as number[])[1]).toBeLessThanOrEqual(FIGURE_BOUNDS.reach);
   });
 
   it('clamps scale, so one part cannot become the frame', () => {
     const world = mount({ pose: (_t, p) => { p[0]!.scale = 1e6; } });
     world.tick(1 / 60);
-    expect((slice(world)['pose'] as number[])[6]).toBeLessThanOrEqual(8);
+    expect((slice(world)['pose'] as number[])[6]).toBeLessThanOrEqual(FIGURE_BOUNDS.scale);
   });
 });

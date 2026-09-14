@@ -47,8 +47,14 @@ export interface BaseScene {
   /**
    * @param focus  `[x, y, z, radius]` — where the world's subject is and how big it is.
    *               The camera frames it by its size rather than from a fixed distance.
+   * @returns      How far the shot has arrived, 0..1, on the same convention every
+   *               primitive that takes time to become itself already publishes. The
+   *               camera eases toward its target over a second or more, and a verdict
+   *               taken before it lands is a verdict on the frame the viewer was
+   *               leaving — which is how a perceptual critic came to report "no person
+   *               and no dog" about a person and a dog.
    */
-  update(elapsed: number, focus?: readonly [number, number, number, number] | null): void;
+  update(elapsed: number, focus?: readonly [number, number, number, number] | null): number;
 }
 
 /**
@@ -1305,7 +1311,12 @@ export function createBaseScene(): BaseScene {
         // 40 — and a 58-unit floor framed a person the way one frames a tower block.
         ? Math.max(4, Math.min(300, (focus[3] / Math.tan((camera.fov * Math.PI) / 360)) * 2.4))
         : 150 + framing * 130;
-      dolly += (want - dolly) * 0.02;
+      // Faster when a rig has the frame. At 0.02 the move from the wide shot to a
+      // four-unit dolly takes over three seconds, which is most of the per-utterance
+      // budget spent travelling; 0.05 lands in about a second and still reads as a move
+      // rather than a cut.
+      dolly += (want - dolly) * (focus ? 0.05 : 0.02);
+      const framed = 1 - Math.min(1, Math.abs(want - dolly) / Math.max(1, want * 0.08));
       // Low, and looking up. 12 units is street level against 300-unit towers, which
       // is the whole point: at 26 the camera was level with nothing and taller than
       // the low-rises, so the skyline read as a model on a table.
@@ -1379,6 +1390,7 @@ export function createBaseScene(): BaseScene {
       // The streets go out with the windows. Lit roads at noon is the same defect as
       // lamps at noon, written in a third place.
       streetMat.opacity = 0.9 * windowGlow;
+      return framed;
     },
   };
 }

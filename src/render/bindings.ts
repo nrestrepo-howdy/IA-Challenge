@@ -1142,23 +1142,57 @@ export const figureBinding: BindingFactory = (scene, statePath) => {
   const rigs = new Map<string, Rig>();
   const euler = new Euler();
 
+  /**
+   * A part's geometry, sized to exactly fill the half-extents it declared.
+   *
+   * This was the reason rigs had no proportion. The radius of a capsule, cylinder or
+   * cone was `max(x, z)` — so a torso authored `[2.6, 3.4, 1.7]` became a sausage of
+   * radius 2.6 instead of an upright body 5.2 wide and 3.4 deep, and at that radius it
+   * *swallowed its own arms*: the pose put them 5.5 units off the centre line, which is
+   * inside a shape the renderer had decided was 5.2 units fat. A walking figure came out
+   * as one featureless blob with a dog beside it.
+   *
+   * Every shape is now built at unit radius and scaled by the declared extents, so
+   * `size` means the same thing in the renderer that the prompt promises it means:
+   * half-extents in x, y and z. A part that says it is thin is thin, and two parts that
+   * do not overlap in the numbers do not overlap on screen.
+   */
   function geometryFor(shape: string, size: readonly number[]): BufferGeometry {
-    const [x = 1, y = 1, z = 1] = size;
-    // Radii come from the widest horizontal half-extent: a capsule authored 0.3 x 1.2
-    // x 0.3 is a limb, and reading only `x` would make an arm out of a thread.
-    const radius = Math.max(0.01, Math.max(x, z));
-    const height = Math.max(0.01, y * 2);
-    if (shape === 'sphere') return new SphereGeometry(radius, 18, 12);
-    if (shape === 'capsule') return new CapsuleGeometry(radius, height, 6, 12);
-    if (shape === 'cylinder') return new CylinderGeometry(radius, radius, height, 18);
-    // Directional shapes. These are the ones that give a rig a silhouette: a cone points,
-    // a wedge sweeps, a pyramid caps. Without them a model asked for an aeroplane has
-    // only blobs to answer with.
-    if (shape === 'cone') return new ConeGeometry(radius, height, 18);
-    if (shape === 'pyramid') return new ConeGeometry(radius, height, 4);
-    if (shape === 'torus') return new TorusGeometry(radius, Math.max(0.01, Math.min(y, radius * 0.6)), 10, 22);
+    const x = Math.max(0.01, size[0] ?? 1);
+    const y = Math.max(0.01, size[1] ?? 1);
+    const z = Math.max(0.01, size[2] ?? 1);
+
+    if (shape === 'box') return new BoxGeometry(x * 2, y * 2, z * 2);
     if (shape === 'wedge') return wedgeGeometry(x, y, z);
-    return new BoxGeometry(Math.max(0.01, x * 2), height, Math.max(0.01, z * 2));
+
+    // The round shapes: authored at radius 1 about the y axis, then scaled into the box.
+    // Building them this way rather than picking one of x and z as "the" radius is what
+    // lets a part be genuinely elliptical — a torso is wider than it is deep, and every
+    // rig in this world has one.
+    let geometry: BufferGeometry;
+    if (shape === 'sphere') geometry = new SphereGeometry(1, 18, 12);
+    else if (shape === 'capsule') {
+      // `CapsuleGeometry(radius, length)` measures the cylindrical section only, so the
+      // total height is length + 2r. Asking for the straight part to be `2y - 2` keeps
+      // the finished capsule exactly `2y` tall, which is what the caller asked for.
+      geometry = new CapsuleGeometry(1, Math.max(0.02, y * 2 - 2), 6, 12);
+      geometry.scale(x, 1, z);
+      return geometry;
+    }
+    else if (shape === 'cylinder') geometry = new CylinderGeometry(1, 1, y * 2, 18);
+    else if (shape === 'cone') geometry = new ConeGeometry(1, y * 2, 18);
+    else if (shape === 'pyramid') geometry = new ConeGeometry(1, y * 2, 4);
+    else if (shape === 'torus') {
+      // The tube is the thickness, which is what `y` means for a ring lying in xz.
+      geometry = new TorusGeometry(1, Math.min(0.8, Math.max(0.04, y / Math.max(x, z))), 10, 22);
+      geometry.rotateX(Math.PI / 2);
+      geometry.scale(x, 1, z);
+      return geometry;
+    }
+    else return new BoxGeometry(x * 2, y * 2, z * 2);
+
+    geometry.scale(x, shape === 'sphere' ? y : 1, z);
+    return geometry;
   }
 
   function build(name: string, parts: readonly Record<string, unknown>[]): Rig {

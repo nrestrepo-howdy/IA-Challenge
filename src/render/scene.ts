@@ -13,7 +13,7 @@
  */
 import {
   AdditiveBlending, AmbientLight, BackSide, BoxGeometry,
-  BufferAttribute, BufferGeometry, CanvasTexture, Color, LinearMipmapLinearFilter,
+  BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, LinearMipmapLinearFilter,
   DirectionalLight, Fog, InstancedMesh, Matrix4,
   Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshStandardNodeMaterial,
   PerspectiveCamera, PlaneGeometry, Points, PointsMaterial,
@@ -344,94 +344,6 @@ export function createBaseScene(): BaseScene {
   groundMesh.receiveShadow = true;
   scene.add(groundMesh);
 
-  /**
-   * The streets, as a lit grid laid over the ground.
-   *
-   * Without them the city stands on nothing. The ground is a near-black plane and the
-   * towers simply stop at the bottom of the frame, which reads as a skyline pasted onto
-   * a dark background rather than as a place — and it is the first thing anyone sees,
-   * before a word of the interface has been read.
-   *
-   * A night city seen from above is mostly this: dark blocks with glowing lines between
-   * them. It is a separate additive mesh rather than an emissive map on the ground,
-   * because the ground's `emissive` channel belongs to the time of day — `daylight`
-   * drives it, and `ground-tint` blends from the authored colour (AC-12). Adding a map
-   * there would have put the streets under two owners.
-   *
-   * The grid is deliberately irregular. Perfectly even blocks read as graph paper; real
-   * cities have avenues that run wider and further than the streets between them.
-   */
-  const STREET_TEX = 1024;
-  const streets = document.createElement('canvas');
-  streets.width = streets.height = STREET_TEX;
-  const sx = streets.getContext('2d')!;
-  sx.fillStyle = '#000';
-  sx.fillRect(0, 0, STREET_TEX, STREET_TEX);
-
-  const lines: { at: number; wide: boolean }[] = [];
-  for (let at = 0; at < STREET_TEX; ) {
-    const wide = rand() > 0.78;
-    lines.push({ at, wide });
-    at += wide ? 84 + rand() * 40 : 34 + rand() * 26;
-  }
-  for (const axis of [0, 1]) {
-    for (const { at, wide } of lines) {
-      // Warmer and brighter on the avenues: more lamps, more traffic, and it is what
-      // gives the grid a hierarchy instead of a uniform mesh.
-      const w = wide ? 5.5 : 2.6;
-      const g = sx.createLinearGradient(
-        axis ? 0 : at - w, axis ? at - w : 0,
-        axis ? 0 : at + w, axis ? at + w : 0,
-      );
-      g.addColorStop(0, 'rgba(255,168,84,0)');
-      g.addColorStop(0.5, wide ? 'rgba(255,190,118,1)' : 'rgba(255,166,92,0.72)');
-      g.addColorStop(1, 'rgba(255,168,84,0)');
-      sx.fillStyle = g;
-      if (axis) sx.fillRect(0, at - w, STREET_TEX, w * 2);
-      else sx.fillRect(at - w, 0, w * 2, STREET_TEX);
-    }
-  }
-
-  // Faded to nothing before the plane ends.
-  //
-  // A grid that stops at a hard edge draws that edge: additive blending turned the rim
-  // of the plane into a bright line straight across the skyline, which is worse than the
-  // horizon band it replaced. Painted into the texture rather than done with a shader
-  // because the texture covers the plane exactly once — which is also why `repeat` is 1
-  // here, and why the block spacing above is in world units rather than tile units.
-  sx.globalCompositeOperation = 'destination-in';
-  const falloff = sx.createRadialGradient(
-    STREET_TEX / 2, STREET_TEX / 2, STREET_TEX * 0.16,
-    STREET_TEX / 2, STREET_TEX / 2, STREET_TEX * 0.5,
-  );
-  falloff.addColorStop(0, 'rgba(0,0,0,1)');
-  falloff.addColorStop(0.82, 'rgba(0,0,0,0.9)');
-  falloff.addColorStop(1, 'rgba(0,0,0,0)');
-  sx.fillStyle = falloff;
-  sx.fillRect(0, 0, STREET_TEX, STREET_TEX);
-  sx.globalCompositeOperation = 'source-over';
-
-  const streetMap = new CanvasTexture(streets);
-  streetMap.wrapS = streetMap.wrapT = ClampToEdgeWrapping;
-  streetMap.colorSpace = SRGBColorSpace;
-  streetMap.generateMipmaps = true;
-  streetMap.minFilter = LinearMipmapLinearFilter;
-  streetMap.anisotropy = 16;
-  const streetMat = new MeshBasicMaterial({
-    map: streetMap, transparent: true, opacity: 0.9,
-    blending: AdditiveBlending, depthWrite: false, fog: true,
-  });
-  // 1800 rather than the ground's 4000, and the difference is the horizon. A street
-  // grid that runs to the far plane compresses, at grazing angles, into a single bright
-  // band across the skyline — mipmaps and anisotropy soften it and cannot remove it,
-  // because the geometry really is converging. Stopping the plane short of the fog's
-  // reach lets the haze end it instead, which is what distance does to a real one.
-  //
-  // Just above the ground: coplanar with it would z-fight along every line.
-  const streetMesh = new Mesh(new PlaneGeometry(1800, 1800), streetMat);
-  streetMesh.rotation.x = -Math.PI / 2;
-  streetMesh.position.y = 0.4;
-  scene.add(streetMesh);
 
   // The authored values are captured here, not in the binding: `ground-tint` blends
   // *from* what the world was made of, and a binding that read the current material
@@ -463,21 +375,82 @@ export function createBaseScene(): BaseScene {
   // rebuilding it, and rebuilding geometry mid-verb is how an injection drops a frame
   // (AC-14).
   const CAPACITY = COUNT * 2;
+  /**
+   * The street plan, which every other thing in this scene is derived from.
+   *
+   * Buildings used to be scattered through an annulus at random angles with random
+   * rotations. That is not a city, it is a handful of boxes thrown at a disc — and it
+   * was the single cause of four separate complaints: there were no streets, because
+   * there were no gaps for streets to be; nothing was well placed, because nothing was
+   * placed at all; a rig dropped into the world landed inside a tower; and trees had
+   * nowhere to stand.
+   *
+   * So the avenues come first. Everything downstream reads from `AVENUES` — the blocks
+   * are what is left between them, the buildings sit inside blocks aligned to their
+   * edges, the street texture is drawn from the same coordinates, and the plaza is one
+   * block deliberately left empty for whatever the agent builds.
+   *
+   * Irregular spacing on purpose. An even grid reads as graph paper; a real plan has
+   * long avenues and short cross streets, and the variation is most of what makes it
+   * look surveyed rather than tiled.
+   */
+  const CITY_HALF = 1150;
+  const AVENUES: number[] = [];
+  for (let at = -CITY_HALF; at < CITY_HALF; ) {
+    AVENUES.push(at);
+    at += 86 + rand() * 104;
+  }
+  AVENUES.push(CITY_HALF);
+  /** Half-width of the roadway. Buildings are inset from the avenue by this much. */
+  const ROAD = 11;
+
+  /** One block: the space between four avenues, minus the pavement. */
+  interface Block {
+    readonly x0: number; readonly x1: number;
+    readonly z0: number; readonly z1: number;
+  }
+  const cityBlocks: Block[] = [];
+  for (let i = 0; i < AVENUES.length - 1; i++) {
+    for (let j = 0; j < AVENUES.length - 1; j++) {
+      const x0 = AVENUES[i]! + ROAD, x1 = AVENUES[i + 1]! - ROAD;
+      const z0 = AVENUES[j]! + ROAD, z1 = AVENUES[j + 1]! - ROAD;
+      if (x1 - x0 < 26 || z1 - z0 < 26) continue;
+      // The core of the map is left open, and it has to be *wider than the camera's
+      // orbit*. At 120 it was not: the camera circles at 165, so the first grid put it
+      // inside the city, looking down an avenue with two towers filling the frame. The
+      // view this world is composed for is a skyline seen across open ground, so the
+      // ground has to be there. 260 puts the nearest block a hundred units beyond the
+      // orbit and turns the middle of the map into the plaza the rigs already assumed.
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      if (Math.hypot(cx, cz) < 260) continue;
+      cityBlocks.push({ x0, x1, z0, z1 });
+    }
+  }
+  // Nearest first, so the prefix that `skyline-shift` draws is the city around the
+  // viewer rather than a random scatter of the whole map.
+  cityBlocks.sort((a, b) =>
+    Math.hypot((a.x0 + a.x1) / 2, (a.z0 + a.z1) / 2) - Math.hypot((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2));
+
   const slots: Slot[] = [];
   for (let i = 0; i < CAPACITY; i++) {
-    const angle = rand() * Math.PI * 2;
-    // Infill sits closer in and lower than the authored ring, so "denser" fills the
-    // middle distance rather than adding a second horizon nobody can see.
-    const infill = i >= COUNT;
-    const radius = infill ? 150 + rand() * 620 : 170 + rand() * 1000;
-    // The infill ring sits closest to the camera, and it used to start at 24 units
-    // against a viewpoint at 35 — so the buildings nearest the eye were the ones whose
-    // roofs it looked down on, and a street-level camera read as a drone. Nothing near
-    // is shorter than the viewpoint now.
-    const height = (infill ? 70 + rand() * rand() * 240 : 28 + rand() * rand() * 300);
-    const width = 16 + rand() * 30;
-    const depth = width * (0.7 + rand() * 0.6);
-    const nx = Math.cos(angle), nz = Math.sin(angle);
+    const block = cityBlocks[i % cityBlocks.length]!;
+    const bw = block.x1 - block.x0, bd = block.z1 - block.z0;
+    // A second pass over the same block puts a second building on it, so a block can
+    // hold a tower and its low neighbour rather than one box centred in a plot.
+    const lot = Math.floor(i / cityBlocks.length);
+    const cols = bw > 90 ? 2 : 1, lotRows = bd > 90 ? 2 : 1;
+    const col = lot % cols, row = Math.floor(lot / cols) % lotRows;
+
+    const width = Math.min(46, (bw / cols) * (0.62 + rand() * 0.3));
+    const depth = Math.min(46, (bd / lotRows) * (0.62 + rand() * 0.3));
+    const x = block.x0 + (bw / cols) * (col + 0.5) + (rand() - 0.5) * 6;
+    const z = block.z0 + (bd / lotRows) * (row + 0.5) + (rand() - 0.5) * 6;
+
+    // Tall in the middle, low at the edges — which is what a downtown is, and it gives
+    // the skyline a shape instead of a uniform field of towers.
+    const fromCentre = Math.min(1, Math.hypot(x, z) / CITY_HALF);
+    const ceiling = 340 * (1 - fromCentre * 0.72);
+    const height = Math.max(26, 26 + rand() * rand() * ceiling);
 
     // The massing.
     //
@@ -521,6 +494,31 @@ export function createBaseScene(): BaseScene {
       boxes.push({ dx: side * 0.62, dz: 0, w: 0.58, d: 0.78, y0: 0, h: 0.34 + rand() * 0.22 });
       boxes.push({ dx: 0, dz: 0, w: 0.26, d: 0.4, y0: 1, h: 0.04 });
     }
+    /**
+     * Rooftop clutter: water tanks, stair houses, plant.
+     *
+     * What separates a skyline that was built from one that was extruded is what sits on
+     * top of it. Every roof here was a clean rectangle — which no roof is: real ones
+     * carry tanks, lift machinery, a stair house, a run of ducting, and from street
+     * level those read as a broken silhouette against the sky rather than as detail.
+     *
+     * Cheap, because it is the same instanced mesh: two or three more boxes on a
+     * building that already costs two to five. Offset off-centre and sized small, since
+     * a tank in the middle of the roof at a third of its width is a penthouse.
+     */
+    const roofBits = 1 + Math.floor(rand() * 3);
+    for (let k = 0; k < roofBits; k++) {
+      const w = 0.1 + rand() * 0.17;
+      boxes.push({
+        dx: (rand() - 0.5) * 0.52,
+        dz: (rand() - 0.5) * 0.52,
+        w, d: w * (0.7 + rand() * 0.7),
+        y0: 1,
+        // Squat, mostly. The occasional tall one is a stair house or a tank on legs.
+        h: rand() < 0.22 ? 0.05 + rand() * 0.05 : 0.018 + rand() * 0.022,
+      });
+    }
+
     // A mast on the tall ones only. Every tower wearing an antenna is as uniform as
     // none of them wearing one.
     const tall = height > 150 && rand() < 0.55;
@@ -530,8 +528,14 @@ export function createBaseScene(): BaseScene {
     // them. The first attempt scattered them with sign flips that cancelled out and
     // put most of them inside the geometry, where they are invisible.
     const windows: { dx: number; dz: number; t: number }[] = [];
-    const rows = Math.max(1, Math.floor(height / 22));
-    for (let r = 0; r < rows; r++) {
+    // Placed on the face that looks toward the middle of the map, which is where the
+    // camera is. The old version derived this from the building's own angle around a
+    // ring; on a street grid there is no such angle, so it comes from the direction back
+    // to the origin instead.
+    const toCentre = Math.hypot(x, z) || 1;
+    const nx = x / toCentre, nz = z / toCentre;
+    const floors = Math.max(1, Math.floor(height / 22));
+    for (let r = 0; r < floors; r++) {
       for (let k = 0; k < 3; k++) {
         if (rand() > 0.3) continue;
         const lateral = (k - 1) * width * 0.3;
@@ -544,8 +548,13 @@ export function createBaseScene(): BaseScene {
     }
 
     slots.push({
-      x: nx * radius, z: nz * radius, width, depth, height,
-      rotation: rand() * Math.PI, windows, boxes,
+      x, z, width, depth, height,
+      // Square to the street. A random rotation is the other half of why the old city
+      // read as scattered: buildings meet an avenue along their face, always, and a
+      // block of them at eleven different angles is a collision, not a neighbourhood.
+      // The quarter-turns keep the facade variety without breaking the alignment.
+      rotation: (Math.floor(rand() * 4) * Math.PI) / 2,
+      windows, boxes,
       // Above the mast if there is one, on the roof if not. Only on what is tall
       // enough that a real one would be required to carry it.
       beacon: height > 150 ? (tall ? 1.3 : 1.02) : null,
@@ -585,6 +594,167 @@ export function createBaseScene(): BaseScene {
   const lamps = new Points(lampGeo, lampMat);
   lamps.frustumCulled = false;
   scene.add(lamps);
+
+  /**
+   * The streets, as a lit grid laid over the ground.
+   *
+   * Without them the city stands on nothing. The ground is a near-black plane and the
+   * towers simply stop at the bottom of the frame, which reads as a skyline pasted onto
+   * a dark background rather than as a place — and it is the first thing anyone sees,
+   * before a word of the interface has been read.
+   *
+   * A night city seen from above is mostly this: dark blocks with glowing lines between
+   * them. It is a separate additive mesh rather than an emissive map on the ground,
+   * because the ground's `emissive` channel belongs to the time of day — `daylight`
+   * drives it, and `ground-tint` blends from the authored colour (AC-12). Adding a map
+   * there would have put the streets under two owners.
+   *
+   * The grid is deliberately irregular. Perfectly even blocks read as graph paper; real
+   * cities have avenues that run wider and further than the streets between them.
+   */
+  const STREET_TEX = 2048;
+  const STREET_SPAN = CITY_HALF * 2 + 160;
+  const streets = document.createElement('canvas');
+  streets.width = streets.height = STREET_TEX;
+  const sx = streets.getContext('2d')!;
+  sx.fillStyle = '#05060a';
+  sx.fillRect(0, 0, STREET_TEX, STREET_TEX);
+
+  /** World coordinate to texture pixel. The plane and the plan share one mapping. */
+  const toTex = (world: number): number => ((world + STREET_SPAN / 2) / STREET_SPAN) * STREET_TEX;
+  const texPerUnit = STREET_TEX / STREET_SPAN;
+
+  // Drawn from `AVENUES`, which is what makes these *streets* rather than a pattern.
+  // The previous grid was an independent set of lines at an unrelated spacing, laid over
+  // buildings that were scattered at random — so it crossed through towers and stopped
+  // in the middle of blocks, and read as a texture because that is all it was. These
+  // lines land in the gaps because the gaps were cut from the same numbers.
+  for (const axis of [0, 1]) {
+    for (const avenue of AVENUES) {
+      const at = toTex(avenue);
+      const w = ROAD * texPerUnit;
+      const g = sx.createLinearGradient(
+        axis ? 0 : at - w, axis ? at - w : 0,
+        axis ? 0 : at + w, axis ? at + w : 0,
+      );
+      // Asphalt in the middle, lit at the kerbs. A road that is brightest along its
+      // centreline reads as a strip light; a real one is lit from its edges.
+      g.addColorStop(0, 'rgba(255,166,92,0.55)');
+      g.addColorStop(0.28, 'rgba(96,86,78,0.5)');
+      g.addColorStop(0.5, 'rgba(62,58,56,0.55)');
+      g.addColorStop(0.72, 'rgba(96,86,78,0.5)');
+      g.addColorStop(1, 'rgba(255,166,92,0.55)');
+      sx.fillStyle = g;
+      if (axis) sx.fillRect(0, at - w, STREET_TEX, w * 2);
+      else sx.fillRect(at - w, 0, w * 2, STREET_TEX);
+    }
+  }
+
+  // The lane markings: a dashed centreline down each avenue. Small, and the thing that
+  // makes a strip of asphalt read as a road rather than as a grey band.
+  sx.fillStyle = 'rgba(228,214,176,0.5)';
+  for (const axis of [0, 1]) {
+    for (const avenue of AVENUES) {
+      const at = toTex(avenue);
+      const dash = 9 * texPerUnit, gap = 13 * texPerUnit, thick = Math.max(1, 0.7 * texPerUnit);
+      for (let along = 0; along < STREET_TEX; along += dash + gap) {
+        if (axis) sx.fillRect(along, at - thick / 2, dash, thick);
+        else sx.fillRect(at - thick / 2, along, thick, dash);
+      }
+    }
+  }
+
+  // Faded at the rim, so the plane does not draw its own edge across the skyline.
+  sx.globalCompositeOperation = 'destination-in';
+  const falloff = sx.createRadialGradient(
+    STREET_TEX / 2, STREET_TEX / 2, STREET_TEX * 0.2,
+    STREET_TEX / 2, STREET_TEX / 2, STREET_TEX * 0.5,
+  );
+  falloff.addColorStop(0, 'rgba(0,0,0,1)');
+  falloff.addColorStop(0.8, 'rgba(0,0,0,0.92)');
+  falloff.addColorStop(1, 'rgba(0,0,0,0)');
+  sx.fillStyle = falloff;
+  sx.fillRect(0, 0, STREET_TEX, STREET_TEX);
+  sx.globalCompositeOperation = 'source-over';
+
+  const streetMap = new CanvasTexture(streets);
+  streetMap.wrapS = streetMap.wrapT = ClampToEdgeWrapping;
+  streetMap.colorSpace = SRGBColorSpace;
+  streetMap.generateMipmaps = true;
+  streetMap.minFilter = LinearMipmapLinearFilter;
+  streetMap.anisotropy = 16;
+  const streetMat = new MeshBasicMaterial({
+    map: streetMap, transparent: true, opacity: 0.95,
+    blending: AdditiveBlending, depthWrite: false, fog: true,
+  });
+  // Sized to the plan, not to a number picked by eye: the texture covers the city
+  // exactly once, so a pixel in it is a fixed number of world units and the lane
+  // markings stay the same size wherever you stand.
+  const streetMesh = new Mesh(new PlaneGeometry(STREET_SPAN, STREET_SPAN), streetMat);
+  streetMesh.rotation.x = -Math.PI / 2;
+  streetMesh.position.y = 0.4;
+  scene.add(streetMesh);
+
+  /**
+   * Street trees, along the avenues the plan already knows about.
+   *
+   * A city with no planting is a rendering of a city. They also carry the only green in
+   * a scene that is otherwise blue sky, orange sodium and near-black stone — and one
+   * colour that belongs to nothing else is what stops a palette reading as a filter.
+   *
+   * Placed from `AVENUES` like everything else, set back to the kerb, and skipped near
+   * the middle so the plaza stays open for whatever the agent builds there. Two instanced
+   * draws for the whole city: trunks and canopies.
+   */
+  const TREE_CAP = 900;
+  const trunkGeo = new CylinderGeometry(0.55, 0.8, 9, 6);
+  const trunkMat = new MeshStandardMaterial({ color: new Color(0.055, 0.042, 0.031), roughness: 0.95 });
+  const trunks = new InstancedMesh(trunkGeo, trunkMat, TREE_CAP);
+  const canopyGeo = new SphereGeometry(1, 7, 5);
+  const canopyMat = new MeshStandardMaterial({
+    color: new Color(0.055, 0.105, 0.052), roughness: 0.88,
+    emissive: new Color(0.013, 0.030, 0.014), emissiveIntensity: 1,
+  });
+  const canopies = new InstancedMesh(canopyGeo, canopyMat, TREE_CAP);
+  trunks.castShadow = canopies.castShadow = true;
+  canopies.receiveShadow = true;
+
+  {
+    const tm = new Matrix4(), tq = new Quaternion(), tp = new Vector3(), ts = new Vector3();
+    let n = 0;
+    for (const avenue of AVENUES) {
+      for (const side of [-1, 1]) {
+        const offset = avenue + side * (ROAD + 3.4);
+        for (let along = -CITY_HALF; along < CITY_HALF && n < TREE_CAP - 1; along += 26 + rand() * 16) {
+          // Two rows per avenue, one along each axis, so a corner gets trees on both.
+          for (const axis of [0, 1]) {
+            if (n >= TREE_CAP - 1) break;
+            const x = axis ? along : offset;
+            const z = axis ? offset : along;
+            const r = Math.hypot(x, z);
+            // Not in the plaza and not out past the fog.
+            if (r < 235 || r > CITY_HALF) continue;
+            if (rand() > 0.62) continue;
+            const scale = 0.82 + rand() * 0.7;
+            tp.set(x, 4.5 * scale, z);
+            ts.set(scale, scale, scale);
+            trunks.setMatrixAt(n, tm.compose(tp, tq, ts));
+            tp.set(x, (9 + 4.6) * scale, z);
+            // Squashed a little and turned, so a row of them is not one tree repeated.
+            ts.set(5.4 * scale, 6.4 * scale * (0.8 + rand() * 0.4), 5.4 * scale);
+            tq.setFromAxisAngle(new Vector3(0, 1, 0), rand() * Math.PI);
+            canopies.setMatrixAt(n, tm.compose(tp, tq, ts));
+            tq.identity();
+            n += 1;
+          }
+        }
+      }
+    }
+    trunks.count = canopies.count = n;
+    trunks.instanceMatrix.needsUpdate = true;
+    canopies.instanceMatrix.needsUpdate = true;
+  }
+  scene.add(trunks, canopies);
 
   // A node material rather than a plain standard one, for one reason: the rim.
   //
@@ -1099,7 +1269,10 @@ export function createBaseScene(): BaseScene {
       // a third of the height with the city still behind it — which is the shot, because
       // a figure alone against black is not why anyone asked for a figure in a city.
       const want = focus
-        ? Math.max(70, Math.min(320, (focus[3] / Math.tan((camera.fov * Math.PI) / 360)) * 3.2))
+        // 2.4x the exact-fit distance rather than 3.2x: the subject fills about half the
+        // frame height instead of a third, which is the difference between a figure you
+        // can see and one you have to be told is there.
+        ? Math.max(58, Math.min(300, (focus[3] / Math.tan((camera.fov * Math.PI) / 360)) * 2.4))
         : 150 + framing * 130;
       dolly += (want - dolly) * 0.02;
       // Low, and looking up. 12 units is street level against 300-unit towers, which
@@ -1138,7 +1311,12 @@ export function createBaseScene(): BaseScene {
         // centroid. Adding a second one put the subject a third of the way down the
         // frame and pointed the camera at the skyline behind it.
         subject.set(focus[0], focus[1], focus[2]);
-        aim.lerp(subject, 0.72);
+        // 0.88, not 0.72. At 0.72 the subject sits a third of the way in from the edge
+        // and the frame is mostly the skyline behind it — L3 called it "jammed against
+        // the left frame edge", which is what a weighted average of two points looks
+        // like when the other point is a city. Never 1.0: at 1.0 the city stops being in
+        // the shot, and the city is what makes the figure worth looking at.
+        aim.lerp(subject, 0.88);
       }
       camera.lookAt(aim);
       winMat.opacity = (0.72 + Math.sin(elapsed * 1.7) * 0.06) * windowGlow;
